@@ -25,21 +25,27 @@ def get_sheet_client():
     คืนค่า gspread client หรือ None เมื่อไม่สามารถเชื่อมได้
     """
     try:
-        # ถ้ามี env var ให้ใช้ก่อน (เช่นใน Render/Heroku)
         creds_env = os.environ.get("GSPREAD_CREDENTIALS")
         if creds_env:
             logger.debug("Using GSPREAD_CREDENTIALS from environment")
             creds_json = json.loads(creds_env)
-            return gspread.service_account_from_dict(creds_json)
+            # modern gspread supports service_account_from_dict
+            try:
+                return gspread.service_account_from_dict(creds_json)
+            except Exception:
+                # fallback: write temp file and use service_account
+                tmp_path = "/tmp/gspread_creds.json"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(creds_json, f, ensure_ascii=False)
+                return gspread.service_account(filename=tmp_path)
 
-        # fallback to file
         if os.path.exists("credentials.json"):
             logger.debug("Using credentials.json file for gspread")
             return gspread.service_account(filename="credentials.json")
 
         logger.warning("No Google credentials found (credentials.json or GSPREAD_CREDENTIALS).")
         return None
-    except Exception as e:
+    except Exception:
         logger.exception("Connect Sheet Error:")
         return None
 
@@ -66,7 +72,7 @@ def send_line_push(message):
         payload = {"to": target_id, "messages": [{"type": "text", "text": message}]}
 
         resp = requests.post(url, headers=headers, json=payload, timeout=8)
-        if resp.status_code != 200:
+        if not (200 <= resp.status_code < 300):
             logger.error("LINE push failed: %s %s", resp.status_code, resp.text)
             return False
         logger.info("Push Notification Sent")
@@ -81,18 +87,21 @@ def send_line_push(message):
 # -----------------------
 # Symptom logic
 # -----------------------
-def save_symptom_data(pain, wound, fever, mobility, risk_result):
+def save_symptom_data(user_id, pain, wound, fever, mobility, risk_result):
+    """
+    บันทึกข้อมูลรายวัน (sheet1) โดยมีคอลัมน์: Timestamp, UserID, Pain, Wound, Fever, Mobility, RiskLevel
+    """
     try:
         client = get_sheet_client()
         if client:
             sheet = client.open('KhwanBot_Data').sheet1
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([timestamp, pain, wound, fever, mobility, risk_result], value_input_option='USER_ENTERED')
-            logger.info("Symptom Saved")
+            sheet.append_row([timestamp, user_id, pain, wound, fever, mobility, risk_result], value_input_option='USER_ENTERED')
+            logger.info("Symptom Saved for user=%s", user_id)
     except Exception:
         logger.exception("Save Symptom Error")
 
-def calculate_symptom_risk(pain, wound, fever, mobility):
+def calculate_symptom_risk(user_id, pain, wound, fever, mobility):
     risk_score = 0
     try:
         p_val = int(pain) if pain is not None and str(pain).strip() != "" else 0
@@ -132,7 +141,7 @@ def calculate_symptom_risk(pain, wound, fever, mobility):
         risk_level = "ต่ำ (ปกติ)"
         msg = f"เสี่ยง{risk_level}\nแผลหายดี"
 
-    save_symptom_data(pain, wound, fever, mobility, risk_level)
+    save_symptom_data(user_id, pain, wound, fever, mobility, risk_level)
     return msg
 
 # -----------------------
@@ -146,7 +155,7 @@ def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level):
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             diseases_str = ", ".join(diseases) if isinstance(diseases, list) else str(diseases)
             sheet.append_row([timestamp, user_id, age, weight, height, bmi, diseases_str, risk_level], value_input_option='USER_ENTERED')
-            logger.info("Profile Saved")
+            logger.info("Profile Saved for user=%s diseases=%s", user_id, diseases_str)
     except Exception:
         logger.exception("Save Profile Error")
 
@@ -230,6 +239,15 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
     except:
         height_cm = None
 
+    # validation ranges (early return with user-friendly message)
+    if age_val is not None and (age_val < 0 or age_val > 120):
+        logger.warning("Suspicious age value: %s", age_val)
+        return "กรุณาระบุอายุที่ถูกต้อง (0-120 ปี)"
+    if weight_val is not None and (weight_val <= 0 or weight_val > 500):
+        return "กรุณาระบุ น้ำหนักที่สมเหตุสมผล (1-500 kg)"
+    if height_cm is not None and (height_cm <= 0 or height_cm > 300):
+        return "กรุณาระบุ ส่วนสูงที่สมเหตุสมผล (1-300 cm)"
+
     if height_cm and weight_val:
         height_m = height_cm / 100.0
         if height_m > 0:
@@ -291,45 +309,54 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
     return message
 
 # -----------------------
-# Webhook endpoint
+# Webhook endpoint & helpers
 # -----------------------
-def extract_user_id(original_req):
-    """พยายามหา user id จาก payload หลายรูปแบบ (LINE, Telegram, etc.)"""
+def extract_user_id(original_req, req):
+    """
+    หา user id จาก originalDetectIntentRequest หลายรูปแบบ
+    ถ้าไม่ได้ ให้ fallback เป็น DF-<session-id> จาก req['session']
+    """
     try:
-        # หลาย platform เก็บใน payload.data.source.userId หรือ payload.data.source.userId
+        if not isinstance(original_req, dict):
+            original_req = {}
+
         payload = original_req.get('payload') or {}
-        # try nested common paths
-        for path in [
-            ("payload","data","source","userId"),
-            ("payload","data","source","user_id"),
-            ("payload","data","source","userId"),
-            ("payload","data","user","id"),
-            ("payload","user","id"),
-        ]:
-            cur = original_req
-            found = True
-            for p in path:
-                if isinstance(cur, dict) and p in cur:
-                    cur = cur[p]
-                else:
-                    found = False
-                    break
-            if found and cur:
-                return cur
-        # fallback simple keys
-        if isinstance(payload, dict):
-            # line: payload["data"]["source"]["userId"]
-            try:
-                return payload.get("data", {}).get("source", {}).get("userId")
-            except:
-                pass
+        user_id = None
+
+        # common LINE path via Dialogflow
+        try:
+            user_id = payload.get('data', {}).get('source', {}).get('userId')
+        except Exception:
+            user_id = None
+
+        # other possible shapes
+        if not user_id:
+            user_id = payload.get('userId') or (payload.get('data', {}).get('user', {}).get('id') if isinstance(payload, dict) else None)
+
+        # fallback: use dialogflow session id (last segment)
+        if not user_id:
+            session = req.get('session')
+            if session and isinstance(session, str):
+                user_id = "DF-" + session.split('/')[-1]
+
+        if not user_id:
+            return "Unknown"
+        return user_id
     except Exception:
-        logger.debug("Could not extract user id from original detect intent request")
-    return "Unknown"
+        logger.debug("Could not extract user id from original detect intent request", exc_info=True)
+        return "Unknown"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
+        # optional secret header check
+        WEBHOOK_SECRET = os.environ.get('WEBHOOK_SECRET')
+        if WEBHOOK_SECRET:
+            token = request.headers.get('X-Webhook-Token')
+            if token != WEBHOOK_SECRET:
+                logger.warning("Rejected webhook: invalid token")
+                return jsonify({"fulfillmentText": "Unauthorized"}), 401
+
         req = request.get_json(silent=True, force=True)
         if not req:
             logger.warning("Empty request body")
@@ -338,13 +365,14 @@ def webhook():
         intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
         params = req.get('queryResult', {}).get('parameters', {})
         original_req = req.get('originalDetectIntentRequest', {}) or {}
-        user_id = extract_user_id(original_req) or "Unknown"
+        user_id = extract_user_id(original_req, req) or "Unknown"
 
         logger.info("Intent incoming: %s user=%s", intent, user_id)
         logger.debug("Params: %s", params)
 
         if intent == 'ReportSymptoms':
             res = calculate_symptom_risk(
+                user_id,
                 params.get('pain_score'),
                 params.get('wound_status'),
                 params.get('fever_check'),
@@ -372,8 +400,13 @@ def webhook():
 
     except Exception:
         logger.exception("Unhandled error in webhook")
-        # ส่งข้อความ fallback ให้ Dialogflow (ต้องเป็น 200 เพื่อ Dialogflow จะรับ)
         return jsonify({"fulfillmentText": "เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่ภายหลัง"}), 200
 
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    return jsonify({"status": "ok"}), 200
+
 if __name__ == '__main__':
-    app.run(port=int(os.environ.get("PORT", 5000)), debug=DEBUG)
+    port = int(os.environ.get("PORT", 5000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    app.run(host=host, port=port, debug=DEBUG)
