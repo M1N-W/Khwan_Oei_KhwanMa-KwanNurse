@@ -2,17 +2,50 @@ from flask import Flask, request, jsonify
 import gspread
 from datetime import datetime
 import os
-import json # ต้อง import json ด้วยครับ
+import json 
+import requests # <--- (1) ต้องเพิ่มบรรทัดนี้ ไม่งั้นส่งไลน์ไม่ได้ครับ
 
 app = Flask(__name__)
+
+# --- ฟังก์ชันส่งข้อความหาพยาบาล (Messaging API Version) ---
+def send_line_push(message):
+    try:
+        # ดึงค่าจาก Render Environment
+        access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+        target_id = os.environ.get('NURSE_GROUP_ID') # ส่งเข้ากลุ่มพยาบาล
+        
+        if not access_token or not target_id:
+            print("ตั้งค่าไม่ครบ (ขาด Token หรือ Group ID)")
+            return
+
+        url = 'https://api.line.me/v2/bot/message/push'
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        payload = {
+            "to": target_id,
+            "messages": [
+                {
+                    "type": "text",
+                    "text": message
+                }
+            ]
+        }
+        
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        print(f"แจ้งเตือนพยาบาล: {response.status_code} {response.text}")
+        
+    except Exception as e:
+        print(f"แจ้งเตือนล้มเหลว: {e}")
 
 # --- ส่วนตั้งค่า Google Sheets ---
 def save_to_sheet(pain, wound, fever, mobility, risk_result):
     try:
-        # ตรวจสอบว่ามีไฟล์ credentials.json หรือไม่ (กรณีรันบน Render ต้องสร้างจาก ENV)
+        # ตรวจสอบว่ามีไฟล์ credentials.json หรือไม่
         if not os.path.exists('credentials.json'):
-            print("ไม่พบไฟล์ credentials.json กำลังพยายามสร้างจาก Environment Variable...")
-            # (ใส่โค้ดสร้างไฟล์จาก ENV ที่นี่ถ้าจำเป็น แต่วันนี้ข้ามไปก่อนถ้าคุณใช้วิธี Start Command สร้างไฟล์แล้ว)
+            print("ไม่พบไฟล์ credentials.json (ระบบกำลังใช้ Environment Variable)")
 
         client = gspread.service_account(filename='credentials.json')
         sheet = client.open('KhwanBot_Data').sheet1
@@ -62,6 +95,18 @@ def calculate_risk(pain, wound, fever, mobility):
             f"อาการน่าเป็นห่วง (คะแนน {risk_score})\n"
             f"กรุณากดปุ่ม 'ติดต่อพยาบาล' ทันทีค่ะ"
         )
+        
+        # (2) เพิ่มส่วนนี้กลับเข้ามาครับ (นิยามข้อความก่อนส่ง)
+        notify_msg = (
+            f"🚨 EMERGENCY REPORT 🚨\n"
+            f"ผู้ป่วยมีความเสี่ยงสูง (คะแนน {risk_score})\n"
+            f"ระดับความปวด: {pain}\n"
+            f"แผล: {wound}\n"
+            f"ไข้: {fever}\n"
+            f"กรุณาตรวจสอบทันที!"
+        )
+        send_line_push(notify_msg) # ส่งไลน์หาพยาบาล
+
     elif risk_score >= 2: 
         risk_level = "ปานกลาง"
         message = (
@@ -96,29 +141,8 @@ def webhook():
     except Exception:
         intent_name = None
     
-    print(f"Intent received: {intent_name}") # ดู Log ได้ว่า Intent เข้าไหม
+    print(f"Intent received: {intent_name}")
 
-    # ✅ 1. เช็ค Intent สำหรับขอ Group ID (ต้องสร้าง Intent ชื่อ GetGroupID ใน Dialogflow ก่อน)
-    if intent_name == 'GetGroupID':
-        try:
-            # ดึงข้อมูล Source จาก LINE Payload
-            original_request = req.get('originalDetectIntentRequest', {})
-            source = original_request.get('payload', {}).get('data', {}).get('source', {})
-            
-            group_id = source.get('groupId') or source.get('roomId')
-            user_id = source.get('userId')
-
-            if group_id:
-                reply = f"🔑 Group ID ของห้องนี้คือ:\n{group_id}\n(จดรหัสนี้ไปใส่ใน Render นะคะ)"
-            else:
-                reply = f"⚠️ ไม่พบ Group ID ค่ะ\n(คุณอาจจะคุยแบบส่วนตัว หรือบอทไม่ได้อยู่ในกลุ่ม)\nUser ID ของคุณคือ: {user_id}"
-            
-            return jsonify({"fulfillmentText": reply})
-            
-        except Exception as e:
-            return jsonify({"fulfillmentText": f"เกิดข้อผิดพลาดในการหา ID: {e}"})
-
-    # ✅ 2. เช็ค Intent สำหรับรายงานอาการ
     if intent_name == 'ReportSymptoms':
         parameters = req.get('queryResult', {}).get('parameters', {})
         pain_score = parameters.get('pain_score')
