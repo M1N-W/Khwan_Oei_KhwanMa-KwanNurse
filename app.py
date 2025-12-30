@@ -1,31 +1,29 @@
 from flask import Flask, request, jsonify
 import gspread
 from datetime import datetime
+import os
+import json # ต้อง import json ด้วยครับ
 
 app = Flask(__name__)
 
 # --- ส่วนตั้งค่า Google Sheets ---
-# เชื่อมต่อกับ Google Sheets (ใช้ google-auth ผ่าน gspread.service_account)
 def save_to_sheet(pain, wound, fever, mobility, risk_result):
     try:
-        # สร้าง client จากไฟล์ credentials.json ที่ต้องมีบนเครื่อง/instance
+        # ตรวจสอบว่ามีไฟล์ credentials.json หรือไม่ (กรณีรันบน Render ต้องสร้างจาก ENV)
+        if not os.path.exists('credentials.json'):
+            print("ไม่พบไฟล์ credentials.json กำลังพยายามสร้างจาก Environment Variable...")
+            # (ใส่โค้ดสร้างไฟล์จาก ENV ที่นี่ถ้าจำเป็น แต่วันนี้ข้ามไปก่อนถ้าคุณใช้วิธี Start Command สร้างไฟล์แล้ว)
+
         client = gspread.service_account(filename='credentials.json')
-
-        # เปิดไฟล์ Google Sheet (ต้องตั้งชื่อไฟล์ให้ตรงเป๊ะๆ)
         sheet = client.open('KhwanBot_Data').sheet1
-
-        # เตรียมข้อมูลที่จะบันทึก (วันที่, เวลา, อาการต่างๆ)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row = [timestamp, pain, wound, fever, mobility, risk_result]
-
-        # บันทึกลงแถวใหม่ (value_input_option เป็น optional)
         sheet.append_row(row, value_input_option='USER_ENTERED')
         print("บันทึกข้อมูลสำเร็จ!")
     except Exception as e:
-        # แค่พิมพ์ error เพื่อ debug (ใน production ควรเก็บ log)
         print(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
 
-# --- ส่วนคำนวณความเสี่ยง (Logic เดิมที่ปรับปรุงแล้ว) ---
+# --- ส่วนคำนวณความเสี่ยง ---
 def calculate_risk(pain, wound, fever, mobility):
     risk_score = 0
     risk_level = "ต่ำ"
@@ -86,36 +84,41 @@ def calculate_risk(pain, wound, fever, mobility):
             f"ดูแลตัวเองตามคำแนะนำต่อไปนะคะ"
         )
     
-    # ส่งข้อมูลไปบันทึกใน Sheet ก่อนส่งข้อความกลับ
     save_to_sheet(pain, wound, fever, mobility, risk_level)
-    
     return message
 
 # --- Webhook ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
-    # ป้องกันกรณี payload ไม่ตรงโครงสร้าง
     try:
         intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
     except Exception:
         intent_name = None
-    # (ใส่ไว้ในฟังก์ชัน webhook ก่อนบรรทัด if intent_name == ...)
     
-    # --- โค้ดสำหรับหา Group ID (ใช้เสร็จแล้วลบออกได้) ---
-    try:
-        # เช็คว่าข้อความมาจากกลุ่มไลน์ไหม
-        source = req.get('originalDetectIntentRequest', {}).get('payload', {}).get('data', {}).get('source', {})
-        if source.get('type') == 'group' or source.get('type') == 'room':
+    print(f"Intent received: {intent_name}") # ดู Log ได้ว่า Intent เข้าไหม
+
+    # ✅ 1. เช็ค Intent สำหรับขอ Group ID (ต้องสร้าง Intent ชื่อ GetGroupID ใน Dialogflow ก่อน)
+    if intent_name == 'GetGroupID':
+        try:
+            # ดึงข้อมูล Source จาก LINE Payload
+            original_request = req.get('originalDetectIntentRequest', {})
+            source = original_request.get('payload', {}).get('data', {}).get('source', {})
+            
             group_id = source.get('groupId') or source.get('roomId')
-            # ถ้าพิมพ์คำว่า "check id" ในกลุ่ม บอทจะบอก ID กลับมา
-            user_text = req.get('queryResult').get('queryText')
-            if user_text == "check id":
-                return jsonify({"fulfillmentText": f"Group ID ของห้องนี้คือ: {group_id}"})
-    except Exception as e:
-        print(f"Error finding group ID: {e}")
-    # ------------------------------------------------
-    
+            user_id = source.get('userId')
+
+            if group_id:
+                reply = f"🔑 Group ID ของห้องนี้คือ:\n{group_id}\n(จดรหัสนี้ไปใส่ใน Render นะคะ)"
+            else:
+                reply = f"⚠️ ไม่พบ Group ID ค่ะ\n(คุณอาจจะคุยแบบส่วนตัว หรือบอทไม่ได้อยู่ในกลุ่ม)\nUser ID ของคุณคือ: {user_id}"
+            
+            return jsonify({"fulfillmentText": reply})
+            
+        except Exception as e:
+            return jsonify({"fulfillmentText": f"เกิดข้อผิดพลาดในการหา ID: {e}"})
+
+    # ✅ 2. เช็ค Intent สำหรับรายงานอาการ
     if intent_name == 'ReportSymptoms':
         parameters = req.get('queryResult', {}).get('parameters', {})
         pain_score = parameters.get('pain_score')
@@ -129,8 +132,7 @@ def webhook():
             "fulfillmentText": reply_text
         })
 
-    return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว"})
+    return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว หรือไม่เข้าใจคำสั่ง"})
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
-
