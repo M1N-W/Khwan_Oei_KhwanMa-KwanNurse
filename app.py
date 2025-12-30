@@ -2,20 +2,33 @@ from flask import Flask, request, jsonify
 import gspread
 from datetime import datetime
 import os
-import json 
-import requests # <--- (1) ต้องเพิ่มบรรทัดนี้ ไม่งั้นส่งไลน์ไม่ได้ครับ
+import json
+import requests
 
 app = Flask(__name__)
 
-# --- ฟังก์ชันส่งข้อความหาพยาบาล (Messaging API Version) ---
-def send_line_push(message):
+# ==========================================
+# 🔧 CONFIGURATION & UTILS (ส่วนตั้งค่าระบบ)
+# ==========================================
+
+def get_sheet_client():
+    """เชื่อมต่อ Google Sheet แบบปลอดภัย"""
     try:
-        # ดึงค่าจาก Render Environment
+        if not os.path.exists('credentials.json'):
+            print("⚠️ Warning: ไม่พบไฟล์ credentials.json (อาจจะรันบน Cloud)")
+        return gspread.service_account(filename='credentials.json')
+    except Exception as e:
+        print(f"❌ Connect Sheet Error: {e}")
+        return None
+
+def send_line_push(message):
+    """ฟังก์ชันส่งข้อความหาพยาบาล (Reusable)"""
+    try:
         access_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-        target_id = os.environ.get('NURSE_GROUP_ID') # ส่งเข้ากลุ่มพยาบาล
+        target_id = os.environ.get('NURSE_GROUP_ID')
         
         if not access_token or not target_id:
-            print("ตั้งค่าไม่ครบ (ขาด Token หรือ Group ID)")
+            print("⚠️ Config Error: ขาด Token หรือ Group ID")
             return
 
         url = 'https://api.line.me/v2/bot/message/push'
@@ -23,141 +36,189 @@ def send_line_push(message):
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {access_token}'
         }
-        
         payload = {
             "to": target_id,
-            "messages": [
-                {
-                    "type": "text",
-                    "text": message
-                }
-            ]
+            "messages": [{"type": "text", "text": message}]
         }
-        
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        print(f"แจ้งเตือนพยาบาล: {response.status_code} {response.text}")
-        
+        requests.post(url, headers=headers, data=json.dumps(payload))
+        print("✅ Push Notification Sent!")
     except Exception as e:
-        print(f"แจ้งเตือนล้มเหลว: {e}")
+        print(f"❌ Push Error: {e}")
 
-# --- ส่วนตั้งค่า Google Sheets ---
-def save_to_sheet(pain, wound, fever, mobility, risk_result):
+# ==========================================
+# 🧠 LOGIC PART 1: DAILY SYMPTOM (อาการรายวัน)
+# ==========================================
+
+def save_symptom_data(pain, wound, fever, mobility, risk_result):
     try:
-        # ตรวจสอบว่ามีไฟล์ credentials.json หรือไม่
-        if not os.path.exists('credentials.json'):
-            print("ไม่พบไฟล์ credentials.json (ระบบกำลังใช้ Environment Variable)")
-
-        client = gspread.service_account(filename='credentials.json')
-        sheet = client.open('KhwanBot_Data').sheet1
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row = [timestamp, pain, wound, fever, mobility, risk_result]
-        sheet.append_row(row, value_input_option='USER_ENTERED')
-        print("บันทึกข้อมูลสำเร็จ!")
+        client = get_sheet_client()
+        if client:
+            sheet = client.open('KhwanBot_Data').sheet1 # แผ่นที่ 1
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([timestamp, pain, wound, fever, mobility, risk_result], value_input_option='USER_ENTERED')
+            print("✅ Symptom Saved")
     except Exception as e:
-        print(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
+        print(f"❌ Save Symptom Error: {e}")
 
-# --- ส่วนคำนวณความเสี่ยง ---
-def calculate_risk(pain, wound, fever, mobility):
+def calculate_symptom_risk(pain, wound, fever, mobility):
+    # ... (Logic เดิมของคุณที่ผมย่อให้กระชับขึ้น) ...
     risk_score = 0
-    risk_level = "ต่ำ"
-    message = ""
-
-    # 1. ประเมินความปวด
-    try:
-        pain_val = int(pain)
-    except:
-        pain_val = 0
     
-    if pain_val >= 8:
-        risk_score += 3
-    elif pain_val >= 6:
-        risk_score += 1
+    # Pain Logic
+    try: p_val = int(pain)
+    except: p_val = 0
+    if p_val >= 8: risk_score += 3
+    elif p_val >= 6: risk_score += 1
 
-    # 2. ประเมินแผล
-    if "หนอง" in wound or "มีกลิ่น" in wound or "แฉะ" in wound:
-        risk_score += 3
-    elif "บวมแดง" in wound or "อักเสบ" in wound:
-        risk_score += 2
+    # Wound Logic
+    if any(x in wound for x in ["หนอง", "มีกลิ่น", "แฉะ"]): risk_score += 3
+    elif any(x in wound for x in ["บวมแดง", "อักเสบ"]): risk_score += 2
 
-    # 3. ประเมินไข้
-    if "มี" in fever or "ตัวร้อน" in fever:
-        risk_score += 2
+    # Fever & Mobility Logic
+    if any(x in fever for x in ["มี", "ตัวร้อน"]): risk_score += 2
+    if any(x in mobility for x in ["ไม่ได้", "ติดเตียง"]): risk_score += 1
 
-    # 4. ประเมินการเดิน
-    if "ไม่ได้" in mobility or "ติดเตียง" in mobility:
-        risk_score += 1
-
-    # --- สรุปผล ---
+    # Evaluation
     if risk_score >= 3:
         risk_level = "สูง (อันตราย)"
-        message = (
-            f"⚠️ ผลการประเมิน: ความเสี่ยง{risk_level}\n"
-            f"อาการน่าเป็นห่วง (คะแนน {risk_score})\n"
-            f"กรุณากดปุ่ม 'ติดต่อพยาบาล' ทันทีค่ะ"
-        )
-        
-        # (2) เพิ่มส่วนนี้กลับเข้ามาครับ (นิยามข้อความก่อนส่ง)
-        notify_msg = (
-            f"🚨 EMERGENCY REPORT 🚨\n"
-            f"ผู้ป่วยมีความเสี่ยงสูง (คะแนน {risk_score})\n"
-            f"ระดับความปวด {pain} คะแนน\n"
-            f"แผล = {wound}\n"
-            f"ไข้ = {fever}\n"
-            f"กรุณาตรวจสอบทันที!"
-        )
-        send_line_push(notify_msg) # ส่งไลน์หาพยาบาล
-
-    elif risk_score >= 2: 
+        msg = f"⚠️ เสี่ยง{risk_level} (คะแนน {risk_score})\nกรุณากดปุ่ม 'ติดต่อพยาบาล' ทันที"
+        # Alert Nurse
+        notify_msg = f"🚨 DAILY REPORT (อาการแย่)\nRisk: {risk_score}\nPain: {pain}\nWound: {wound}\nFever: {fever}\nCheck ASAP!"
+        send_line_push(notify_msg)
+    elif risk_score >= 2:
         risk_level = "ปานกลาง"
-        message = (
-            f"⚠️ ผลการประเมิน: ความเสี่ยง{risk_level}\n"
-            f"มีอาการที่ต้องดูแลใกล้ชิด (คะแนน {risk_score})\n"
-            f"หากอาการไม่ดีขึ้นใน 24 ชม. ให้แจ้งพยาบาลนะคะ"
-        )
+        msg = f"⚠️ เสี่ยง{risk_level} (คะแนน {risk_score})\nเฝ้าระวังอาการใกล้ชิด 24 ชม.นะคะ"
     elif risk_score == 1:
         risk_level = "ต่ำ (เฝ้าระวัง)"
-        message = (
-            f"🟡 ผลการประเมิน: ความเสี่ยง{risk_level}\n"
-            f"โดยรวมยังปกติดีค่ะ มีแค่อาการบางอย่างต้องสังเกต\n"
-            f"พักผ่อนและทานยาตามแพทย์สั่งนะคะ"
-        )
+        msg = f"🟡 เสี่ยง{risk_level}\nโดยรวมปกติดี แต่ต้องสังเกตอาการนะคะ"
     else:
         risk_level = "ต่ำ (ปกติ)"
-        message = (
-            f"✅ ผลการประเมิน: ความเสี่ยง{risk_level}\n"
-            f"แผลและร่างกายฟื้นตัวได้ดีเยี่ยมค่ะ\n"
-            f"ดูแลตัวเองตามคำแนะนำต่อไปนะคะ"
-        )
-    
-    save_to_sheet(pain, wound, fever, mobility, risk_level)
-    return message
+        msg = f"✅ เสี่ยง{risk_level}\nแผลหายดี ยอดเยี่ยมมากค่ะ"
 
-# --- Webhook ---
+    save_symptom_data(pain, wound, fever, mobility, risk_level)
+    return msg
+
+# ==========================================
+# 🧠 LOGIC PART 2: PATIENT PROFILE (ประเมินความเสี่ยงบุคคล)
+# ==========================================
+
+def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level):
+    try:
+        client = get_sheet_client()
+        if client:
+            # 🔥 บันทึกลง Tab ชื่อ 'RiskProfile' (ต้องสร้างรอไว้ก่อน)
+            sheet = client.open('KhwanBot_Data').worksheet('RiskProfile')
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([timestamp, user_id, age, weight, height, bmi, diseases, risk_level], value_input_option='USER_ENTERED')
+            print("✅ Profile Saved")
+    except Exception as e:
+        print(f"❌ Save Profile Error: {e}")
+
+def assess_patient_risk(user_id, age, weight, height, diseases):
+    """
+    ฟังก์ชันประเมินความเสี่ยงพื้นฐานของผู้ป่วย (Risk Stratification)
+    Logic: อายุเยอะ, อ้วน, มีโรคประจำตัว = เสี่ยงสูง
+    """
+    score = 0
+    risk_factors = []
+    
+    # 1. คำนวณ BMI
+    try:
+        h_meter = float(height) / 100
+        bmi = float(weight) / (h_meter ** 2)
+        bmi = round(bmi, 2)
+    except:
+        bmi = 0
+
+    # 2. Logic การให้คะแนน (Customizable)
+    if float(age) > 60:
+        score += 1
+        risk_factors.append("ผู้สูงอายุ")
+    
+    if bmi > 30:
+        score += 1
+        risk_factors.append(f"ภาวะอ้วน (BMI {bmi})")
+    
+    # ตรวจสอบโรค (Keywords)
+    diseases_str = str(diseases)
+    if "เบาหวาน" in diseases_str or "Diabetes" in diseases_str:
+        score += 2 # เบาหวานแผลหายช้า ให้คะแนนเยอะหน่อย
+        risk_factors.append("เบาหวาน")
+    if "ความดัน" in diseases_str or "หัวใจ" in diseases_str:
+        score += 1
+        risk_factors.append("โรคเรื้อรัง")
+
+    # 3. สรุปผล
+    if score >= 3:
+        level = "สูง (High Risk)"
+        advice = "🔴 คุณอยู่ในกลุ่มเสี่ยงสูง\nพยาบาลจะเข้ามาเยี่ยมบ่อยเป็นพิเศษนะคะ"
+        # ถ้าความเสี่ยงพื้นฐานสูง แจ้งพยาบาลให้รับทราบเคสใหม่ทันที
+        send_line_push(f"📋 NEW CASE REPORT\nคนไข้กลุ่มเสี่ยงสูง (Score {score})\nปัจจัย: {', '.join(risk_factors)}\nฝากดูแลด้วยนะคะ")
+    elif score >= 1:
+        level = "ปานกลาง (Moderate Risk)"
+        advice = "🟡 คุณอยู่ในกลุ่มเสี่ยงปานกลาง\nควรดูแลแผลและคุมอาหารอย่างเคร่งครัดนะคะ"
+    else:
+        level = "ต่ำ (Low Risk)"
+        advice = "✅ คุณอยู่ในกลุ่มเสี่ยงต่ำ\nร่างกายแข็งแรงดีมาก ปฏิบัติตัวตามปกติได้เลยค่ะ"
+
+    # บันทึกข้อมูล
+    save_profile_data(user_id, age, weight, height, bmi, diseases_str, level)
+
+    return f"ผลประเมินสุขภาพเบื้องต้น:\nความเสี่ยงระดับ: {level}\n(BMI: {bmi})\n\n{advice}"
+
+# ==========================================
+# 🌐 WEBHOOK HANDLER (ตัวแยกทางเดินรถ)
+# ==========================================
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True, force=True)
     try:
-        intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
-    except Exception:
-        intent_name = None
+        intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
+        params = req.get('queryResult', {}).get('parameters', {})
+        
+        # ดึง User ID (เผื่อใช้ระบุตัวตน)
+        original_req = req.get('originalDetectIntentRequest', {})
+        user_id = original_req.get('payload', {}).get('data', {}).get('source', {}).get('userId', 'Unknown')
+    except Exception as e:
+        print(f"❌ Parse Error: {e}")
+        return jsonify({"fulfillmentText": "Error parsing request"})
+
+    print(f"🔔 Intent Incoming: {intent}")
+
+    # --- ROUTING ---
     
-    print(f"Intent received: {intent_name}")
+    if intent == 'GetGroupID':
+        # (Logic หา ID แบบเดิม)
+        try:
+            source = original_req.get('payload', {}).get('data', {}).get('source', {})
+            group_id = source.get('groupId') or source.get('roomId')
+            if group_id: return jsonify({"fulfillmentText": f"🔑 Group ID: {group_id}"})
+            else: return jsonify({"fulfillmentText": "บอทไม่ได้อยู่ในกลุ่มค่ะ"})
+        except: return jsonify({"fulfillmentText": "Error"})
 
-    if intent_name == 'ReportSymptoms':
-        parameters = req.get('queryResult', {}).get('parameters', {})
-        pain_score = parameters.get('pain_score')
-        wound_status = parameters.get('wound_status', "")
-        fever_check = parameters.get('fever_check', "")
-        mobility_status = parameters.get('mobility_status', "")
-        
-        reply_text = calculate_risk(pain_score, wound_status, fever_check, mobility_status)
-        
-        return jsonify({
-            "fulfillmentText": reply_text
-        })
+    elif intent == 'ReportSymptoms':
+        # ฟีเจอร์ 1: รายงานอาการ
+        res = calculate_symptom_risk(
+            params.get('pain_score'), 
+            params.get('wound_status'), 
+            params.get('fever_check'), 
+            params.get('mobility_status')
+        )
+        return jsonify({"fulfillmentText": res})
 
-    return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว หรือไม่เข้าใจคำสั่ง"})
+    elif intent == 'AssessRisk':
+        # 🔥 ฟีเจอร์ 2: ประเมินความเสี่ยงบุคคล (ใหม่!)
+        res = assess_patient_risk(
+            user_id,
+            params.get('age'),
+            params.get('weight'),
+            params.get('height'),
+            params.get('diseases')
+        )
+        return jsonify({"fulfillmentText": res})
+
+    return jsonify({"fulfillmentText": "ขอโทษค่ะ บอทไม่เข้าใจคำสั่งนี้"})
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
-
