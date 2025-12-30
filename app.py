@@ -117,4 +117,4 @@ def webhook():
     return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว"})
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)ue)
+    app.run(port=5000, debug=True)
