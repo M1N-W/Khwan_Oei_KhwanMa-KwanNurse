@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Khw anBot webhook (full, copy-paste ready)
-Features:
- - Appointments (multi-param via Dialogflow) -> save to Google Sheet "Appointments"
- - Notify nurse group via LINE push (NURSE_GROUP_ID env var)
- - Symptom reporting (save to KhwanBot_Data.sheet1)
- - Personal risk assessment (RiskProfile worksheet)
- - Robust gspread auth (credentials.json or GSPREAD_CREDENTIALS env)
- - Dialogflow webhook endpoint
+Khw anBot webhook (improved)
+- normalize phone, resolve time-of-day, validate date not past
+- better logging, safer sheet writes, helpful responses for Dialogflow
 """
 from flask import Flask, request, jsonify
 import gspread
-from datetime import datetime
+from datetime import datetime, date
 import os
 import json
 import requests
@@ -27,21 +22,20 @@ logging.basicConfig(level=logging.DEBUG if DEBUG else logging.INFO,
 logger = logging.getLogger(__name__)
 
 LOCAL_TZ = ZoneInfo("Asia/Bangkok")
-WORKSHEET_LINK = os.environ.get("WORKSHEET_LINK", "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit")
+WORKSHEET_LINK = os.environ.get("WORKSHEET_LINK", "https://docs.google.com/spreadsheets/d/1Jteh4XLzgQM3YKMzUeW3PGuBjUkvnS61rm2IXfGPnPo/edit?usp=sharing")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
 NURSE_GROUP_ID = os.environ.get("NURSE_GROUP_ID")  # set this to group ID for push notifications
 
 # ---------- gspread helper ----------
 def get_sheet_client():
-    """
-    Return gspread client.
-    Uses 'GSPREAD_CREDENTIALS' env var (JSON content) or credentials.json file if present.
-    """
     try:
         creds_env = os.environ.get("GSPREAD_CREDENTIALS")
         if creds_env:
             creds_json = json.loads(creds_env)
-            return gspread.service_account_from_dict(creds_json)
+            # some gspread versions have service_account_from_dict
+            if hasattr(gspread, "service_account_from_dict"):
+                return gspread.service_account_from_dict(creds_json)
+            # fallback: write temp file (if allowed) or raise
         if os.path.exists("credentials.json"):
             return gspread.service_account(filename="credentials.json")
         logger.warning("No Google credentials found (credentials.json or GSPREAD_CREDENTIALS).")
@@ -51,7 +45,6 @@ def get_sheet_client():
 
 # ---------- LINE push helper ----------
 def send_line_push(message):
-    """Push a text message to NURSE_GROUP_ID via LINE push API"""
     try:
         access_token = LINE_CHANNEL_ACCESS_TOKEN
         target_id = NURSE_GROUP_ID
@@ -72,50 +65,143 @@ def send_line_push(message):
         logger.exception("Push Error")
         return False
 
-# ---------- Appointment helpers ----------
+# ---------- Helpers for date/time/phone ----------
 def parse_date_iso(s: str):
-    """Validate YYYY-MM-DD -> datetime.date or None"""
+    """Validate YYYY-MM-DD -> datetime.date or None. Accept '2026-02-22T00:00:00Z' too."""
     if not s:
         return None
     try:
-        return datetime.strptime(s.strip(), "%Y-%m-%d").date()
+        # if Dialogflow sends dict/string etc, ensure str
+        if isinstance(s, dict):
+            # try common keys
+            for k in ("date", "value", "original"):
+                if k in s and isinstance(s[k], str):
+                    s = s[k]
+                    break
+            else:
+                s = json.dumps(s, ensure_ascii=False)
+        s2 = str(s).split("T")[0]
+        return datetime.strptime(s2.strip(), "%Y-%m-%d").date()
     except Exception:
-        # try to extract iso part if Dialogflow gave "2026-02-22T00:00:00Z"
         try:
-            if "T" in s:
-                return datetime.strptime(s.split("T")[0].strip(), "%Y-%m-%d").date()
+            # try to find a date substring
+            m = re.search(r'(\d{4}-\d{2}-\d{2})', str(s))
+            if m:
+                return datetime.strptime(m.group(1), "%Y-%m-%d").date()
         except Exception:
             return None
     return None
 
 def parse_time_hhmm(s: str):
-    """Validate HH:MM -> normalized string or None"""
+    """Normalize various time shapes into 'HH:MM' or None."""
     if not s:
         return None
     try:
-        t = datetime.strptime(s.strip(), "%H:%M").time()
-        return t.strftime("%H:%M")
+        if isinstance(s, dict):
+            # Dialogflow may send dicts in some locales; stringify
+            s = json.dumps(s, ensure_ascii=False)
+        s = str(s).strip()
+        # If contains 'T' and time part e.g. 2026-02-22T09:00:00
+        if "T" in s:
+            parts = s.split("T")[-1]
+            s = parts
+        # time like 09:00:00 or 09:00
+        parts = s.split(":")
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            h = int(parts[0]) % 24
+            m = int(parts[1]) % 60
+            return f"{h:02d}:{m:02d}"
+        # fallback: find HH:MM via regex
+        m = re.search(r'(\d{1,2}[:.]\d{2})', s)
+        if m:
+            txt = m.group(1).replace('.', ':')
+            ph = txt.split(':')
+            h = int(ph[0]) % 24
+            m2 = int(ph[1]) % 60
+            return f"{h:02d}:{m2:02d}"
     except Exception:
-        # sometimes Dialogflow returns "09:00:00"
-        try:
-            if ":" in s:
-                parts = s.split(":")
-                return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
-        except Exception:
-            return None
+        logger.exception("parse_time_hhmm error")
     return None
 
+# mapping for time-of-day canonical -> default HH:MM
+TIME_OF_DAY_MAP = {
+    "morning": "09:00",
+    "late_morning": "10:30",
+    "noon": "12:00",
+    "afternoon": "14:00",
+    "evening": "18:00",
+    "night": "20:00",
+    # also allow thai keys if Dialogflow returns thai text for custom entity
+    "เช้า": "09:00",
+    "สาย": "10:30",
+    "เที่ยง": "12:00",
+    "บ่าย": "14:00",
+    "เย็น": "18:00",
+    "กลางคืน": "20:00"
+}
+
+def resolve_time_from_params(sys_time_param, timeofday_param):
+    """Prefer explicit time; else map timeofday to default."""
+    t = parse_time_hhmm(sys_time_param) if sys_time_param else None
+    if t:
+        return t
+    if not timeofday_param:
+        return None
+    # timeofday_param may be dict or string; normalize
+    if isinstance(timeofday_param, dict):
+        # try value/name keys
+        for k in ("value", "name", "original", "displayName"):
+            if k in timeofday_param:
+                timeofday_param = timeofday_param[k]
+                break
+        else:
+            timeofday_param = json.dumps(timeofday_param, ensure_ascii=False)
+    if isinstance(timeofday_param, str):
+        key = timeofday_param.strip().lower()
+        # map a few thai variants to canonical
+        if key in TIME_OF_DAY_MAP:
+            return TIME_OF_DAY_MAP[key]
+        # try english keywords
+        if "morning" in key:
+            return TIME_OF_DAY_MAP["morning"]
+        if "afternoon" in key or "pm" in key:
+            return TIME_OF_DAY_MAP["afternoon"]
+        if "evening" in key:
+            return TIME_OF_DAY_MAP["evening"]
+    return None
+
+def normalize_phone_number(raw: str):
+    """Normalize various phone formats to local '0xxxxxxxxx' or return raw digits if unknown."""
+    if not raw:
+        return None
+    s = str(raw).strip()
+    s = re.sub(r"[^\d+]", "", s)
+    if s.startswith("+"):
+        if s.startswith("+66"):
+            s = "0" + s[3:]
+        else:
+            # other country code: just remove + for now
+            s = s.lstrip("+")
+    elif s.startswith("66") and len(s) > 2:
+        s = "0" + s[2:]
+    # now s should be digits starting with 0 or other
+    return s
+
+def is_valid_thai_mobile(s: str):
+    """Basic check: 10 digits starting with 0 and second digit 6-9 (typical mobile)"""
+    if not s:
+        return False
+    if not s.isdigit():
+        return False
+    return len(s) == 10 and s.startswith("0") and s[1] in "6789"
+
+# ---------- Sheet saves ----------
 def save_appointment_to_sheet(user_id, name, phone, preferred_date, preferred_time, reason, status="New", assigned_to="", notes=""):
-    """
-    Append row to Google Sheet named 'Appointments' (sheet1).
-    Columns: Timestamp | User_ID | Name | Phone | Preferred_Date | Preferred_Time | Reason | Status | Assigned_to | Notes
-    """
     try:
         client = get_sheet_client()
         if not client:
             logger.error("No gspread client available.")
             return False
-        # Open sheet named "Appointments" - ensure the sheet exists
         sheet = client.open("Appointments").sheet1
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         row = [timestamp, user_id, name or "", phone or "", preferred_date or "", preferred_time or "", reason or "", status, assigned_to, notes]
@@ -130,7 +216,7 @@ def build_appointment_notification(user_id, preferred_date, preferred_time, reas
     sheet_link = WORKSHEET_LINK
     return f"นัดใหม่ — user: {user_id}\nวันที่: {preferred_date} เวลา: {preferred_time}\nเรื่อง: {reason}\nดู sheet: {sheet_link}"
 
-# ---------- Symptom & Personal Risk logic (full implementations) ----------
+# ---------- Symptom & Personal Risk logic (kept as before) ----------
 def save_symptom_data(pain, wound, fever, mobility, risk_result):
     try:
         client = get_sheet_client()
@@ -180,7 +266,11 @@ def calculate_symptom_risk(pain, wound, fever, mobility):
     save_symptom_data(pain, wound, fever, mobility, risk_level)
     return msg
 
+# normalize_diseases, save_profile_data, calculate_personal_risk
+# (copy the earlier functions unchanged for brevity — include them if needed)
 def normalize_diseases(disease_param):
+    # same as previous block (omitted here to keep snippet shorter)
+    # include your full normalize_diseases implementation from earlier
     if not disease_param:
         return []
     def extract_items(param):
@@ -251,6 +341,7 @@ def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level):
         logger.exception("Save Profile Error")
 
 def calculate_personal_risk(user_id, age, weight, height, disease):
+    # use same implementation from earlier (kept unchanged)
     risk_score = 0
     bmi = 0.0
     try:
@@ -321,57 +412,58 @@ def webhook():
         return jsonify({"fulfillmentText": "Request body empty"}), 400
     try:
         intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
-        params = req.get('queryResult', {}).get('parameters', {})
+        params = req.get('queryResult', {}).get('parameters', {}) or {}
         original_req = req.get('originalDetectIntentRequest', {}) or {}
-        # Fallback: use session id as user id if no richer payload
         user_id = req.get('session', 'unknown').split('/')[-1]
     except Exception:
         logger.exception("Parse Error")
         return jsonify({"fulfillmentText": "Error parsing request"}), 200
 
-    logger.info("Intent incoming: %s user=%s", intent, user_id)
+    logger.info("Intent incoming: %s user=%s params=%s", intent, user_id, json.dumps(params, ensure_ascii=False))
 
     # --- Appointment Intent ---
     if intent == 'RequestAppointment':
-        # Dialogflow params: date, time, reason, name, phone
         preferred_date_raw = params.get('date') or params.get('preferred_date') or params.get('date-original')
         preferred_time_raw = params.get('time') or params.get('preferred_time')
+        # support custom TimeOfDay entity -> param name could be 'timeofday'
+        timeofday_raw = params.get('timeofday') or params.get('time_of_day')
         reason = params.get('reason') or params.get('symptom') or params.get('description')
         name = params.get('name') or None
-        phone = params.get('phone-number') or params.get('phone') or None
+        phone_raw = params.get('phone-number') or params.get('phone') or None
 
-        # Normalize date/time if provided
-        preferred_date = None
-        if isinstance(preferred_date_raw, str):
-            preferred_date = parse_date_iso(preferred_date_raw)
-        elif isinstance(preferred_date_raw, dict):
-            # try to extract date-like value from dict
-            raw_str = json.dumps(preferred_date_raw, ensure_ascii=False)
-            m = re.search(r'(\d{4}-\d{2}-\d{2})', raw_str)
-            if m:
-                preferred_date = parse_date_iso(m.group(1))
+        preferred_date = parse_date_iso(preferred_date_raw)
+        preferred_time = resolve_time_from_params(preferred_time_raw, timeofday_raw)
 
-        preferred_time = None
-        if isinstance(preferred_time_raw, str):
-            preferred_time = parse_time_hhmm(preferred_time_raw)
-
-        # Ask for missing fields
+        # validate date/time/reason
         missing = []
         if not preferred_date:
             missing.append("วันที่ (รูปแบบ YYYY-MM-DD)")
+        else:
+            # check not in past (compare with LOCAL_TZ date)
+            today_local = datetime.now(tz=LOCAL_TZ).date()
+            if preferred_date < today_local:
+                return jsonify({"fulfillmentText": "วันที่ที่เลือกเป็นอดีต กรุณาเลือกวันที่ในอนาคต"}), 200
+
         if not preferred_time:
-            missing.append("เวลา (รูปแบบ HH:MM เช่น 09:00)")
+            missing.append("เวลา (รูปแบบ HH:MM เช่น 09:00 หรือ 'เช้า'/'บ่าย')")
+
         if not reason:
             missing.append("เหตุผลการนัด (สั้น ๆ)")
+
+        # normalize phone if present
+        phone_norm = normalize_phone_number(phone_raw) if phone_raw else None
+        if phone_norm and not is_valid_thai_mobile(phone_norm):
+            # we don't require phone, but if provided and invalid, ask user to correct
+            return jsonify({"fulfillmentText": "เบอร์โทรที่ให้มาไม่ถูกต้อง กรุณาพิมพ์ใหม่เป็นตัวเลข 10 หลัก เช่น 0812345678"}), 200
 
         if missing:
             ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยครับ"
             return jsonify({"fulfillmentText": ask}), 200
 
-        # all required => save and notify
         pd_str = preferred_date.isoformat()
         pt_str = preferred_time
-        ok = save_appointment_to_sheet(user_id, name, phone, pd_str, pt_str, reason, status="New")
+
+        ok = save_appointment_to_sheet(user_id, name, phone_norm, pd_str, pt_str, reason, status="New")
         if ok:
             notif = build_appointment_notification(user_id, pd_str, pt_str, reason)
             send_line_push(notif)
