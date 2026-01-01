@@ -185,7 +185,9 @@ def save_appointment_to_sheet(user_id, name, phone, preferred_date, preferred_ti
         if not client:
             logger.error("No gspread client available.")
             return False
-        sheet = client.open("Appointments").sheet1
+        # แก้ไข: ใช้แท็บ Appointments จากไฟล์ KhwanBot_Data
+        spreadsheet = client.open("KhwanBot_Data")
+        sheet = spreadsheet.worksheet("Appointments")
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         row = [timestamp, user_id, name or "", phone or "", preferred_date or "", preferred_time or "", reason or "", status, assigned_to, notes]
         sheet.append_row(row, value_input_option="USER_ENTERED")
