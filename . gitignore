@@ -1,2 +1,25 @@
-.env
-__pycache__/
+# Python
+   *.pyc
+   __pycache__/
+   *.py[cod]
+   .Python
+   env/
+   venv/
+   *.egg-info/
+
+   # Environment variables (ห้ามอัปโหลด!)
+   .env
+   *.env
+   credentials.json
+   *credentials*.json
+
+   # IDE
+   .vscode/
+   .idea/
+
+   # OS
+   .DS_Store
+   Thumbs.db
+
+   # Logs
+   *.log
