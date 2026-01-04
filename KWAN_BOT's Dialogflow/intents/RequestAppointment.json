@@ -1,0 +1,144 @@
+{
+  "id": "f92636d5-1e74-4dc8-90d5-fde123dd0c9b",
+  "name": "RequestAppointment",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "daf49fe1-5271-494c-96b5-d00a715a4874",
+          "name": "date",
+          "required": true,
+          "dataType": "@sys.date",
+          "value": "$date",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "คุณต้องการนัดวันไหนคะ? (เช่น 25 มกราคม หรือ 2026-01-25)"
+            },
+            {
+              "lang": "th",
+              "value": "กรุณาระบุวันที่นัดค่ะ"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "34b7d6fd-274f-4434-b0ea-9fc07622348d",
+          "name": "time",
+          "required": true,
+          "dataType": "@sys.time",
+          "value": "$time",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "เวลาเท่าไหร่คะ? (เช่น 09:00 หรือ เช้า/บ่าย/เย็น)"
+            },
+            {
+              "lang": "th",
+              "value": "กรุณาระบุเวลาที่ต้องการนัดค่ะ"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "845c21d1-d2e8-4ce1-90dc-a9d7f41eb0f7",
+          "name": "timeofday",
+          "required": false,
+          "dataType": "@TimeOfDay",
+          "value": "$timeofday",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "6ff7d3d4-2d45-4857-9d40-315eb8f4d6df",
+          "name": "reason",
+          "required": true,
+          "dataType": "@sys.any",
+          "value": "$reason",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "คุณต้องการนัดเพื่ออะไรคะ? (เช่น เปลี่ยนผ้าพันแผล, ตรวจแผล, ปรึกษาอาการ)"
+            },
+            {
+              "lang": "th",
+              "value": "ระบุเหตุผลหรือเรื่องที่ต้องการพบพยาบาลค่ะ"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "672f4015-871c-44ec-b63a-bd8e51e008ab",
+          "name": "name",
+          "required": false,
+          "dataType": "@sys.person",
+          "value": "$name",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "8b39a0cc-5149-401e-971f-396469884a2a",
+          "name": "phone-number",
+          "required": false,
+          "dataType": "@sys.phone-number",
+          "value": "$phone-number",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "th",
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

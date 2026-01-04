@@ -1,0 +1,109 @@
+{
+  "id": "ed4cf2e6-d112-401f-80bc-e81259707345",
+  "name": "ReportSymptoms",
+  "auto": true,
+  "contexts": [],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [],
+      "parameters": [
+        {
+          "id": "9449d439-e825-4716-8a44-8658e5ca8b7b",
+          "name": "pain_score",
+          "required": true,
+          "dataType": "@sys.number",
+          "value": "$pain_score",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "วันนี้ระดับความปวดอยู่ที่เท่าไหร่คะ? (คะแนน 0-10)"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "4b2c986d-fe50-47a2-9a64-23141b05e1ba",
+          "name": "wound_status",
+          "required": true,
+          "dataType": "@WoundStatus",
+          "value": "$wound_status",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "แผลผ่าตัดมีลักษณะอย่างไรคะ? (เช่น แห้งดี, บวมแดง, หรือมีหนอง)"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "e876bdcf-a14a-455a-9432-1330249feb95",
+          "name": "fever_check",
+          "required": true,
+          "dataType": "@sys.any",
+          "value": "$fever_check",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "วันนี้มีไข้ตัวร้อนไหมคะ?"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        },
+        {
+          "id": "444b3e6a-d36d-475f-83be-29e67fff66e3",
+          "name": "mobility_status",
+          "required": true,
+          "dataType": "@Mobility",
+          "value": "$mobility_status",
+          "defaultValue": "",
+          "isList": false,
+          "prompts": [
+            {
+              "lang": "th",
+              "value": "วันนี้คนไข้สามารถลุกเดินหรือขยับตัวได้ไหมคะ?"
+            }
+          ],
+          "promptMessages": [],
+          "noMatchPromptMessages": [],
+          "noInputPromptMessages": [],
+          "outputDialogContexts": []
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "th",
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

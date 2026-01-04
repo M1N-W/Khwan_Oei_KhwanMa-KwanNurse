@@ -1,0 +1,449 @@
+[
+  {
+    "id": "f9285248-3865-4dcc-859a-6b9258431637",
+    "data": [
+      {
+        "text": "นัดวันที่ ",
+        "userDefined": false
+      },
+      {
+        "text": "2026-01-01",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " เวลา ",
+        "userDefined": false
+      },
+      {
+        "text": "9:00 น.",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": false
+      },
+      {
+        "text": " (",
+        "userDefined": false
+      },
+      {
+        "text": "ช่วงบ่าย",
+        "meta": "@TimeOfDay",
+        "alias": "timeofday",
+        "userDefined": false
+      },
+      {
+        "text": ") เรื่อง",
+        "userDefined": false
+      },
+      {
+        "text": "เปลี่ยนผ้าพันแผล",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      },
+      {
+        "text": " ชื่อ",
+        "userDefined": false
+      },
+      {
+        "text": "นายสมชาย วงสวัสดิ์",
+        "meta": "@sys.person",
+        "alias": "name",
+        "userDefined": true
+      },
+      {
+        "text": " เบอร์โทรติดต่อ ",
+        "userDefined": false
+      },
+      {
+        "text": "081-234-5678",
+        "meta": "@sys.phone-number",
+        "alias": "phone-number",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "681ed830-3c1c-4141-a6a9-71a3a46c1bac",
+    "data": [
+      {
+        "text": "นัด",
+        "userDefined": false
+      },
+      {
+        "text": "วันพรุ่งนี้",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": true
+      },
+      {
+        "text": "เรื่อง",
+        "userDefined": false
+      },
+      {
+        "text": "ทำแผล",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      },
+      {
+        "text": "ครับ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "36d455eb-260d-4901-bb20-c4c598f95cc8",
+    "data": [
+      {
+        "text": "ขอจองคิววันที่ ",
+        "userDefined": false
+      },
+      {
+        "text": "5 มกรา",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " ",
+        "userDefined": false
+      },
+      {
+        "text": "ตอนสิบโมง",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": true
+      },
+      {
+        "text": " ชื่อ",
+        "userDefined": false
+      },
+      {
+        "text": "สมชาย",
+        "meta": "@sys.person",
+        "alias": "name",
+        "userDefined": true
+      },
+      {
+        "text": "ครับ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "7a45283e-1ff3-412b-93c2-200cbb0be1c9",
+    "data": [
+      {
+        "text": "ต้องการ",
+        "userDefined": false
+      },
+      {
+        "text": "ปรึกษาพยาบาลเกี่ยวกับยา",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      },
+      {
+        "text": " นัด",
+        "userDefined": false
+      },
+      {
+        "text": "วันจันทร์",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": "ตอน",
+        "userDefined": false
+      },
+      {
+        "text": "บ่ายสองโมง",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "a5f95b4b-73ec-4d87-9545-cd32714a2d9f",
+    "data": [
+      {
+        "text": "อยากนัด",
+        "userDefined": false
+      },
+      {
+        "text": "วันที่ 20",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " เวลา ",
+        "userDefined": false
+      },
+      {
+        "text": "16:00",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": false
+      },
+      {
+        "text": " เพราะ",
+        "userDefined": false
+      },
+      {
+        "text": "มีไข้",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "8fbb230e-be8e-409d-9163-8a87de59996c",
+    "data": [
+      {
+        "text": "ขอนัด",
+        "userDefined": false
+      },
+      {
+        "text": "วันศุกร์หน้า",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " ",
+        "userDefined": false
+      },
+      {
+        "text": "เช้า ๆ",
+        "meta": "@TimeOfDay",
+        "alias": "timeofday",
+        "userDefined": false
+      },
+      {
+        "text": " ชื่อ",
+        "userDefined": false
+      },
+      {
+        "text": "สมชาย",
+        "meta": "@sys.person",
+        "alias": "name",
+        "userDefined": true
+      },
+      {
+        "text": " เบอร์ ",
+        "userDefined": false
+      },
+      {
+        "text": "081-234-5678",
+        "meta": "@sys.phone-number",
+        "alias": "phone-number",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "d08ac043-5e9e-40de-9f4b-9a88a83970e3",
+    "data": [
+      {
+        "text": "นัดวันที่ ",
+        "userDefined": false
+      },
+      {
+        "text": "2026-01-15",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " เวลา ",
+        "userDefined": false
+      },
+      {
+        "text": "10:00",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": false
+      },
+      {
+        "text": " เรื่อง",
+        "userDefined": false
+      },
+      {
+        "text": "เปลี่ยนผ้าพันแผล",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "17edd9a6-0cfb-428c-9eab-bc41fe35a9de",
+    "data": [
+      {
+        "text": "ต้องการพบพยาบาล",
+        "userDefined": false
+      },
+      {
+        "text": "วันอังคาร",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " ",
+        "userDefined": false
+      },
+      {
+        "text": "ตอนบ่าย",
+        "meta": "@TimeOfDay",
+        "alias": "timeofday",
+        "userDefined": false
+      },
+      {
+        "text": " เพราะ",
+        "userDefined": false
+      },
+      {
+        "text": "แผลติดเชื้อ",
+        "meta": "@sys.any",
+        "alias": "reason",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "7825ba5c-17c0-49c7-90fb-fef3efbaf34f",
+    "data": [
+      {
+        "text": "นัดตรวจ",
+        "userDefined": false
+      },
+      {
+        "text": "วันพรุ่งนี้",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " เวลา ",
+        "userDefined": false
+      },
+      {
+        "text": "14:00",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "517edd2d-7edd-45de-a9cd-70762e079c84",
+    "data": [
+      {
+        "text": "ขอนัด",
+        "userDefined": false
+      },
+      {
+        "text": "วันที่ 25 มกราคม",
+        "meta": "@sys.date",
+        "alias": "date",
+        "userDefined": false
+      },
+      {
+        "text": " เวลา",
+        "userDefined": false
+      },
+      {
+        "text": "9 โมงเช้า",
+        "meta": "@sys.time",
+        "alias": "time",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "7f6a689c-1333-468b-b2db-ecb335d2ec1e",
+    "data": [
+      {
+        "text": "นัดหมายพยาบาล",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "5f5c107f-527e-45d4-9f4c-a4d4e3263587",
+    "data": [
+      {
+        "text": "อยากนัดตรวจ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "374e9cce-90b4-4f14-89f2-92bf0063a2f5",
+    "data": [
+      {
+        "text": "ขอนัดพยาบาล",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]
