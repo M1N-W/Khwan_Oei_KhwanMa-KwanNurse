@@ -128,30 +128,42 @@ def save_reminder_response(user_id, reminder_type, response_text):
         spreadsheet = client.open('KhwanBot_Data')
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
-        # Find the most recent 'sent' entry for this user and reminder type
-        all_records = sheet.get_all_records()
+        # Get all values safely
+        all_values = sheet.get_all_values()
         
-        # Search backwards (most recent first)
-        for i in range(len(all_records) - 1, -1, -1):
-            record = all_records[i]
-            if (record.get('User_ID') == user_id and 
-                record.get('Reminder_Type') == reminder_type and
-                record.get('Status') == 'sent'):
-                
-                # Update this row
-                row_num = i + 2  # +2 because: +1 for header, +1 for 0-indexed
-                response_timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                
-                sheet.update_cell(row_num, 4, 'responded')  # Status
-                sheet.update_cell(row_num, 5, response_text)  # Response_Text
-                sheet.update_cell(row_num, 7, response_timestamp)  # Response_Timestamp
-                
-                logger.info(f"Recorded response from {user_id} for {reminder_type}")
-                
-                # Update schedule status
-                update_schedule_status(user_id, reminder_type, 'responded')
-                
-                return True
+        # If sheet is not empty, try to find matching record
+        if all_values and len(all_values) > 1:
+            headers = all_values[0]
+            
+            # Search backwards (most recent first)
+            for i in range(len(all_values) - 1, 0, -1):  # Start from end, skip header
+                row = all_values[i]
+                if len(row) >= len(headers):
+                    record = dict(zip(headers, row))
+                    
+                    if (record.get('User_ID') == user_id and 
+                        record.get('Reminder_Type') == reminder_type and
+                        record.get('Status') == 'sent'):
+                        
+                        # Update this row
+                        row_num = i + 1  # +1 for 1-indexed
+                        response_timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Find column indices
+                        status_col = headers.index('Status') + 1 if 'Status' in headers else 4
+                        response_col = headers.index('Response_Text') + 1 if 'Response_Text' in headers else 5
+                        timestamp_col = headers.index('Response_Timestamp') + 1 if 'Response_Timestamp' in headers else 7
+                        
+                        sheet.update_cell(row_num, status_col, 'responded')
+                        sheet.update_cell(row_num, response_col, response_text)
+                        sheet.update_cell(row_num, timestamp_col, response_timestamp)
+                        
+                        logger.info(f"Recorded response from {user_id} for {reminder_type}")
+                        
+                        # Update schedule status
+                        update_schedule_status(user_id, reminder_type, 'responded')
+                        
+                        return True
         
         # If no 'sent' record found, create a new 'responded' record anyway
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -191,18 +203,31 @@ def update_schedule_status(user_id, reminder_type, new_status):
         spreadsheet = client.open('KhwanBot_Data')
         sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
-        all_records = sheet.get_all_records()
+        # Get all values safely
+        all_values = sheet.get_all_values()
         
-        # Find the matching schedule
-        for i in range(len(all_records) - 1, -1, -1):
-            record = all_records[i]
-            if (record.get('User_ID') == user_id and 
-                record.get('Reminder_Type') == reminder_type):
+        if not all_values or len(all_values) <= 1:
+            logger.warning("ReminderSchedules sheet is empty, cannot update status")
+            return
+        
+        headers = all_values[0]
+        
+        # Find status column index
+        status_col = headers.index('Status') + 1 if 'Status' in headers else 6
+        
+        # Find the matching schedule (search backwards for most recent)
+        for i in range(len(all_values) - 1, 0, -1):
+            row = all_values[i]
+            if len(row) >= len(headers):
+                record = dict(zip(headers, row))
                 
-                row_num = i + 2
-                sheet.update_cell(row_num, 6, new_status)  # Status column
-                logger.info(f"Updated schedule status: {user_id}/{reminder_type} -> {new_status}")
-                return
+                if (record.get('User_ID') == user_id and 
+                    record.get('Reminder_Type') == reminder_type):
+                    
+                    row_num = i + 1
+                    sheet.update_cell(row_num, status_col, new_status)
+                    logger.info(f"Updated schedule status: {user_id}/{reminder_type} -> {new_status}")
+                    return
                 
     except Exception as e:
         logger.exception(f"Error updating schedule status: {e}")
@@ -227,10 +252,26 @@ def get_pending_reminders(user_id, reminder_type):
         spreadsheet = client.open('KhwanBot_Data')
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
-        all_records = sheet.get_all_records()
+        # Get all values safely
+        all_values = sheet.get_all_values()
         
+        # Check if empty
+        if not all_values or len(all_values) <= 1:
+            logger.info("FollowUpReminders sheet is empty")
+            return []
+        
+        # Parse records
+        headers = all_values[0]
+        records = []
+        
+        for row in all_values[1:]:
+            if len(row) >= len(headers):
+                record = dict(zip(headers, row))
+                records.append(record)
+        
+        # Filter pending reminders
         pending = []
-        for record in all_records:
+        for record in records:
             if record.get('User_ID') == user_id and record.get('Status') == 'sent':
                 if reminder_type is None or record.get('Reminder_Type') == reminder_type:
                     pending.append(record)
@@ -257,9 +298,25 @@ def get_scheduled_reminders():
         spreadsheet = client.open('KhwanBot_Data')
         sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
-        all_records = sheet.get_all_records()
+        # Get all values (safer than get_all_records for empty sheets)
+        all_values = sheet.get_all_values()
         
-        scheduled = [r for r in all_records if r.get('Status') == 'scheduled']
+        # Check if sheet is empty or has only headers
+        if not all_values or len(all_values) <= 1:
+            logger.info("ReminderSchedules sheet is empty (no data rows)")
+            return []
+        
+        # Parse records manually
+        headers = all_values[0]
+        records = []
+        
+        for row in all_values[1:]:  # Skip header
+            if len(row) >= len(headers):
+                record = dict(zip(headers, row))
+                records.append(record)
+        
+        # Filter for scheduled status
+        scheduled = [r for r in records if r.get('Status') == 'scheduled']
         
         return scheduled
         
@@ -283,40 +340,54 @@ def check_no_response_reminders():
         spreadsheet = client.open('KhwanBot_Data')
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
-        all_records = sheet.get_all_records()
+        # Get all values safely
+        all_values = sheet.get_all_values()
+        
+        if not all_values or len(all_values) <= 1:
+            logger.info("FollowUpReminders sheet is empty, no reminders to check")
+            return []
+        
+        headers = all_values[0]
+        
+        # Find column indices
+        status_col = headers.index('Status') + 1 if 'Status' in headers else 4
         
         no_response = []
         now = datetime.now(tz=LOCAL_TZ)
         
-        for i, record in enumerate(all_records):
-            if record.get('Status') == 'sent':
-                # Check if sent more than 24 hours ago
-                timestamp_str = record.get('Timestamp', '')
-                if timestamp_str:
-                    try:
-                        sent_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                        sent_time = sent_time.replace(tzinfo=LOCAL_TZ)
-                        
-                        hours_passed = (now - sent_time).total_seconds() / 3600
-                        
-                        if hours_passed >= 24:
-                            # Mark as no_response
-                            row_num = i + 2
-                            sheet.update_cell(row_num, 4, 'no_response')
+        for i in range(1, len(all_values)):  # Skip header
+            row = all_values[i]
+            if len(row) >= len(headers):
+                record = dict(zip(headers, row))
+                
+                if record.get('Status') == 'sent':
+                    # Check if sent more than 24 hours ago
+                    timestamp_str = record.get('Timestamp', '')
+                    if timestamp_str:
+                        try:
+                            sent_time = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                            sent_time = sent_time.replace(tzinfo=LOCAL_TZ)
                             
-                            record['row_num'] = row_num
-                            record['hours_passed'] = hours_passed
-                            no_response.append(record)
+                            hours_passed = (now - sent_time).total_seconds() / 3600
                             
-                            # Update schedule status
-                            update_schedule_status(
-                                record.get('User_ID'),
-                                record.get('Reminder_Type'),
-                                'no_response'
-                            )
-                            
-                    except Exception as e:
-                        logger.warning(f"Error parsing timestamp {timestamp_str}: {e}")
+                            if hours_passed >= 24:
+                                # Mark as no_response
+                                row_num = i + 1
+                                sheet.update_cell(row_num, status_col, 'no_response')
+                                
+                                record['row_num'] = row_num
+                                record['hours_passed'] = hours_passed
+                                no_response.append(record)
+                                
+                                # Update schedule status
+                                update_schedule_status(
+                                    record.get('User_ID'),
+                                    record.get('Reminder_Type'),
+                                    'no_response'
+                                )
+                                
+                        except Exception as e:
+                            logger.warning(f"Error parsing timestamp {timestamp_str}: {e}")
         
         logger.info(f"Found {len(no_response)} reminders with no response after 24h")
         return no_response
