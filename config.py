@@ -26,6 +26,8 @@ SPREADSHEET_NAME = "KhwanBot_Data"
 SHEET_SYMPTOM_LOG = "SymptomLog"
 SHEET_RISK_PROFILE = "RiskProfile"
 SHEET_APPOINTMENTS = "Appointments"
+SHEET_FOLLOW_UP_REMINDERS = "FollowUpReminders"
+SHEET_REMINDER_SCHEDULES = "ReminderSchedules"
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
@@ -88,3 +90,18 @@ DISEASE_NEGATIVES = {
     "none", "no", "no disease", "ไม่มี", "ไม่มีโรค",
     "healthy", "null", "n/a", "ไม่"
 }
+
+# Follow-up Reminder Configuration
+REMINDER_INTERVALS = {
+    'day3': {'days': 3, 'name': 'วันที่ 3 หลังจำหน่าย'},
+    'day7': {'days': 7, 'name': 'สัปดาห์ที่ 1'},
+    'day14': {'days': 14, 'name': 'สัปดาห์ที่ 2'},
+    'day30': {'days': 30, 'name': '1 เดือน'}
+}
+
+# Time to check for no-response (hours)
+NO_RESPONSE_CHECK_HOURS = 24
+
+# Scheduler Configuration
+SCHEDULER_TIMEZONE = 'Asia/Bangkok'
+SCHEDULER_JOBSTORE = 'default'
