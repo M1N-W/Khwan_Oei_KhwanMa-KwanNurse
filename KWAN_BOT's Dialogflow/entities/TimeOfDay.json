@@ -1,9 +1,0 @@
-{
-  "id": "6d1c67f7-5f04-46d6-a932-952136123200",
-  "name": "TimeOfDay",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": false,
-  "allowFuzzyExtraction": false
-}

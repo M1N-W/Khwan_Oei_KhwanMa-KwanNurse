@@ -1,9 +1,0 @@
-{
-  "id": "c50e5fa3-57de-4333-940b-6a54a57e8014",
-  "name": "WoundStatus",
-  "isOverridable": true,
-  "isEnum": false,
-  "isRegexp": false,
-  "automatedExpansion": false,
-  "allowFuzzyExtraction": false
-}
