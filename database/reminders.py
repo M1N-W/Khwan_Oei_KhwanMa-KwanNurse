@@ -2,6 +2,9 @@
 """
 Reminder Database Module
 Handle all database operations for follow-up reminders
+
+⚠️ THIS IS: database/reminders.py (PLURAL - in database folder)
+⚠️ NOT: services/reminder.py (that's a different file!)
 """
 from datetime import datetime
 from config import (

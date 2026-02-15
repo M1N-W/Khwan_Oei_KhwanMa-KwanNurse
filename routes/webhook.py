@@ -23,7 +23,8 @@ from services import (
     get_physical_therapy_guide,
     get_dvt_prevention_guide,
     get_medication_guide,
-    get_warning_signs_guide
+    get_warning_signs_guide,
+    get_reminder_summary
 )
 from services.teleconsult import (
     is_office_hours,
@@ -91,6 +92,9 @@ def register_routes(app):
         
         elif intent == 'GetKnowledge':
             return handle_get_knowledge(params)
+        
+        elif intent == 'GetFollowUpSummary':
+            return handle_get_followup_summary(user_id)
         
         elif intent == 'ContactNurse':
             return handle_contact_nurse(user_id, params, query_text)
@@ -270,6 +274,111 @@ def handle_get_knowledge(params):
     }), 200
 
 
+def handle_get_followup_summary(user_id):
+    """
+    Handle GetFollowUpSummary intent
+    FIXED: Added implementation for follow-up reminder summary
+    
+    Args:
+        user_id: User's LINE ID
+        
+    Returns:
+        JSON response with follow-up summary
+    """
+    try:
+        logger.info(f"GetFollowUpSummary request from {user_id}")
+        
+        # Get reminder summary from database
+        summary = get_reminder_summary(user_id)
+        
+        # Check if there was an error
+        if 'error' in summary:
+            return jsonify({
+                "fulfillmentText": (
+                    "ขอโทษค่ะ เกิดข้อผิดพลาดในการดึงข้อมูล\n"
+                    "กรุณาลองใหม่อีกครั้งหรือติดต่อพยาบาลค่ะ"
+                )
+            }), 200
+        
+        # Check if user has any reminders
+        if summary['total_reminders'] == 0:
+            message = (
+                "📋 ยังไม่มีข้อมูลการติดตามค่ะ\n\n"
+                "หลังจากที่คุณจำหน่ายจากโรงพยาบาล\n"
+                "ระบบจะเริ่มติดตามอาการของคุณอัตโนมัติ\n\n"
+                "💡 ระบบจะส่งการเตือนในวันที่:\n"
+                "   • วันที่ 3 หลังจำหน่าย\n"
+                "   • วันที่ 7 (สัปดาห์แรก)\n"
+                "   • วันที่ 14 (สัปดาห์ที่ 2)\n"
+                "   • วันที่ 30 (ครบ 1 เดือน)"
+            )
+        else:
+            # Build summary message
+            message = (
+                f"📊 สรุปการติดตามของคุณ\n"
+                f"{'=' * 30}\n\n"
+                f"📌 รวมทั้งหมด: {summary['total_reminders']} ครั้ง\n"
+                f"✅ ตอบกลับแล้ว: {summary['responded']} ครั้ง\n"
+                f"⏳ รอตอบกลับ: {summary['pending']} ครั้ง\n"
+            )
+            
+            if summary['no_response'] > 0:
+                message += f"⚠️ ไม่ตอบกลับ: {summary['no_response']} ครั้ง\n"
+            
+            message += "\n"
+            
+            # Add latest reminder info
+            if summary.get('latest'):
+                latest = summary['latest']
+                reminder_type = latest.get('Reminder_Type', 'unknown')
+                status = latest.get('Status', 'unknown')
+                timestamp = latest.get('Created_At', '')
+                
+                # Format reminder type
+                type_map = {
+                    'day3': 'วันที่ 3',
+                    'day7': 'วันที่ 7 (สัปดาห์แรก)',
+                    'day14': 'วันที่ 14 (สัปดาห์ที่ 2)',
+                    'day30': 'วันที่ 30 (ครบ 1 เดือน)'
+                }
+                type_display = type_map.get(reminder_type, reminder_type)
+                
+                # Format status
+                status_map = {
+                    'scheduled': '📅 กำหนดการแล้ว',
+                    'sent': '⏳ รอตอบกลับ',
+                    'responded': '✅ ตอบกลับแล้ว',
+                    'no_response': '⚠️ ไม่ตอบกลับ'
+                }
+                status_display = status_map.get(status, status)
+                
+                message += (
+                    f"🔔 การติดตามล่าสุด:\n"
+                    f"   📅 {type_display}\n"
+                    f"   สถานะ: {status_display}\n"
+                )
+                
+                if timestamp:
+                    message += f"   ⏰ {timestamp}\n"
+            
+            message += (
+                f"\n"
+                f"💡 พยาบาลจะติดตามอาการของคุณ\n"
+                f"เป็นประจำตามกำหนดการนะคะ"
+            )
+        
+        return jsonify({"fulfillmentText": message}), 200
+        
+    except Exception as e:
+        logger.exception(f"Error in GetFollowUpSummary: {e}")
+        return jsonify({
+            "fulfillmentText": (
+                "ขอโทษค่ะ เกิดข้อผิดพลาดในการดึงข้อมูล\n"
+                "กรุณาลองใหม่อีกครั้งหรือติดต่อพยาบาลค่ะ"
+            )
+        }), 200
+
+
 def handle_get_group_id():
     """Handle GetGroupID debug intent"""
     return jsonify({
@@ -357,6 +466,8 @@ def handle_unknown_intent(intent):
             f"• รายงานอาการ\n"
             f"• ประเมินความเสี่ยง\n"
             f"• นัดหมายพยาบาล\n"
-            f"• ความรู้และคำแนะนำ"
+            f"• ความรู้และคำแนะนำ\n"
+            f"• ติดตามหลังจำหน่าย\n"
+            f"• ปรึกษาพยาบาล"
         )
     }), 200

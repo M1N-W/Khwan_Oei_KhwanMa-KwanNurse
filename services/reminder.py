@@ -94,8 +94,8 @@ def send_reminder(user_id, reminder_type):
         # Get message
         message = get_reminder_message(reminder_type)
         
-        # Send via LINE
-        success = send_line_push(user_id, message)
+        # Send via LINE - FIXED: Correct parameter order (message, target_id)
+        success = send_line_push(message, user_id)
         
         if success:
             # Record in database
@@ -254,7 +254,7 @@ def check_response_for_concerns(user_id, reminder_type, response_text):
         if has_concern:
             logger.warning(f"Concerning response detected from {user_id}: {response_text}")
             
-            # Alert nurse
+            # Alert nurse - FIXED: Correct parameter order
             alert_message = (
                 f"⚠️ แจ้งเตือนอาการน่ากังวล\n\n"
                 f"👤 ผู้ป่วย: {user_id}\n"
@@ -263,7 +263,7 @@ def check_response_for_concerns(user_id, reminder_type, response_text):
                 f"กรุณาติดตามด่วนค่ะ"
             )
             
-            send_line_push(NURSE_GROUP_ID, alert_message)
+            send_line_push(alert_message, NURSE_GROUP_ID)
             logger.info(f"Sent concern alert for {user_id} to nurse")
             
     except Exception as e:
@@ -296,7 +296,7 @@ def check_and_alert_no_response():
                 users_no_response[user_id] = []
             users_no_response[user_id].append(reminder)
         
-        # Send alerts
+        # Send alerts - FIXED: Correct parameter order
         alerts_sent = 0
         for user_id, reminders in users_no_response.items():
             reminder_types = [r.get('Reminder_Type') for r in reminders]
@@ -309,7 +309,7 @@ def check_and_alert_no_response():
                 f"กรุณาติดตามผู้ป่วยค่ะ"
             )
             
-            success = send_line_push(NURSE_GROUP_ID, alert_message)
+            success = send_line_push(alert_message, NURSE_GROUP_ID)
             if success:
                 alerts_sent += 1
                 logger.info(f"Sent no-response alert for {user_id}")
@@ -325,26 +325,49 @@ def check_and_alert_no_response():
 def get_reminder_summary(user_id):
     """
     Get summary of reminders for a user
+    FIXED: Return correct field names matching webhook handler expectations
     
     Args:
         user_id: User ID
         
     Returns:
-        dict: Summary of user's reminders
+        dict: Summary of user's reminders with correct field names
     """
     try:
         from database.reminders import get_scheduled_reminders
         
+        # Get all scheduled reminders
         all_scheduled = get_scheduled_reminders()
-        user_reminders = [r for r in all_scheduled if r.get('User_ID') == user_id]
+        user_scheduled = [r for r in all_scheduled if r.get('User_ID') == user_id]
         
+        # Get pending (sent but not responded)
         pending = get_pending_reminders(user_id, None)
+        
+        # Count by status
+        total_reminders = len(user_scheduled)
+        responded = len([r for r in user_scheduled if r.get('Status') == 'responded'])
+        pending_count = len([r for r in user_scheduled if r.get('Status') == 'sent'])
+        no_response = len([r for r in user_scheduled if r.get('Status') == 'no_response'])
+        
+        # Get latest reminder
+        latest = None
+        if user_scheduled:
+            # Sort by timestamp descending
+            sorted_reminders = sorted(
+                user_scheduled,
+                key=lambda x: x.get('Created_At', ''),
+                reverse=True
+            )
+            latest = sorted_reminders[0] if sorted_reminders else None
         
         summary = {
             'user_id': user_id,
-            'total_scheduled': len(user_reminders),
-            'pending_response': len(pending),
-            'scheduled_reminders': user_reminders,
+            'total_reminders': total_reminders,
+            'responded': responded,
+            'pending': pending_count,
+            'no_response': no_response,
+            'latest': latest,
+            'all_scheduled': user_scheduled,
             'pending_reminders': pending
         }
         
@@ -352,4 +375,12 @@ def get_reminder_summary(user_id):
         
     except Exception as e:
         logger.exception(f"Error getting reminder summary: {e}")
-        return {'user_id': user_id, 'error': str(e)}
+        return {
+            'user_id': user_id,
+            'error': str(e),
+            'total_reminders': 0,
+            'responded': 0,
+            'pending': 0,
+            'no_response': 0,
+            'latest': None
+        }
