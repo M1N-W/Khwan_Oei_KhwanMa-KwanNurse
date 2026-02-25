@@ -21,35 +21,47 @@ from services.scheduler import init_scheduler
 # Initialize logger
 logger = get_logger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
-app.config['DEBUG'] = DEBUG
 
-# Register all routes
-register_routes(app)
+def create_app():
+    """
+    Application factory.
+    Keeps route registration and scheduler init inside a callable so that
+    Gunicorn worker forks do not each execute this code at import time,
+    which would create duplicate APScheduler instances sending duplicate reminders.
+    """
+    flask_app = Flask(__name__)
+    flask_app.config['DEBUG'] = DEBUG
 
-# Initialize scheduler for follow-up reminders
-try:
-    init_scheduler()
-    logger.info("✅ Reminder scheduler initialized successfully")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize scheduler: {e}")
+    # Register all routes
+    register_routes(flask_app)
 
-# Log startup information
-logger.info("=" * 60)
-logger.info("KwanNurse-Bot v4.0 - COMPLETE!")
-logger.info("=" * 60)
-logger.info("Debug Mode: %s", DEBUG)
-logger.info("Features (6/6 - 100%%): ")
-logger.info("  1. ✅ ReportSymptoms")
-logger.info("  2. ✅ AssessRisk")
-logger.info("  3. ✅ RequestAppointment")
-logger.info("  4. ✅ GetKnowledge")
-logger.info("  5. ✅ FollowUpReminders")
-logger.info("  6. ✅ Teleconsult ⭐ NEW")
-logger.info("=" * 60)
-logger.info("🎉 ALL FEATURES COMPLETE!")
-logger.info("=" * 60)
+    # Initialize scheduler for follow-up reminders
+    try:
+        init_scheduler()
+        logger.info("✅ Reminder scheduler initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize scheduler: {e}")
+
+    # Log startup information
+    logger.info("=" * 60)
+    logger.info("KwanNurse-Bot v4.0 - COMPLETE!")
+    logger.info("=" * 60)
+    logger.info("Debug Mode: %s", DEBUG)
+    logger.info("Features (6/6 - 100%%): ")
+    logger.info("  1. ✅ ReportSymptoms")
+    logger.info("  2. ✅ AssessRisk")
+    logger.info("  3. ✅ RequestAppointment")
+    logger.info("  4. ✅ GetKnowledge")
+    logger.info("  5. ✅ FollowUpReminders")
+    logger.info("  6. ✅ Teleconsult ⭐ NEW")
+    logger.info("=" * 60)
+    logger.info("🎉 ALL FEATURES COMPLETE!")
+    logger.info("=" * 60)
+
+    return flask_app
+
+
+app = create_app()
 
 
 if __name__ == '__main__':

@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from config import (
     LOCAL_TZ,
+    SPREADSHEET_NAME,
     SHEET_TELECONSULT_SESSIONS,
     SHEET_TELECONSULT_QUEUE,
     get_logger
@@ -45,7 +46,7 @@ def create_session(user_id, issue_type, priority, description=""):
             logger.error("No sheet client available")
             return None
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         session_id = generate_session_id()
@@ -75,6 +76,7 @@ def create_session(user_id, issue_type, priority, description=""):
             'user_id': user_id,
             'issue_type': issue_type,
             'priority': priority,
+            'description': description,
             'status': 'queued',
             'timestamp': timestamp
         }
@@ -102,7 +104,7 @@ def add_to_queue(session_id, user_id, issue_type, priority):
         if not client:
             return None
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         # Get current queue to calculate position
@@ -177,7 +179,7 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
         if not client:
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()
@@ -237,7 +239,7 @@ def update_session_queue_position(session_id, position):
         if not client:
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()
@@ -276,7 +278,7 @@ def remove_from_queue(session_id):
         if not client:
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         all_values = sheet.get_all_values()
@@ -315,7 +317,7 @@ def get_queue_status():
         if not client:
             return {'total': 0, 'by_priority': {}}
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         all_values = sheet.get_all_values()
@@ -335,7 +337,10 @@ def get_queue_status():
         # Count by priority
         by_priority = {1: 0, 2: 0, 3: 0}
         for item in waiting:
-            priority = int(item.get('Priority', 3))
+            try:
+                priority = int(item.get('Priority', 3))
+            except (ValueError, TypeError):
+                priority = 3
             by_priority[priority] = by_priority.get(priority, 0) + 1
         
         return {
@@ -364,7 +369,7 @@ def get_user_active_session(user_id):
         if not client:
             return None
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()

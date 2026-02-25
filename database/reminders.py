@@ -8,7 +8,8 @@ Handle all database operations for follow-up reminders
 """
 from datetime import datetime
 from config import (
-    LOCAL_TZ, 
+    LOCAL_TZ,
+    SPREADSHEET_NAME,
     SHEET_FOLLOW_UP_REMINDERS,
     SHEET_REMINDER_SCHEDULES,
     get_logger
@@ -38,7 +39,7 @@ def save_reminder_schedule(user_id, discharge_date, reminder_type, scheduled_dat
             logger.error("No sheet client available")
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -82,7 +83,7 @@ def save_reminder_sent(user_id, reminder_type, message_text=""):
             logger.error("No sheet client available")
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -128,7 +129,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
             logger.error("No sheet client available")
             return False
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely
@@ -148,18 +149,32 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         record.get('Reminder_Type') == reminder_type and
                         record.get('Status') == 'sent'):
                         
-                        # Update this row
+                        # Update this row using batch_update (single API call)
                         row_num = i + 1  # +1 for 1-indexed
                         response_timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Find column indices
+
+                        # Find column letters for batch update
                         status_col = headers.index('Status') + 1 if 'Status' in headers else 4
                         response_col = headers.index('Response_Text') + 1 if 'Response_Text' in headers else 5
                         timestamp_col = headers.index('Response_Timestamp') + 1 if 'Response_Timestamp' in headers else 7
-                        
-                        sheet.update_cell(row_num, status_col, 'responded')
-                        sheet.update_cell(row_num, response_col, response_text)
-                        sheet.update_cell(row_num, timestamp_col, response_timestamp)
+
+                        def _col_letter(n):
+                            return chr(ord('A') + n - 1)
+
+                        sheet.batch_update([
+                            {
+                                'range': f"{_col_letter(status_col)}{row_num}",
+                                'values': [['responded']]
+                            },
+                            {
+                                'range': f"{_col_letter(response_col)}{row_num}",
+                                'values': [[response_text]]
+                            },
+                            {
+                                'range': f"{_col_letter(timestamp_col)}{row_num}",
+                                'values': [[response_timestamp]]
+                            }
+                        ])
                         
                         logger.info(f"Recorded response from {user_id} for {reminder_type}")
                         
@@ -203,7 +218,7 @@ def update_schedule_status(user_id, reminder_type, new_status):
         if not client:
             return
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         # Get all values safely
@@ -252,7 +267,7 @@ def get_pending_reminders(user_id, reminder_type):
         if not client:
             return []
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely
@@ -298,7 +313,7 @@ def get_scheduled_reminders():
         if not client:
             return []
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         # Get all values (safer than get_all_records for empty sheets)
@@ -340,7 +355,7 @@ def check_no_response_reminders():
         if not client:
             return []
         
-        spreadsheet = client.open('KhwanBot_Data')
+        spreadsheet = client.open(SPREADSHEET_NAME)
         sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely

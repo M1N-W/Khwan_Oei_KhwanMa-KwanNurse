@@ -82,14 +82,13 @@ def parse_category_choice(choice_text):
         str: Category key or None
     """
     try:
-        # Try as number
-        try:
-            choice_num = int(choice_text.strip())
+        # Try as number (only pure digit strings)
+        stripped = choice_text.strip()
+        if stripped.isdigit():
+            choice_num = int(stripped)
             categories = list(ISSUE_CATEGORIES.keys())
             if 1 <= choice_num <= len(categories):
                 return categories[choice_num - 1]
-        except ValueError:
-            pass
         
         # Try as text matching
         choice_lower = choice_text.lower().strip()
@@ -253,7 +252,7 @@ def handle_emergency(user_id, description):
             f"Session ID: {session['session_id']}"
         )
         
-        send_line_push(NURSE_GROUP_ID, alert_message)
+        send_line_push(alert_message, NURSE_GROUP_ID)
         
         message = (
             "🚨 รับเรื่องฉุกเฉินแล้วค่ะ\n\n"
@@ -393,7 +392,7 @@ def alert_nurse_new_request(session, queue_info):
             f"Session ID: {session['session_id']}"
         )
         
-        send_line_push(NURSE_GROUP_ID, message)
+        send_line_push(message, NURSE_GROUP_ID)
         
         logger.info(f"Sent nurse alert for session {session['session_id']}")
         

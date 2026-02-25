@@ -15,8 +15,8 @@ Updated webhook.py - Add GetFollowUpSummary Intent Handler
 #
 # เพิ่มหลังจากบรรทัดนั้น:
 
-elif intent == 'GetFollowUpSummary':
-    return handle_get_followup_summary(user_id)
+# elif intent == 'GetFollowUpSummary':
+#     return handle_get_followup_summary(user_id)
 
 
 # ========================================

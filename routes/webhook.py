@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 from flask import request, jsonify
-from config import get_logger, LOCAL_TZ
+from config import get_logger, LOCAL_TZ, OFFICE_HOURS
 from utils import (
     parse_date_iso,
     resolve_time_from_params,
@@ -422,8 +422,6 @@ def handle_contact_nurse(user_id, params, query_text):
             
             # Add office hours info if outside hours
             if not is_office_hours():
-                from datetime import datetime
-                from config import OFFICE_HOURS
                 now = datetime.now(tz=LOCAL_TZ)
                 current_time = now.strftime("%H:%M")
                 

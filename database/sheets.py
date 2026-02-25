@@ -6,6 +6,7 @@ Handles all interactions with Google Sheets
 import gspread
 import json
 import os
+import time
 from datetime import datetime
 from config import (
     get_logger,
@@ -19,38 +20,50 @@ from config import (
 
 logger = get_logger(__name__)
 
-# Module-level client cache
+# Module-level client cache with TTL (refresh before 1-hour token expiry)
 _sheet_client = None
+_client_created_at = None
+_CLIENT_TTL_SECONDS = 3000  # 50 minutes
 
 
 def get_sheet_client():
     """
-    Get Google Sheets client (singleton pattern)
+    Get Google Sheets client (singleton with TTL refresh)
+    Refreshes the client before the 1-hour OAuth token expiry.
     Returns: gspread client or None
     """
-    global _sheet_client
-    
-    if _sheet_client is not None:
+    global _sheet_client, _client_created_at
+
+    now = time.monotonic()
+    if (_sheet_client is not None and
+            _client_created_at is not None and
+            (now - _client_created_at) < _CLIENT_TTL_SECONDS):
         return _sheet_client
-    
+
+    # Invalidate stale client
+    _sheet_client = None
+    _client_created_at = None
+
     try:
         creds_env = GSPREAD_CREDENTIALS
         if creds_env:
             creds_json = json.loads(creds_env)
             if hasattr(gspread, "service_account_from_dict"):
                 _sheet_client = gspread.service_account_from_dict(creds_json)
+                _client_created_at = now
                 logger.info("Google Sheets client initialized from environment")
                 return _sheet_client
-        
+
         if os.path.exists("credentials.json"):
             _sheet_client = gspread.service_account(filename="credentials.json")
+            _client_created_at = now
             logger.info("Google Sheets client initialized from file")
             return _sheet_client
-        
+
         logger.warning("No Google credentials found")
     except Exception:
         logger.exception("Error connecting to Google Sheets")
-    
+
     return None
 
 

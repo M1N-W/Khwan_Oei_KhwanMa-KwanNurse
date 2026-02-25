@@ -18,6 +18,7 @@ from database.reminders import (
     check_no_response_reminders
 )
 from services.notification import send_line_push
+from services.scheduler import schedule_reminder_job
 
 logger = get_logger(__name__)
 
@@ -163,6 +164,7 @@ def schedule_follow_up_reminders(user_id, discharge_date):
                     'name': name,
                     'scheduled_date': scheduled_date.strftime("%Y-%m-%d %H:%M")
                 }
+                schedule_reminder_job(user_id, reminder_type, scheduled_date)
                 logger.info(f"Scheduled {reminder_type} for {user_id} at {scheduled_date}")
             else:
                 logger.error(f"Failed to schedule {reminder_type} for {user_id}")
@@ -207,8 +209,13 @@ def handle_reminder_response(user_id, response_text):
             logger.warning(f"No pending reminders found for {user_id}")
             return False
         
-        # Get the most recent pending reminder
-        most_recent = pending[-1]
+        # Get the most recent pending reminder (sort by Timestamp descending)
+        pending_sorted = sorted(
+            pending,
+            key=lambda x: x.get('Timestamp', ''),
+            reverse=True
+        )
+        most_recent = pending_sorted[0]
         reminder_type = most_recent.get('Reminder_Type')
         
         # Save response

@@ -19,6 +19,9 @@ from services.notification import (
 
 logger = get_logger(__name__)
 
+# Pre-sorted disease keys (longest first) — avoids re-sorting on every call
+_SORTED_DISEASE_KEYS = sorted(DISEASE_MAPPING.keys(), key=lambda x: -len(x))
+
 
 def calculate_symptom_risk(user_id, pain, wound, fever, mobility):
     """
@@ -170,7 +173,7 @@ def normalize_diseases(disease_param):
         
         # Try to map to standard disease name
         found = False
-        for key in sorted(DISEASE_MAPPING.keys(), key=lambda x: -len(x)):
+        for key in _SORTED_DISEASE_KEYS:
             if key in s:
                 canon = DISEASE_MAPPING[key]
                 if canon not in seen:
@@ -338,7 +341,12 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
     # Send notification if high risk
     if risk_score >= 4:
         notify_msg = build_risk_notification(
-            user_id, age_val, bmi, diseases_str, risk_level, risk_score
+            user_id,
+            age_val if age_val is not None else "ไม่ระบุ",
+            bmi,
+            diseases_str,
+            risk_level,
+            risk_score
         )
         send_line_push(notify_msg)
     
