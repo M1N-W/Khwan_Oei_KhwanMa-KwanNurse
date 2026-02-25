@@ -18,7 +18,6 @@ from database.reminders import (
     check_no_response_reminders
 )
 from services.notification import send_line_push
-from services.scheduler import schedule_reminder_job
 
 logger = get_logger(__name__)
 
@@ -164,6 +163,7 @@ def schedule_follow_up_reminders(user_id, discharge_date):
                     'name': name,
                     'scheduled_date': scheduled_date.strftime("%Y-%m-%d %H:%M")
                 }
+                from services.scheduler import schedule_reminder_job  # deferred to avoid circular import
                 schedule_reminder_job(user_id, reminder_type, scheduled_date)
                 logger.info(f"Scheduled {reminder_type} for {user_id} at {scheduled_date}")
             else:

@@ -15,10 +15,6 @@ from config import (
     SCHEDULER_TIMEZONE,
     get_logger
 )
-from services.reminder import (
-    send_reminder,
-    check_and_alert_no_response
-)
 from database.reminders import get_scheduled_reminders
 
 logger = get_logger(__name__)
@@ -44,6 +40,7 @@ def init_scheduler():
             logger.info("✅ Scheduler started successfully")
             
             # Schedule recurring job to check no-response reminders
+            from services.reminder import check_and_alert_no_response  # deferred to avoid circular import
             scheduler.add_job(
                 func=check_and_alert_no_response,
                 trigger=CronTrigger(hour=10, minute=0, timezone=LOCAL_TZ),  # Daily at 10 AM
@@ -120,6 +117,7 @@ def load_pending_reminders():
                 # Schedule the job
                 job_id = f"{user_id}_{reminder_type}_{scheduled_date.strftime('%Y%m%d%H%M')}"
                 
+                from services.reminder import send_reminder  # deferred to avoid circular import
                 scheduler.add_job(
                     func=send_reminder,
                     trigger=DateTrigger(run_date=scheduled_date, timezone=LOCAL_TZ),
