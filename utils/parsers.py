@@ -49,7 +49,7 @@ def parse_date_iso(s):
 def parse_time_hhmm(s):
     """
     Normalize various time formats to 'HH:MM'
-    Accepts: HH:MM, HH.MM, ISO format, etc.
+    Accepts: HH:MM, HH.MM, ISO format, ISO with timezone suffix (+07:00, Z), etc.
     Returns: 'HH:MM' string or None
     """
     if not s:
@@ -62,20 +62,24 @@ def parse_time_hhmm(s):
         
         s = str(s).strip()
         
-        # Extract time from ISO format
+        # Extract time from ISO datetime (e.g. "2026-01-01T09:30:00Z")
         if "T" in s:
-            parts = s.split("T")[-1]
-            s = parts
+            s = s.split("T")[-1]
         
-        # Parse HH:MM format
+        # Bug #9 fix: strip timezone suffix before parsing (e.g. "09:30+07:00" → "09:30")
+        # Match and remove trailing +HH:MM, -HH:MM, or Z
+        import re as _re
+        s = _re.sub(r'[+-]\d{2}:\d{2}$|Z$', '', s).strip()
+        
+        # Parse HH:MM[:SS] format
         parts = s.split(":")
-        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1][:2].isdigit():
             h = int(parts[0]) % 24
-            m = int(parts[1]) % 60
+            m = int(parts[1][:2]) % 60
             return f"{h:02d}:{m:02d}"
         
-        # Try to extract HH:MM or HH.MM
-        m = re.search(r'(\d{1,2})[:.]\s*(\d{2})', s)
+        # Try to extract HH:MM or HH.MM via regex
+        m = re.search(r'(\d{1,2})[:.](\d{2})', s)
         if m:
             h = int(m.group(1)) % 24
             m2 = int(m.group(2)) % 60

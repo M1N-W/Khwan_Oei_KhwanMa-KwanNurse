@@ -36,7 +36,7 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility):
     # Pain Score Analysis
     try:
         p_val = int(pain) if pain is not None and str(pain).strip() != "" else 0
-    except:
+    except (ValueError, TypeError):  # Bug #8 fix: was bare except:
         p_val = 0
     
     if p_val >= 8:
@@ -206,17 +206,17 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
     # Parse inputs
     try:
         age_val = int(age) if age is not None and str(age).strip() != "" else None
-    except:
+    except (ValueError, TypeError):  # Bug #8 fix: was bare except:
         age_val = None
     
     try:
         weight_val = float(weight) if weight is not None and str(weight).strip() != "" else None
-    except:
+    except (ValueError, TypeError):  # Bug #8 fix
         weight_val = None
     
     try:
         height_cm = float(height) if height is not None and str(height).strip() != "" else None
-    except:
+    except (ValueError, TypeError):  # Bug #8 fix
         height_cm = None
     
     # Calculate BMI

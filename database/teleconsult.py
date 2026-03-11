@@ -125,10 +125,14 @@ def add_to_queue(session_id, user_id, issue_type, priority):
         queue_id = generate_queue_id()
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         
-        # Calculate estimated wait time based on priority
+        # Calculate estimated wait time (Bug #5 fix)
+        # Formula: people-ahead * avg_service_time + own max_wait
+        # avg_service_time ≈ 10 minutes per session (conservative estimate)
         from config import ISSUE_CATEGORIES
         max_wait = ISSUE_CATEGORIES.get(issue_type, {}).get('max_wait_minutes', 30)
-        estimated_wait = queue_position * max_wait
+        AVG_SERVICE_MINUTES = 10
+        people_ahead = queue_position - 1
+        estimated_wait = people_ahead * AVG_SERVICE_MINUTES + max_wait
         
         row = [
             queue_id,              # Queue_ID

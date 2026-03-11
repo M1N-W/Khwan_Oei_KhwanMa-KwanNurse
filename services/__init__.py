@@ -29,9 +29,11 @@ from .scheduler import (
 from .teleconsult import (
     is_office_hours,
     get_category_menu,
+    parse_category_choice,        # Bug #6 fix: was missing
     start_teleconsult,
     cancel_consultation,
-    get_queue_info_message
+    get_queue_info_message,
+    handle_after_hours_choice     # expose new handler
 )
 
 __all__ = [
@@ -58,7 +60,9 @@ __all__ = [
     'reschedule_all_reminders',
     'is_office_hours',
     'get_category_menu',
+    'parse_category_choice',      # Bug #6 fix
     'start_teleconsult',
     'cancel_consultation',
-    'get_queue_info_message'
+    'get_queue_info_message',
+    'handle_after_hours_choice',  # new handler
 ]

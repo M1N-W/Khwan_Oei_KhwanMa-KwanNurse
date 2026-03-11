@@ -14,11 +14,16 @@ PORT = int(os.environ.get("PORT", 5000))
 # Timezone
 LOCAL_TZ = ZoneInfo("Asia/Bangkok")
 
-# Google Sheets Configuration
-WORKSHEET_LINK = os.environ.get(
-    "WORKSHEET_LINK",
-    "https://docs.google.com/spreadsheets/d/1Jteh4XLzgQM3YKMzUeW3PGuBjUkvnS61rm2IXfGPnPo/edit?usp=sharing"
-)
+# Bug #10 fix: ไม่ hardcode URL จริงใน source code เพื่อป้องกัน leak ถ้า push ขึ้น public repo
+# กรุณาตั้งค่า WORKSHEET_LINK ใน environment variable (.env หรือ Render/Railway secrets)
+WORKSHEET_LINK = os.environ.get("WORKSHEET_LINK", "")
+if not WORKSHEET_LINK:
+    import warnings
+    warnings.warn(
+        "WORKSHEET_LINK environment variable is not set. "
+        "Nurse notification links will be empty.",
+        stacklevel=1
+    )
 GSPREAD_CREDENTIALS = os.environ.get("GSPREAD_CREDENTIALS")
 SPREADSHEET_NAME = "KhwanBot_Data"
 

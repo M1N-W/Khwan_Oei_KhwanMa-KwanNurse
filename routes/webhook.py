@@ -32,7 +32,8 @@ from services.teleconsult import (
     parse_category_choice,
     start_teleconsult,
     cancel_consultation,
-    get_queue_info_message
+    get_queue_info_message,
+    handle_after_hours_choice  # Bug #2 fix
 )
 
 logger = get_logger(__name__)
@@ -98,6 +99,11 @@ def register_routes(app):
         
         elif intent == 'ContactNurse':
             return handle_contact_nurse(user_id, params, query_text)
+        
+        elif intent == 'AfterHoursChoice':
+            # Bug #2 fix: รับคำตอบ 1/2 จากผู้ใช้หลังแสดงเมนูนอกเวลาทำการ
+            result = handle_after_hours_choice(user_id, query_text)
+            return jsonify({"fulfillmentText": result['message']}), 200
         
         elif intent == 'CancelConsultation':
             return handle_cancel_consultation(user_id)

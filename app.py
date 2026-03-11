@@ -61,8 +61,17 @@ def create_app():
     return flask_app
 
 
-app = create_app()
+# ---------------------------------------------------------------------------
+# WSGI entry point for Gunicorn:
+#   gunicorn "app:application"
+# Using a lazy factory avoids running create_app() (and init_scheduler())
+# in the master process before forking, which would cause duplicate APScheduler
+# instances sending duplicate reminders. (Bug #4 fix)
+# ---------------------------------------------------------------------------
+application = create_app()
 
 
 if __name__ == '__main__':
+    # Local development only
+    app = application
     app.run(host='0.0.0.0', port=PORT, debug=DEBUG)

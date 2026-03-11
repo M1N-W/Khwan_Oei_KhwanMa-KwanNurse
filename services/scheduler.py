@@ -167,6 +167,7 @@ def schedule_reminder_job(user_id, reminder_type, scheduled_date):
         job_id = f"{user_id}_{reminder_type}_{scheduled_date.strftime('%Y%m%d%H%M')}"
         
         # Add job to scheduler
+        from services.reminder import send_reminder
         scheduler.add_job(
             func=send_reminder,
             trigger=DateTrigger(run_date=scheduled_date, timezone=LOCAL_TZ),

@@ -279,7 +279,10 @@ def handle_emergency(user_id, description):
 
 def handle_after_hours(user_id, issue_type, description):
     """
-    Handle request made outside office hours
+    Handle request made outside office hours.
+
+    FIXED (Bug #2): ตอนนี้บันทึก session แบบ after_hours_pending ลง DB ทันที
+    เพื่อป้องกันคำขอสูญหายเมื่อผู้ใช้แจ้งนอกเวลาทำการ
     
     Args:
         user_id: Patient ID
@@ -292,7 +295,18 @@ def handle_after_hours(user_id, issue_type, description):
     try:
         now = datetime.now(tz=LOCAL_TZ)
         current_time = now.strftime("%H:%M")
-        
+
+        # --- FIX: บันทึก session ก่อนเพื่อป้องกันข้อมูลสูญหาย ---
+        session = create_session(user_id, issue_type, priority=3, description=description)
+        if session:
+            update_session_status(session['session_id'], 'after_hours_pending')
+            logger.info(
+                f"After-hours session saved: {session['session_id']} for {user_id}"
+            )
+        else:
+            logger.error(f"Failed to save after-hours session for {user_id}")
+        # ----------------------------------------------------------
+
         message = (
             f"สวัสดีค่ะ 😊\n\n"
             f"⏰ ขณะนี้นอกเวลาทำการ (เวลา {current_time} น.)\n"
@@ -302,16 +316,84 @@ def handle_after_hours(user_id, issue_type, description):
             f"2. 📝 ไม่เร่งด่วน (บันทึกไว้ติดต่อพรุ่งนี้)\n\n"
             f"พิมพ์หมายเลข 1 หรือ 2"
         )
-        
+
         return {
             'success': True,
             'message': message,
             'is_after_hours': True,
-            'awaiting_choice': True
+            'awaiting_choice': True,
+            'session': session
         }
-        
+
     except Exception as e:
         logger.exception(f"Error handling after hours: {e}")
+        return {
+            'success': False,
+            'message': "เกิดข้อผิดพลาด กรุณาลองใหม่"
+        }
+
+
+def handle_after_hours_choice(user_id, choice_text):
+    """
+    Process the user's answer (1 or 2) after receiving the after-hours menu.
+
+    ADDED (Bug #2 fix): จัดการคำตอบของผู้ใช้ที่แจ้งนอกเวลาทำการ
+    - เลือก 1 → escalate เป็น emergency
+    - เลือก 2 → ยืนยันบันทึกและแจ้งพยาบาล
+
+    Args:
+        user_id: Patient ID
+        choice_text: "1" or "2" (or Thai equivalent)
+
+    Returns:
+        dict: Response with 'message' key
+    """
+    try:
+        stripped = str(choice_text).strip()
+
+        if stripped == "1" or "ฉุกเฉิน" in stripped:
+            # Escalate — ดึง pending session แล้ว escalate
+            session = get_user_active_session(user_id)
+            description = session.get('Description', '') if session else ''
+            return handle_emergency(user_id, description)
+
+        elif stripped == "2" or "ไม่เร่งด่วน" in stripped or "บันทึก" in stripped:
+            # ยืนยันว่าบันทึกแล้ว และแจ้งพยาบาล
+            session = get_user_active_session(user_id)
+            if session:
+                nurse_alert = (
+                    f"📋 มีคำขอนอกเวลาทำการ (ไม่เร่งด่วน)\n\n"
+                    f"👤 ผู้ป่วย: {user_id}\n"
+                    f"📂 ประเภท: {session.get('Issue_Type', '-')}\n"
+                    f"💬 รายละเอียด: {session.get('Description', '(ไม่มี)')}\n\n"
+                    f"⏰ กรุณาติดต่อกลับในวันทำการถัดไปค่ะ"
+                )
+                send_line_push(nurse_alert, NURSE_GROUP_ID)
+                logger.info(f"After-hours non-urgent request logged and nurse notified for {user_id}")
+
+            return {
+                'success': True,
+                'message': (
+                    "✅ บันทึกคำขอของคุณเรียบร้อยแล้วค่ะ\n\n"
+                    "📋 ทีมพยาบาลจะติดต่อกลับในวันทำการถัดไป\n"
+                    f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
+                    "หากมีอาการฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+                )
+            }
+
+        else:
+            # ตอบไม่ตรง ให้แสดง menu ซ้ำ
+            return {
+                'success': True,
+                'message': (
+                    "กรุณาพิมพ์หมายเลข 1 หรือ 2 ค่ะ\n\n"
+                    "1. 🚨 ฉุกเฉิน\n"
+                    "2. 📝 ไม่เร่งด่วน"
+                )
+            }
+
+    except Exception as e:
+        logger.exception(f"Error handling after-hours choice: {e}")
         return {
             'success': False,
             'message': "เกิดข้อผิดพลาด กรุณาลองใหม่"

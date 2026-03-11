@@ -209,10 +209,12 @@ def handle_reminder_response(user_id, response_text):
             logger.warning(f"No pending reminders found for {user_id}")
             return False
         
-        # Get the most recent pending reminder (sort by Timestamp descending)
+        # Get the most recent pending reminder
+        # Bug #7 fix: FollowUpReminders uses 'Timestamp', ReminderSchedules uses 'Created_At'
+        # Sort using whichever field is present so we always pick the most recent one
         pending_sorted = sorted(
             pending,
-            key=lambda x: x.get('Timestamp', ''),
+            key=lambda x: x.get('Timestamp') or x.get('Created_At') or '',
             reverse=True
         )
         most_recent = pending_sorted[0]

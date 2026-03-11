@@ -159,7 +159,12 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         timestamp_col = headers.index('Response_Timestamp') + 1 if 'Response_Timestamp' in headers else 7
 
                         def _col_letter(n):
-                            return chr(ord('A') + n - 1)
+                            """Convert 1-based column number to A1-notation letter(s), supporting >26 columns."""
+                            result = ""
+                            while n > 0:
+                                n, remainder = divmod(n - 1, 26)
+                                result = chr(ord('A') + remainder) + result
+                            return result
 
                         sheet.batch_update([
                             {
