@@ -23,10 +23,13 @@ logger = get_logger(__name__)
 _SORTED_DISEASE_KEYS = sorted(DISEASE_MAPPING.keys(), key=lambda x: -len(x))
 
 
-def calculate_symptom_risk(user_id, pain, wound, fever, mobility):
+def calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=None):
     """
-    Calculate symptom-based risk score
-    
+    Calculate symptom-based risk score.
+
+    Phase 2-A: neuro-symptom branch (numbness, weakness). Optional so the
+    webhook can omit it for backward compatibility with existing callers.
+
     Returns:
         str: Formatted message with risk assessment
     """
@@ -74,7 +77,25 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility):
         risk_details.append("🟡 เคลื่อนไหวลำบาก")
     elif any(x in mobility_text for x in ["เดินได้", "ปกติ", "normal", "can walk"]):
         risk_details.append("🟢 เคลื่อนไหวได้ปกติ")
-    
+
+    # Neuro Symptoms (Phase 2-A): numbness / weakness flags post-op red flags
+    # for orthopedic and neurosurgical cases per doc #1 § 2.2.
+    neuro_text = str(neuro or "").lower()
+    if neuro_text and neuro_text not in ("none", "no", "ไม่มี", "ไม่", "ปกติ"):
+        if any(x in neuro_text for x in [
+            "อ่อนแรง", "ขยับไม่ได้", "weakness", "paralysis", "อัมพาต"
+        ]):
+            risk_score += 3
+            risk_details.append("🔴 กล้ามเนื้ออ่อนแรง - สัญญาณเส้นประสาท ต้องพบแพทย์ทันที!")
+        elif any(x in neuro_text for x in ["ชา", "numb", "tingling", "เหน็บ"]):
+            risk_score += 2
+            risk_details.append("🟡 อาการชา - ควรปรึกษาพยาบาล")
+        elif any(x in neuro_text for x in ["ปวดร้าว", "radiating", "ร้าวลงขา", "ร้าวลงแขน"]):
+            risk_score += 2
+            risk_details.append("🟡 ปวดร้าวตามเส้นประสาท")
+    elif neuro_text in ("ไม่มี", "ไม่", "none", "no", "ปกติ"):
+        risk_details.append("🟢 ไม่มีอาการทางระบบประสาท")
+
     # Risk Level Classification
     if risk_score >= 5:
         risk_level = "🚨 อันตราย - ต้องพบแพทย์ทันที!"

@@ -139,7 +139,15 @@ def handle_report_symptoms(user_id, params):
     wound = params.get('wound_status')
     fever = params.get('fever_check')
     mobility = params.get('mobility_status')
-    
+    # Phase 2-A: optional neuro branch (ชา / อ่อนแรง / ปวดร้าว).
+    # Accepts several param aliases so it works whether Dialogflow exposes
+    # it as `neuro_status`, `neuro`, or a generic `numbness` entity.
+    neuro = (
+        params.get('neuro_status')
+        or params.get('neuro')
+        or params.get('numbness')
+    )
+
     # Validate required parameters
     missing = []
     if pain is None or str(pain).strip() == "":
@@ -150,13 +158,13 @@ def handle_report_symptoms(user_id, params):
         missing.append("อาการไข้")
     if not mobility:
         missing.append("การเคลื่อนไหว")
-    
+
     if missing:
         ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยค่ะ"
         return jsonify({"fulfillmentText": ask}), 200
-    
-    # Calculate risk
-    result = calculate_symptom_risk(user_id, pain, wound, fever, mobility)
+
+    # Calculate risk (neuro is optional so this stays backward-compatible)
+    result = calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=neuro)
     return jsonify({"fulfillmentText": result}), 200
 
 
