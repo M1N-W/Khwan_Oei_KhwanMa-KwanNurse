@@ -9,12 +9,11 @@ Handle all database operations for follow-up reminders
 from datetime import datetime
 from config import (
     LOCAL_TZ,
-    SPREADSHEET_NAME,
     SHEET_FOLLOW_UP_REMINDERS,
     SHEET_REMINDER_SCHEDULES,
     get_logger
 )
-from database.sheets import get_sheet_client
+from database.sheets import get_worksheet, column_number_to_letter
 
 logger = get_logger(__name__)
 
@@ -34,13 +33,10 @@ def save_reminder_schedule(user_id, discharge_date, reminder_type, scheduled_dat
         bool: True if successful, False otherwise
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_REMINDER_SCHEDULES)
+        if not sheet:
             logger.error("No sheet client available")
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         discharge_str = discharge_date.strftime("%Y-%m-%d") if isinstance(discharge_date, datetime) else str(discharge_date)
@@ -78,13 +74,10 @@ def save_reminder_sent(user_id, reminder_type, message_text=""):
         bool: True if successful
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_FOLLOW_UP_REMINDERS)
+        if not sheet:
             logger.error("No sheet client available")
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         
@@ -124,13 +117,10 @@ def save_reminder_response(user_id, reminder_type, response_text):
         bool: True if successful
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_FOLLOW_UP_REMINDERS)
+        if not sheet:
             logger.error("No sheet client available")
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely
         all_values = sheet.get_all_values()
@@ -153,30 +143,21 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         row_num = i + 1  # +1 for 1-indexed
                         response_timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-                        # Find column letters for batch update
                         status_col = headers.index('Status') + 1 if 'Status' in headers else 4
                         response_col = headers.index('Response_Text') + 1 if 'Response_Text' in headers else 5
                         timestamp_col = headers.index('Response_Timestamp') + 1 if 'Response_Timestamp' in headers else 7
 
-                        def _col_letter(n):
-                            """Convert 1-based column number to A1-notation letter(s), supporting >26 columns."""
-                            result = ""
-                            while n > 0:
-                                n, remainder = divmod(n - 1, 26)
-                                result = chr(ord('A') + remainder) + result
-                            return result
-
                         sheet.batch_update([
                             {
-                                'range': f"{_col_letter(status_col)}{row_num}",
+                                'range': f"{column_number_to_letter(status_col)}{row_num}",
                                 'values': [['responded']]
                             },
                             {
-                                'range': f"{_col_letter(response_col)}{row_num}",
+                                'range': f"{column_number_to_letter(response_col)}{row_num}",
                                 'values': [[response_text]]
                             },
                             {
-                                'range': f"{_col_letter(timestamp_col)}{row_num}",
+                                'range': f"{column_number_to_letter(timestamp_col)}{row_num}",
                                 'values': [[response_timestamp]]
                             }
                         ])
@@ -219,12 +200,9 @@ def update_schedule_status(user_id, reminder_type, new_status):
         new_status: New status (sent, responded, no_response)
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_REMINDER_SCHEDULES)
+        if not sheet:
             return
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         # Get all values safely
         all_values = sheet.get_all_values()
@@ -244,11 +222,14 @@ def update_schedule_status(user_id, reminder_type, new_status):
             if len(row) >= len(headers):
                 record = dict(zip(headers, row))
                 
-                if (record.get('User_ID') == user_id and 
+                if (record.get('User_ID') == user_id and
                     record.get('Reminder_Type') == reminder_type):
-                    
+
                     row_num = i + 1
-                    sheet.update_cell(row_num, status_col, new_status)
+                    sheet.batch_update([{
+                        'range': f"{column_number_to_letter(status_col)}{row_num}",
+                        'values': [[new_status]]
+                    }])
                     logger.info(f"Updated schedule status: {user_id}/{reminder_type} -> {new_status}")
                     return
                 
@@ -268,12 +249,9 @@ def get_pending_reminders(user_id, reminder_type):
         list: List of pending reminders
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_FOLLOW_UP_REMINDERS)
+        if not sheet:
             return []
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely
         all_values = sheet.get_all_values()
@@ -314,12 +292,9 @@ def get_scheduled_reminders():
         list: List of scheduled reminders
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_REMINDER_SCHEDULES)
+        if not sheet:
             return []
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_REMINDER_SCHEDULES)
         
         # Get all values (safer than get_all_records for empty sheets)
         all_values = sheet.get_all_values()
@@ -356,12 +331,9 @@ def check_no_response_reminders():
         list: List of reminders with no response after 24 hours
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_FOLLOW_UP_REMINDERS)
+        if not sheet:
             return []
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_FOLLOW_UP_REMINDERS)
         
         # Get all values safely
         all_values = sheet.get_all_values()
@@ -392,12 +364,14 @@ def check_no_response_reminders():
                             sent_time = sent_time.replace(tzinfo=LOCAL_TZ)
                             
                             hours_passed = (now - sent_time).total_seconds() / 3600
-                            
+
                             if hours_passed >= 24:
-                                # Mark as no_response
                                 row_num = i + 1
-                                sheet.update_cell(row_num, status_col, 'no_response')
-                                
+                                sheet.batch_update([{
+                                    'range': f"{column_number_to_letter(status_col)}{row_num}",
+                                    'values': [['no_response']]
+                                }])
+
                                 record['row_num'] = row_num
                                 record['hours_passed'] = hours_passed
                                 no_response.append(record)

@@ -7,14 +7,14 @@ import uuid
 from datetime import datetime
 from config import (
     LOCAL_TZ,
-    SPREADSHEET_NAME,
     SHEET_TELECONSULT_SESSIONS,
     SHEET_TELECONSULT_QUEUE,
     get_logger
 )
-from database.sheets import get_sheet_client
+from database.sheets import get_worksheet, column_number_to_letter
 
 logger = get_logger(__name__)
+ACTIVE_SESSION_STATUSES = ('queued', 'in_progress', 'after_hours_pending')
 
 
 def generate_session_id():
@@ -41,13 +41,10 @@ def create_session(user_id, issue_type, priority, description=""):
         dict: Session info or None if failed
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
             logger.error("No sheet client available")
             return None
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         session_id = generate_session_id()
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
@@ -100,12 +97,9 @@ def add_to_queue(session_id, user_id, issue_type, priority):
         dict: Queue info including position
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_QUEUE)
+        if not sheet:
             return None
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         # Get current queue to calculate position
         all_values = sheet.get_all_values()
@@ -179,12 +173,9 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
         bool: Success
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()
         
@@ -206,25 +197,38 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
             row = all_values[i]
             if len(row) > 0 and row[0] == session_id:
                 row_num = i + 1
-                
-                # Update status
-                sheet.update_cell(row_num, status_col, new_status)
-                
-                # Update timestamps
                 timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+                updates = [{
+                    'range': f"{column_number_to_letter(status_col)}{row_num}",
+                    'values': [[new_status]]
+                }]
+
                 if new_status == 'in_progress':
-                    sheet.update_cell(row_num, started_col, timestamp)
+                    updates.append({
+                        'range': f"{column_number_to_letter(started_col)}{row_num}",
+                        'values': [[timestamp]]
+                    })
                 elif new_status == 'completed':
-                    sheet.update_cell(row_num, completed_col, timestamp)
-                
-                # Update nurse if provided
+                    updates.append({
+                        'range': f"{column_number_to_letter(completed_col)}{row_num}",
+                        'values': [[timestamp]]
+                    })
+
                 if assigned_nurse:
-                    sheet.update_cell(row_num, nurse_col, assigned_nurse)
-                
-                # Update notes if provided
+                    updates.append({
+                        'range': f"{column_number_to_letter(nurse_col)}{row_num}",
+                        'values': [[assigned_nurse]]
+                    })
+
                 if notes:
-                    sheet.update_cell(row_num, notes_col, notes)
-                
+                    updates.append({
+                        'range': f"{column_number_to_letter(notes_col)}{row_num}",
+                        'values': [[notes]]
+                    })
+
+                sheet.batch_update(updates)
+
                 logger.info(f"Updated session {session_id} status to {new_status}")
                 return True
         
@@ -239,12 +243,9 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
 def update_session_queue_position(session_id, position):
     """Update queue position in session"""
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()
         
@@ -278,12 +279,9 @@ def remove_from_queue(session_id):
         bool: Success
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_QUEUE)
+        if not sheet:
             return False
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         all_values = sheet.get_all_values()
         
@@ -317,12 +315,9 @@ def get_queue_status():
         dict: Queue information
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_QUEUE)
+        if not sheet:
             return {'total': 0, 'by_priority': {}}
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_QUEUE)
         
         all_values = sheet.get_all_values()
         
@@ -369,12 +364,9 @@ def get_user_active_session(user_id):
         dict: Session info or None
     """
     try:
-        client = get_sheet_client()
-        if not client:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
             return None
-        
-        spreadsheet = client.open(SPREADSHEET_NAME)
-        sheet = spreadsheet.worksheet(SHEET_TELECONSULT_SESSIONS)
         
         all_values = sheet.get_all_values()
         
@@ -389,8 +381,8 @@ def get_user_active_session(user_id):
             if len(row) >= len(headers):
                 record = dict(zip(headers, row))
                 
-                if (record.get('User_ID') == user_id and 
-                    record.get('Status') in ['queued', 'in_progress']):
+                if (record.get('User_ID') == user_id and
+                    record.get('Status') in ACTIVE_SESSION_STATUSES):
                     return record
         
         return None

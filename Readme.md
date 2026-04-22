@@ -1,4 +1,4 @@
-# 🏥 KwanNurse-Bot v3.0 (Refactored)
+# 🏥 KwanNurse-Bot v4.0
 
 ## 📁 Project Structure
 
@@ -30,10 +30,13 @@ kwannurse-bot/
 
 ## 🎯 Features
 
-### Core Features (Production Ready)
+### Core Features
 1. **ReportSymptoms** - AI-powered symptom risk assessment
 2. **AssessRisk** - Personal health risk stratification
 3. **RequestAppointment** - Appointment booking and management
+4. **GetKnowledge** - Post-discharge care guides
+5. **FollowUpReminders** - Scheduled follow-up reminders
+6. **Teleconsult** - Nurse consultation queue and escalation
 
 ## 🚀 Quick Start
 
@@ -71,7 +74,17 @@ export PORT='5000'
 python app.py
 
 # Production (with gunicorn)
-gunicorn app:app --bind 0.0.0.0:5000
+gunicorn app:application --bind 0.0.0.0:5000
+```
+
+If you run multiple web workers, only one process should own reminder scheduling:
+
+```bash
+# Scheduler owner
+RUN_SCHEDULER=true gunicorn app:application --bind 0.0.0.0:5000
+
+# Non-owner workers
+RUN_SCHEDULER=false gunicorn app:application --bind 0.0.0.0:5000
 ```
 
 ## 📦 Module Documentation
@@ -180,14 +193,13 @@ Dialogflow webhook endpoints. Handles all API routes.
 ### Testing
 
 ```bash
-# Run tests (when implemented)
-pytest
+# Run the current regression suite
+python run_regression_tests.py
 
-# Check code style
-flake8 .
-
-# Type checking
-mypy .
+# Or run suites individually
+python test_bug_fixes.py
+python -m unittest test_teleconsult.py -v
+python -m unittest test_reminder.py -v
 ```
 
 ## 📊 Data Flow
@@ -224,9 +236,9 @@ Expected response:
 ```json
 {
   "status": "ok",
-  "service": "KwanNurse-Bot v3.0",
-  "version": "3.0 - Perfect Core (Refactored)",
-  "features": ["ReportSymptoms", "AssessRisk", "RequestAppointment"],
+  "service": "KwanNurse-Bot v4.0",
+  "version": "4.0 - Complete (6/6 Features)",
+  "features": ["ReportSymptoms", "AssessRisk", "RequestAppointment", "GetKnowledge", "FollowUpReminders", "Teleconsult"],
   "timestamp": "2026-01-03T14:30:00+07:00"
 }
 ```
@@ -245,7 +257,7 @@ heroku logs --tail  # If using Heroku
 1. Connect GitHub repository
 2. Set environment variables
 3. Build command: `pip install -r requirements.txt`
-4. Start command: `gunicorn app:app`
+4. Start command: `gunicorn app:application`
 
 ### Heroku
 
@@ -254,6 +266,12 @@ heroku logs --tail  # If using Heroku
 3. Set config vars
 
 ## 📝 Version History
+
+### v4.0 - 2026-04-22
+- ✅ Added follow-up reminders and teleconsult flows
+- ✅ Added scheduler ownership flag (`RUN_SCHEDULER`)
+- ✅ Reduced Google Sheets reopen overhead with worksheet caching
+- ✅ Added regression suites for teleconsult and reminder hot paths
 
 ### v3.0 (Refactored) - 2026-01-03
 - ✅ Refactored codebase into modular structure

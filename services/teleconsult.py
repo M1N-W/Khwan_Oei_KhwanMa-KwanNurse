@@ -179,8 +179,13 @@ def start_teleconsult(user_id, issue_type, description=""):
             issue_type,
             priority
         )
-        
+
         if not queue_info:
+            update_session_status(
+                session['session_id'],
+                'queue_failed',
+                notes='Queue insertion failed'
+            )
             return {
                 'success': False,
                 'message': "เกิดข้อผิดพลาดในการเข้าคิว กรุณาลองใหม่"

@@ -13,6 +13,8 @@ Main Application Entry Point
 
 Refactored for maintainability and scalability.
 """
+import os
+
 from flask import Flask
 from config import PORT, DEBUG, get_logger
 from routes import register_routes
@@ -20,6 +22,17 @@ from services.scheduler import init_scheduler
 
 # Initialize logger
 logger = get_logger(__name__)
+
+
+def should_run_scheduler():
+    """
+    Decide whether this process should own reminder scheduling.
+
+    Default remains enabled for backward compatibility, but deployments with
+    multiple web workers can disable it per worker by setting
+    RUN_SCHEDULER=false on non-owner processes.
+    """
+    return os.environ.get("RUN_SCHEDULER", "true").lower() in ("1", "true", "yes")
 
 
 def create_app():
@@ -35,12 +48,16 @@ def create_app():
     # Register all routes
     register_routes(flask_app)
 
-    # Initialize scheduler for follow-up reminders
-    try:
-        init_scheduler()
-        logger.info("✅ Reminder scheduler initialized successfully")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize scheduler: {e}")
+    # Scheduler ownership is now explicit so multi-worker deployments can
+    # disable it on non-owner processes with RUN_SCHEDULER=false.
+    if should_run_scheduler():
+        try:
+            init_scheduler()
+            logger.info("✅ Reminder scheduler initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize scheduler: {e}")
+    else:
+        logger.info("ℹ️ Reminder scheduler disabled for this process")
 
     # Log startup information
     logger.info("=" * 60)

@@ -1,245 +1,201 @@
 # -*- coding: utf-8 -*-
 """
-Teleconsult Feature Testing Script
-Test all teleconsult functionality
+Regression tests for teleconsult and related phase-1 stability fixes.
 """
+import os
 import sys
-sys.path.append('/mnt/user-data/outputs/kwannurse-refactored')
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from datetime import datetime
-from config import LOCAL_TZ, get_logger
+# Keep imports repo-local and disable scheduler side effects during test import.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+os.environ.setdefault("RUN_SCHEDULER", "false")
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding='utf-8')
+
+from app import should_run_scheduler
+from database.teleconsult import get_user_active_session, update_session_status
 from services.teleconsult import (
-    is_office_hours,
+    cancel_consultation,
     get_category_menu,
+    get_queue_info_message,
     parse_category_choice,
     start_teleconsult,
-    cancel_consultation,
-    get_queue_info_message
-)
-from database.teleconsult import (
-    create_session,
-    add_to_queue,
-    update_session_status,
-    get_queue_status,
-    get_user_active_session
 )
 
-logger = get_logger(__name__)
+
+class SchedulerOwnershipTests(unittest.TestCase):
+    def test_should_run_scheduler_respects_env_flag(self):
+        with patch.dict(os.environ, {"RUN_SCHEDULER": "false"}, clear=False):
+            self.assertFalse(should_run_scheduler())
+
+        with patch.dict(os.environ, {"RUN_SCHEDULER": "true"}, clear=False):
+            self.assertTrue(should_run_scheduler())
 
 
-def test_office_hours():
-    """Test office hours checking"""
-    print("\n" + "="*60)
-    print("TEST 1: Office Hours Checking")
-    print("="*60)
-    
-    now = datetime.now(tz=LOCAL_TZ)
-    is_open = is_office_hours()
-    
-    print(f"\n1.1 Current time: {now.strftime('%Y-%m-%d %H:%M (%A)')}")
-    print(f"1.2 Office hours: {'✅ OPEN' if is_open else '❌ CLOSED'}")
-    
-    print("\n✅ Office hours test complete\n")
+class TeleconsultDatabaseTests(unittest.TestCase):
+    def test_get_user_active_session_includes_after_hours_pending(self):
+        mock_sheet = MagicMock()
+        mock_sheet.get_all_values.return_value = [
+            ['Session_ID', 'Timestamp', 'User_ID', 'Issue_Type', 'Priority', 'Status', 'Description'],
+            ['S1', '2026-04-22 09:00:00', 'u1', 'wound', '3', 'after_hours_pending', 'desc'],
+        ]
+
+        with patch('database.teleconsult.get_worksheet', return_value=mock_sheet):
+            result = get_user_active_session('u1')
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['Status'], 'after_hours_pending')
+
+    def test_update_session_status_uses_batch_update_for_multi_field_write(self):
+        mock_sheet = MagicMock()
+        mock_sheet.get_all_values.return_value = [
+            ['Session_ID', 'Timestamp', 'User_ID', 'Issue_Type', 'Priority', 'Status', 'Description', 'Queue_Position', 'Assigned_Nurse', 'Started_At', 'Completed_At', 'Notes'],
+            ['S9', '2026-04-22 09:00:00', 'u9', 'wound', '2', 'queued', 'desc', '', '', '', '', ''],
+        ]
+
+        with patch('database.teleconsult.get_worksheet', return_value=mock_sheet):
+            success = update_session_status('S9', 'in_progress', assigned_nurse='nurse-1', notes='picked up')
+
+        self.assertTrue(success)
+        self.assertTrue(mock_sheet.batch_update.called)
+        updates = mock_sheet.batch_update.call_args[0][0]
+        update_ranges = {item['range'] for item in updates}
+        self.assertIn('F2', update_ranges)
+        self.assertIn('I2', update_ranges)
+        self.assertIn('J2', update_ranges)
+        self.assertIn('L2', update_ranges)
 
 
-def test_category_menu():
-    """Test category menu generation"""
-    print("\n" + "="*60)
-    print("TEST 2: Category Menu")
-    print("="*60)
-    
-    menu = get_category_menu()
-    print("\n2.1 Generated menu:")
-    print(menu)
-    
-    print("\n✅ Category menu test complete\n")
+class TeleconsultServiceTests(unittest.TestCase):
+    def test_category_menu_contains_all_options(self):
+        menu = get_category_menu()
+        self.assertIn('ฉุกเฉิน', menu)
+        self.assertIn('ถามเรื่องยา', menu)
+        self.assertIn('แผลผ่าตัด', menu)
+        self.assertIn('นัดหมาย/เอกสาร', menu)
+        self.assertIn('อื่นๆ', menu)
 
+    def test_category_parsing_supports_number_and_text(self):
+        self.assertEqual(parse_category_choice('1'), 'emergency')
+        self.assertEqual(parse_category_choice('2'), 'medication')
+        self.assertEqual(parse_category_choice('ฉุกเฉิน'), 'emergency')
+        self.assertEqual(parse_category_choice('ถามเรื่องยา'), 'medication')
+        self.assertEqual(parse_category_choice('wound'), 'wound')
+        self.assertIsNone(parse_category_choice('invalid'))
 
-def test_category_parsing():
-    """Test category choice parsing"""
-    print("\n" + "="*60)
-    print("TEST 3: Category Parsing")
-    print("="*60)
-    
-    test_cases = [
-        ("1", "emergency"),
-        ("2", "medication"),
-        ("ฉุกเฉิน", "emergency"),
-        ("ถามเรื่องยา", "medication"),
-        ("wound", "wound"),
-        ("invalid", None)
-    ]
-    
-    for input_text, expected in test_cases:
-        result = parse_category_choice(input_text)
-        status = "✅" if result == expected else "❌"
-        print(f"   {status} Input: '{input_text}' → Result: '{result}' (Expected: '{expected}')")
-    
-    print("\n✅ Category parsing test complete\n")
+    def test_start_teleconsult_rejects_existing_active_session(self):
+        existing = {'Queue_Position': '2', 'Issue_Type': 'wound'}
+        with patch('services.teleconsult.get_user_active_session', return_value=existing):
+            result = start_teleconsult('user-1', 'wound', 'desc')
 
+        self.assertFalse(result['success'])
+        self.assertIn('กำลังดำเนินการอยู่แล้ว', result['message'])
+        self.assertIn('ตำแหน่งในคิว: 2', result['message'])
 
-def test_database_operations():
-    """Test database operations"""
-    print("\n" + "="*60)
-    print("TEST 4: Database Operations")
-    print("="*60)
-    
-    test_user = "test_user_tc_001"
-    
-    # Test 1: Create session
-    print("\n4.1 Creating session...")
-    session = create_session(
-        user_id=test_user,
-        issue_type="medication",
-        priority=2,
-        description="Test question about medication"
-    )
-    
-    if session:
-        print(f"   ✅ Session created: {session['session_id']}")
-    else:
-        print("   ❌ Session creation failed")
-        return
-    
-    # Test 2: Add to queue
-    print("\n4.2 Adding to queue...")
-    queue_info = add_to_queue(
-        session_id=session['session_id'],
-        user_id=test_user,
-        issue_type="medication",
-        priority=2
-    )
-    
-    if queue_info:
-        print(f"   ✅ Added to queue: Position {queue_info['position']}")
-    else:
-        print("   ❌ Queue addition failed")
-    
-    # Test 3: Get queue status
-    print("\n4.3 Getting queue status...")
-    status = get_queue_status()
-    print(f"   Total in queue: {status['total']}")
-    print(f"   By priority: {status['by_priority']}")
-    
-    # Test 4: Update session status
-    print("\n4.4 Updating session status...")
-    success = update_session_status(session['session_id'], 'in_progress')
-    print(f"   {'✅' if success else '❌'} Status updated to in_progress")
-    
-    # Test 5: Get active session
-    print("\n4.5 Getting active session...")
-    active = get_user_active_session(test_user)
-    if active:
-        print(f"   ✅ Found active session: {active.get('Session_ID')}")
-    else:
-        print("   ❌ No active session found")
-    
-    print("\n✅ Database tests complete\n")
+    def test_start_teleconsult_routes_after_hours(self):
+        with patch('services.teleconsult.get_user_active_session', return_value=None), \
+             patch('services.teleconsult.is_office_hours', return_value=False), \
+             patch('services.teleconsult.handle_after_hours', return_value={'success': True, 'message': 'after-hours'}) as mock_after:
+            result = start_teleconsult('user-2', 'wound', 'desc')
 
+        self.assertEqual(result['message'], 'after-hours')
+        mock_after.assert_called_once_with('user-2', 'wound', 'desc')
 
-def test_teleconsult_flow():
-    """Test complete teleconsult flow"""
-    print("\n" + "="*60)
-    print("TEST 5: Complete Teleconsult Flow")
-    print("="*60)
-    
-    test_user = "test_user_tc_flow"
-    
-    # Test 1: Start consultation (normal)
-    print("\n5.1 Starting normal consultation...")
-    result = start_teleconsult(
-        user_id=test_user,
-        issue_type="wound",
-        description="แผลบวมเล็กน้อย"
-    )
-    
-    if result['success']:
-        print("   ✅ Consultation started")
-        print(f"   Message preview: {result['message'][:100]}...")
-    else:
-        print(f"   ❌ Failed: {result['message']}")
-    
-    # Test 2: Try starting another (should fail - already has active)
-    print("\n5.2 Trying to start another (should fail)...")
-    result2 = start_teleconsult(
-        user_id=test_user,
-        issue_type="medication",
-        description="ถามเรื่องยา"
-    )
-    
-    if not result2['success']:
-        print("   ✅ Correctly rejected (already has active session)")
-    else:
-        print("   ❌ Should have been rejected")
-    
-    # Test 3: Cancel consultation
-    print("\n5.3 Cancelling consultation...")
-    cancel_result = cancel_consultation(test_user)
-    
-    if cancel_result['success']:
-        print("   ✅ Consultation cancelled")
-    else:
-        print(f"   ❌ Cancellation failed: {cancel_result['message']}")
-    
-    print("\n✅ Flow tests complete\n")
+    def test_start_teleconsult_returns_queue_full_message(self):
+        with patch('services.teleconsult.get_user_active_session', return_value=None), \
+             patch('services.teleconsult.is_office_hours', return_value=True), \
+             patch('services.teleconsult.get_queue_status', return_value={'total': 20}):
+            result = start_teleconsult('user-3', 'wound', 'desc')
 
+        self.assertFalse(result['success'])
+        self.assertIn('คิวเต็มแล้ว', result['message'])
 
-def test_queue_management():
-    """Test queue management"""
-    print("\n" + "="*60)
-    print("TEST 6: Queue Management")
-    print("="*60)
-    
-    # Get current queue
-    print("\n6.1 Current queue status:")
-    message = get_queue_info_message()
-    print(message)
-    
-    print("\n✅ Queue management test complete\n")
+    def test_start_teleconsult_rolls_back_when_queue_insert_fails(self):
+        session = {
+            'session_id': 'S2',
+            'user_id': 'user-4',
+            'issue_type': 'wound',
+            'priority': 2,
+            'description': 'desc',
+        }
+        with patch('services.teleconsult.get_user_active_session', return_value=None), \
+             patch('services.teleconsult.is_office_hours', return_value=True), \
+             patch('services.teleconsult.get_queue_status', return_value={'total': 0}), \
+             patch('services.teleconsult.create_session', return_value=session), \
+             patch('services.teleconsult.add_to_queue', return_value=None), \
+             patch('services.teleconsult.update_session_status') as mock_update:
+            result = start_teleconsult('user-4', 'wound', 'desc')
 
+        self.assertFalse(result['success'])
+        self.assertIn('เกิดข้อผิดพลาดในการเข้าคิว', result['message'])
+        mock_update.assert_called_once_with('S2', 'queue_failed', notes='Queue insertion failed')
 
-def run_all_tests():
-    """Run all tests"""
-    print("\n" + "="*80)
-    print(" " * 25 + "TELECONSULT TEST SUITE")
-    print("="*80)
-    
-    try:
-        # Test 1: Office Hours
-        test_office_hours()
-        
-        # Test 2: Category Menu
-        test_category_menu()
-        
-        # Test 3: Category Parsing
-        test_category_parsing()
-        
-        # Test 4: Database Operations
-        test_database_operations()
-        
-        # Test 5: Complete Flow
-        test_teleconsult_flow()
-        
-        # Test 6: Queue Management
-        test_queue_management()
-        
-        # Summary
-        print("\n" + "="*80)
-        print(" " * 30 + "TEST SUMMARY")
-        print("="*80)
-        print("\n✅ ALL TELECONSULT TESTS COMPLETED")
-        print("\n📊 Next Steps:")
-        print("   1. Check Google Sheets for test data")
-        print("   2. Create Dialogflow Intent: ContactNurse")
-        print("   3. Test in LINE app")
-        print("   4. Monitor nurse notifications")
-        print("\n" + "="*80 + "\n")
-        
-    except Exception as e:
-        print(f"\n❌ TEST FAILED: {e}")
-        import traceback
-        traceback.print_exc()
+    def test_start_teleconsult_success_path_returns_queue_info(self):
+        session = {
+            'session_id': 'S3',
+            'user_id': 'user-5',
+            'issue_type': 'medication',
+            'priority': 2,
+            'description': 'drug question',
+        }
+        queue_info = {
+            'queue_id': 'Q1',
+            'session_id': 'S3',
+            'position': 1,
+            'estimated_wait': 15,
+            'timestamp': '2026-04-22 10:00:00',
+        }
+        with patch('services.teleconsult.get_user_active_session', return_value=None), \
+             patch('services.teleconsult.is_office_hours', return_value=True), \
+             patch('services.teleconsult.get_queue_status', return_value={'total': 0}), \
+             patch('services.teleconsult.create_session', return_value=session), \
+             patch('services.teleconsult.add_to_queue', return_value=queue_info), \
+             patch('services.teleconsult.alert_nurse_new_request') as mock_alert:
+            result = start_teleconsult('user-5', 'medication', 'drug question')
+
+        self.assertTrue(result['success'])
+        self.assertEqual(result['session'], session)
+        self.assertEqual(result['queue'], queue_info)
+        self.assertIn('ตำแหน่งในคิว: 1', result['message'])
+        mock_alert.assert_called_once_with(session, queue_info)
+
+    def test_cancel_consultation_handles_missing_session(self):
+        with patch('services.teleconsult.get_user_active_session', return_value=None):
+            result = cancel_consultation('user-6')
+
+        self.assertFalse(result['success'])
+        self.assertIn('ไม่พบคำขอปรึกษา', result['message'])
+
+    def test_cancel_consultation_updates_session_and_queue(self):
+        session = {'Session_ID': 'S4'}
+        with patch('services.teleconsult.get_user_active_session', return_value=session), \
+             patch('services.teleconsult.update_session_status', return_value=True) as mock_update, \
+             patch('services.teleconsult.remove_from_queue', return_value=True) as mock_remove:
+            result = cancel_consultation('user-7')
+
+        self.assertTrue(result['success'])
+        self.assertIn('ยกเลิกคำขอแล้ว', result['message'])
+        mock_update.assert_called_once_with('S4', 'cancelled', notes='Cancelled by user')
+        mock_remove.assert_called_once_with('S4')
+
+    def test_get_queue_info_message_formats_empty_queue(self):
+        with patch('services.teleconsult.get_queue_status', return_value={'total': 0, 'by_priority': {}}):
+            message = get_queue_info_message()
+        self.assertEqual(message, '📊 ขณะนี้ไม่มีคิวรอค่ะ')
+
+    def test_get_queue_info_message_formats_priority_counts(self):
+        with patch('services.teleconsult.get_queue_status', return_value={'total': 4, 'by_priority': {1: 1, 2: 2, 3: 1}}):
+            message = get_queue_info_message()
+        self.assertIn('รวมทั้งหมด: 4 คน', message)
+        self.assertIn('ฉุกเฉิน: 1 คน', message)
+        self.assertIn('กลาง: 2 คน', message)
+        self.assertIn('ต่ำ: 1 คน', message)
 
 
 if __name__ == '__main__':
-    run_all_tests()
+    unittest.main(verbosity=2)

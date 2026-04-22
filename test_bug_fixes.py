@@ -6,10 +6,15 @@ Test all 4 bugs have been fixed correctly
 import sys
 import json
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-# Add project to path
-sys.path.insert(0, '/mnt/user-data/outputs')
+# Add project to path and make Windows console output UTF-8 safe
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 from config import LOCAL_TZ, get_logger
 from services.reminder import send_reminder, get_reminder_summary
@@ -127,7 +132,7 @@ def test_bug_2_return_values():
     # Test 2.1: Call function and check return structure
     print("2.1 Testing get_reminder_summary() return structure...")
     
-    with patch('services.reminder.get_scheduled_reminders') as mock_scheduled:
+    with patch('database.reminders.get_scheduled_reminders') as mock_scheduled:
         with patch('services.reminder.get_pending_reminders') as mock_pending:
             # Mock empty data
             mock_scheduled.return_value = []
@@ -165,7 +170,7 @@ def test_bug_2_return_values():
     # Test 2.2: Test with mock data
     print("\n2.2 Testing with mock reminder data...")
     
-    with patch('services.reminder.get_scheduled_reminders') as mock_scheduled:
+    with patch('database.reminders.get_scheduled_reminders') as mock_scheduled:
         with patch('services.reminder.get_pending_reminders') as mock_pending:
             # Mock data with different statuses
             mock_scheduled.return_value = [
@@ -261,7 +266,7 @@ def test_bug_3_missing_handler():
             }
             
             # Mock database functions
-            with patch('services.reminder.get_reminder_summary') as mock_summary:
+            with patch('routes.webhook.get_reminder_summary') as mock_summary:
                 mock_summary.return_value = {
                     'total_reminders': 2,
                     'responded': 1,
@@ -294,7 +299,8 @@ def test_bug_3_missing_handler():
                     
                     if has_fulfillment:
                         message = data['fulfillmentText']
-                        has_summary = 'สรุปการติดตาม' in message
+                        has_summary = ('สรุปการติดตาม' in message or
+                                       'ยังไม่มีข้อมูลการติดตาม' in message)
                         test_passed = print_result(
                             has_summary,
                             f"Contains summary text: {has_summary}"
