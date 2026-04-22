@@ -158,6 +158,31 @@ NURSE_RESPONSE_TIMEOUT_MINUTES = 30
 
 
 # ---------------------------------------------------------------------------
+# LLM Configuration (Phase 2: free-text NLP + personalized education)
+# ---------------------------------------------------------------------------
+# Provider: "none" (rule-based only) or "gemini". Default is "none" so the
+# bot runs safely without any external API key. Flip to "gemini" and supply
+# GEMINI_API_KEY to enable LLM-backed free-text triage and personalized
+# education recommendations.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").strip().lower()
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_DEFAULT_MODEL = "gemini-2.0-flash"
+LLM_MODEL = os.environ.get("LLM_MODEL", "").strip()
+
+# Request budget: keep small so webhook p95 stays under SLO even when LLM
+# is slow.
+LLM_TIMEOUT_SECONDS = float(os.environ.get("LLM_TIMEOUT_SECONDS", "8"))
+LLM_MAX_OUTPUT_TOKENS = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "500"))
+
+# Safety rails
+LLM_DAILY_CALL_LIMIT = int(os.environ.get("LLM_DAILY_CALL_LIMIT", "1000"))
+LLM_CIRCUIT_FAILURE_THRESHOLD = int(os.environ.get("LLM_CIRCUIT_FAILURE_THRESHOLD", "3"))
+LLM_CIRCUIT_COOLDOWN_SECONDS = int(os.environ.get("LLM_CIRCUIT_COOLDOWN_SECONDS", "60"))
+
+
+# ---------------------------------------------------------------------------
 # Status Constants (Phase 1 tail: centralize magic strings)
 # ---------------------------------------------------------------------------
 # Reminder statuses (used in database/reminders.py, services/reminder.py,

@@ -282,6 +282,43 @@ heroku logs --tail  # If using Heroku
 - ✅ Improved maintainability and testability
 - ✅ Added comprehensive documentation
 
+### v4.1 (LLM-Powered Triage & Education) - 2026-04-22
+
+- ✅ Phase 2 P2-E: Free-text symptom triage via Gemini + rule-based fallback
+  (`services/nlp.py`, intent `FreeTextSymptom`)
+- ✅ Phase 2 P2-C: Personalized education recommender
+  (`services/education.py`, intent `RecommendKnowledge`)
+- ✅ Pluggable LLM adapter with circuit breaker and daily quota cap
+  (`services/llm.py`)
+- ✅ PII scrubber applied before every outbound LLM call (`utils/pii.py`)
+- ✅ New regression suite `test_llm.py` (21 tests, fully mocked)
+
+#### LLM Setup (optional)
+
+Set these environment variables on your deploy target (Render, Railway, local):
+
+| Variable | Required? | Default | Notes |
+|---|---|---|---|
+| `LLM_PROVIDER` | yes, to enable | `none` | Set to `gemini` to enable |
+| `GEMINI_API_KEY` | yes, if `gemini` | _empty_ | From Google AI Studio |
+| `LLM_MODEL` | no | `gemini-2.0-flash` | Override model if needed |
+| `LLM_TIMEOUT_SECONDS` | no | `8` | Webhook budget guard |
+| `LLM_MAX_OUTPUT_TOKENS` | no | `500` | Cost guard |
+| `LLM_DAILY_CALL_LIMIT` | no | `1000` | Soft cap per process |
+| `LLM_CIRCUIT_FAILURE_THRESHOLD` | no | `3` | Consecutive fails → open |
+| `LLM_CIRCUIT_COOLDOWN_SECONDS` | no | `60` | Circuit cool-off |
+
+Leave `LLM_PROVIDER=none` to run in pure rule-based mode (safe default).
+
+#### Dialogflow intents to add
+
+| Intent name | Maps to handler | Purpose |
+|---|---|---|
+| `FreeTextSymptom` | `handle_free_text_symptom` | Patient types free-text symptoms |
+| `RecommendKnowledge` | `handle_recommend_knowledge` | Personalized guide recommendations |
+
+Both handlers fall back gracefully when `LLM_PROVIDER=none`.
+
 ### v3.0 (Perfect Core) - 2026-01-03
 
 - ✅ Enhanced UX with detailed messages

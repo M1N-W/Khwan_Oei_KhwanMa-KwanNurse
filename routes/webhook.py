@@ -35,6 +35,10 @@ from services.teleconsult import (
     get_queue_info_message,
     handle_after_hours_choice  # Bug #2 fix
 )
+from services.nlp import analyze_free_text, format_triage_message
+from services.education import recommend_guides, format_recommendations_message
+from services.notification import send_line_push
+from config import NURSE_GROUP_ID
 
 logger = get_logger(__name__)
 
@@ -118,7 +122,13 @@ def register_routes(app):
         
         elif intent == 'GetGroupID':
             return handle_get_group_id()
-        
+
+        elif intent == 'FreeTextSymptom':
+            return handle_free_text_symptom(user_id, params, query_text)
+
+        elif intent == 'RecommendKnowledge':
+            return handle_recommend_knowledge(user_id, params)
+
         else:
             return handle_unknown_intent(intent)
 
@@ -482,6 +492,104 @@ def handle_cancel_consultation(user_id):
         }), 200
 
 
+def handle_free_text_symptom(user_id, params, query_text):
+    """
+    Handle FreeTextSymptom intent (Phase 2-E).
+
+    Patient types an open-ended complaint (e.g. 'แผลมีน้ำเหลืองไหล ปวด 8/10').
+    We run LLM + rule-based triage via services.nlp, reply with a structured
+    summary, and escalate to the nurse group when risk is high.
+    """
+    try:
+        text = (
+            params.get('symptom_text')
+            or params.get('description')
+            or params.get('text')
+            or query_text
+            or ''
+        )
+        if not text or not str(text).strip():
+            return jsonify({
+                "fulfillmentText": (
+                    "เล่าอาการให้ฟังหน่อยค่ะ เช่น\n"
+                    "\"แผลบวมแดง ปวด 7/10 มีไข้นิดหน่อย เดินไม่ค่อยไหว\""
+                )
+            }), 200
+
+        result = analyze_free_text(str(text))
+        logger.info(
+            "FreeTextSymptom triage: level=%s source=%s flags=%s",
+            result.get('risk_level'), result.get('source'), result.get('flags'),
+        )
+
+        reply = format_triage_message(result)
+
+        # Escalate to nurse group on high risk. Keep this best-effort: retry
+        # logic already lives inside send_line_push.
+        if result.get('risk_level') == 'high' and NURSE_GROUP_ID:
+            try:
+                flags = ", ".join(result.get('flags') or []) or "-"
+                summary = result.get('summary') or "-"
+                alert = (
+                    "🚨 รายงานอาการจากแชต (เสี่ยงสูง)\n"
+                    f"👤 ผู้ป่วย: {user_id}\n"
+                    f"🔎 Flags: {flags}\n"
+                    f"📋 สรุป: {summary}\n"
+                    "กรุณาติดต่อกลับโดยเร็ว"
+                )
+                send_line_push(alert, NURSE_GROUP_ID)
+            except Exception:
+                logger.exception("Failed to send high-risk free-text alert")
+
+        return jsonify({"fulfillmentText": reply}), 200
+
+    except Exception:
+        logger.exception("Error in FreeTextSymptom handler")
+        return jsonify({
+            "fulfillmentText": "ขอโทษค่ะ ระบบประเมินข้อความขัดข้อง กรุณาลองใหม่"
+        }), 200
+
+
+def handle_recommend_knowledge(user_id, params):
+    """
+    Handle RecommendKnowledge intent (Phase 2-C).
+
+    Returns a personalized list of knowledge guides ordered by relevance to
+    the patient's profile. Profile fields come from Dialogflow params:
+    age, sex, surgery_type, diseases.
+    """
+    try:
+        profile = {
+            'age': params.get('age'),
+            'sex': params.get('sex'),
+            'surgery_type': (
+                params.get('surgery_type')
+                or params.get('surgery')
+                or params.get('operation')
+            ),
+            'diseases': params.get('diseases') or params.get('disease'),
+        }
+        recommendations = recommend_guides(profile, top_n=3)
+        message = format_recommendations_message(recommendations)
+        if not message:
+            message = (
+                "ตอนนี้ยังไม่มีคำแนะนำเฉพาะราย กรุณาพิมพ์ 'ความรู้' "
+                "เพื่อดูเมนูทั้งหมดค่ะ"
+            )
+        logger.info(
+            "RecommendKnowledge for %s: %s",
+            user_id,
+            [r.get('key') for r in recommendations],
+        )
+        return jsonify({"fulfillmentText": message}), 200
+
+    except Exception:
+        logger.exception("Error in RecommendKnowledge handler")
+        return jsonify({
+            "fulfillmentText": "ขอโทษค่ะ ไม่สามารถแนะนำความรู้ได้ในขณะนี้"
+        }), 200
+
+
 def handle_unknown_intent(intent):
     """Handle unknown/unhandled intents"""
     logger.warning("Unhandled intent: %s", intent)
@@ -492,8 +600,9 @@ def handle_unknown_intent(intent):
             f"• รายงานอาการ\n"
             f"• ประเมินความเสี่ยง\n"
             f"• นัดหมายพยาบาล\n"
-            f"• ความรู้และคำแนะนำ\n"
+            f"• ความรู้และคำแนะนำ (พิมพ์ 'แนะนำความรู้' สำหรับเฉพาะราย)\n"
             f"• ติดตามหลังจำหน่าย\n"
-            f"• ปรึกษาพยาบาล"
+            f"• ปรึกษาพยาบาล\n"
+            f"• เล่าอาการเป็นข้อความอิสระ"
         )
     }), 200

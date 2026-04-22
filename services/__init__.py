@@ -35,6 +35,8 @@ from .teleconsult import (
     get_queue_info_message,
     handle_after_hours_choice     # expose new handler
 )
+from .nlp import analyze_free_text, format_triage_message
+from .education import recommend_guides, format_recommendations_message
 
 __all__ = [
     'send_line_push',
@@ -65,4 +67,9 @@ __all__ = [
     'cancel_consultation',
     'get_queue_info_message',
     'handle_after_hours_choice',  # new handler
+    # Phase 2
+    'analyze_free_text',
+    'format_triage_message',
+    'recommend_guides',
+    'format_recommendations_message',
 ]

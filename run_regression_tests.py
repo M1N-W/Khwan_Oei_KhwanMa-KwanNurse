@@ -11,6 +11,7 @@ TEST_COMMANDS = [
     [sys.executable, "test_bug_fixes.py"],
     [sys.executable, "-m", "unittest", "test_teleconsult.py", "-v"],
     [sys.executable, "-m", "unittest", "test_reminder.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_llm.py", "-v"],
 ]
 
 
