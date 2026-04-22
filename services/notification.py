@@ -3,6 +3,7 @@
 Notification Service Module
 Handles LINE push notifications
 """
+import time
 import requests
 from config import (
     get_logger,
@@ -14,49 +15,88 @@ from config import (
 
 logger = get_logger(__name__)
 
+# Bounded retry policy for LINE push so transient network blips and 5xx
+# responses do not immediately surface as a nurse alert failure, while still
+# keeping the total request budget small enough not to blow webhook latency.
+_LINE_PUSH_RETRIES = 2  # total attempts = 1 + retries
+_LINE_PUSH_BACKOFF_SECONDS = (0.5, 1.0)
+_LINE_PUSH_TIMEOUT_SECONDS = 6
+
 
 def send_line_push(message, target_id=None):
     """
-    Send LINE push notification
-    
+    Send LINE push notification with a short retry budget.
+
+    Retries only on network errors, timeouts, and 5xx responses. 4xx responses
+    are not retried because they indicate a caller/auth problem.
+
     Args:
         message: Message text to send
         target_id: Target user/group ID (default: NURSE_GROUP_ID)
-    
+
     Returns:
-        boolean (success/failure)
+        bool: success/failure
     """
-    try:
-        access_token = LINE_CHANNEL_ACCESS_TOKEN
-        if not target_id:
-            target_id = NURSE_GROUP_ID
-        
-        if not access_token or not target_id:
-            logger.warning("LINE token or target_id not configured")
-            return False
-        
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {access_token}'
-        }
-        
-        payload = {
-            "to": target_id,
-            "messages": [{"type": "text", "text": message}]
-        }
-        
-        resp = requests.post(LINE_API_URL, headers=headers, json=payload, timeout=8)
-        
-        if resp.status_code // 100 == 2:
-            logger.info("Push notification sent to %s", target_id)
-            return True
-        else:
-            logger.error("LINE push failed: %s %s", resp.status_code, resp.text)
-            return False
-    
-    except Exception:
-        logger.exception("Error sending LINE push notification")
+    access_token = LINE_CHANNEL_ACCESS_TOKEN
+    if not target_id:
+        target_id = NURSE_GROUP_ID
+
+    if not access_token or not target_id:
+        logger.warning("LINE token or target_id not configured")
         return False
+
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {access_token}'
+    }
+    payload = {
+        "to": target_id,
+        "messages": [{"type": "text", "text": message}]
+    }
+
+    last_status = None
+    for attempt in range(_LINE_PUSH_RETRIES + 1):
+        try:
+            resp = requests.post(
+                LINE_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=_LINE_PUSH_TIMEOUT_SECONDS,
+            )
+            last_status = resp.status_code
+
+            if resp.status_code // 100 == 2:
+                if attempt > 0:
+                    logger.info("Push notification sent to %s after %d retries", target_id, attempt)
+                else:
+                    logger.info("Push notification sent to %s", target_id)
+                return True
+
+            if resp.status_code // 100 == 5:
+                # Transient server-side error: retry if budget remains
+                logger.warning(
+                    "LINE push 5xx (attempt %d/%d): %s %s",
+                    attempt + 1, _LINE_PUSH_RETRIES + 1, resp.status_code, resp.text,
+                )
+            else:
+                # 4xx (auth, bad payload): do NOT retry
+                logger.error("LINE push failed (no retry): %s %s", resp.status_code, resp.text)
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.warning("LINE API timeout (attempt %d/%d)", attempt + 1, _LINE_PUSH_RETRIES + 1)
+        except requests.exceptions.RequestException as e:
+            logger.warning("LINE API request error (attempt %d/%d): %s", attempt + 1, _LINE_PUSH_RETRIES + 1, e)
+        except Exception:
+            logger.exception("Unexpected error sending LINE push notification")
+            return False
+
+        if attempt < _LINE_PUSH_RETRIES:
+            time.sleep(_LINE_PUSH_BACKOFF_SECONDS[min(attempt, len(_LINE_PUSH_BACKOFF_SECONDS) - 1)])
+
+    logger.error("LINE push giving up after %d attempts (last status=%s)",
+                 _LINE_PUSH_RETRIES + 1, last_status)
+    return False
 
 
 def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level, risk_score):

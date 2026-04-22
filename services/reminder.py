@@ -8,7 +8,8 @@ from config import (
     LOCAL_TZ,
     REMINDER_INTERVALS,
     NURSE_GROUP_ID,
-    get_logger
+    ReminderStatus,
+    get_logger,
 )
 from database.reminders import (
     save_reminder_schedule,
@@ -354,9 +355,9 @@ def get_reminder_summary(user_id):
         
         # Count by status
         total_reminders = len(user_scheduled)
-        responded = len([r for r in user_scheduled if r.get('Status') == 'responded'])
-        pending_count = len([r for r in user_scheduled if r.get('Status') == 'sent'])
-        no_response = len([r for r in user_scheduled if r.get('Status') == 'no_response'])
+        responded = len([r for r in user_scheduled if r.get('Status') == ReminderStatus.RESPONDED])
+        pending_count = len([r for r in user_scheduled if r.get('Status') == ReminderStatus.SENT])
+        no_response = len([r for r in user_scheduled if r.get('Status') == ReminderStatus.NO_RESPONSE])
         
         # Get latest reminder
         latest = None

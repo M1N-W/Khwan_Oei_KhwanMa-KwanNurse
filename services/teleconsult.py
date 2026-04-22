@@ -10,7 +10,8 @@ from config import (
     ISSUE_CATEGORIES,
     MAX_QUEUE_SIZE,
     NURSE_GROUP_ID,
-    get_logger
+    SessionStatus,
+    get_logger,
 )
 from database.teleconsult import (
     create_session,
@@ -183,7 +184,7 @@ def start_teleconsult(user_id, issue_type, description=""):
         if not queue_info:
             update_session_status(
                 session['session_id'],
-                'queue_failed',
+                SessionStatus.QUEUE_FAILED,
                 notes='Queue insertion failed'
             )
             return {
@@ -245,7 +246,7 @@ def handle_emergency(user_id, description):
             }
         
         # Update status to in_progress (skip queue)
-        update_session_status(session['session_id'], 'in_progress')
+        update_session_status(session['session_id'], SessionStatus.IN_PROGRESS)
         
         # Send URGENT alert to nurse
         alert_message = (
@@ -304,7 +305,7 @@ def handle_after_hours(user_id, issue_type, description):
         # --- FIX: บันทึก session ก่อนเพื่อป้องกันข้อมูลสูญหาย ---
         session = create_session(user_id, issue_type, priority=3, description=description)
         if session:
-            update_session_status(session['session_id'], 'after_hours_pending')
+            update_session_status(session['session_id'], SessionStatus.AFTER_HOURS_PENDING)
             logger.info(
                 f"After-hours session saved: {session['session_id']} for {user_id}"
             )
@@ -427,7 +428,7 @@ def cancel_consultation(user_id):
         session_id = session.get('Session_ID')
         
         # Update session status
-        update_session_status(session_id, 'cancelled', notes='Cancelled by user')
+        update_session_status(session_id, SessionStatus.CANCELLED, notes='Cancelled by user')
         
         # Remove from queue
         remove_from_queue(session_id)

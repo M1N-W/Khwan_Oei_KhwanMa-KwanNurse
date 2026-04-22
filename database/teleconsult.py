@@ -9,12 +9,14 @@ from config import (
     LOCAL_TZ,
     SHEET_TELECONSULT_SESSIONS,
     SHEET_TELECONSULT_QUEUE,
-    get_logger
+    SessionStatus,
+    QueueStatus,
+    ACTIVE_SESSION_STATUSES,
+    get_logger,
 )
 from database.sheets import get_worksheet, column_number_to_letter
 
 logger = get_logger(__name__)
-ACTIVE_SESSION_STATUSES = ('queued', 'in_progress', 'after_hours_pending')
 
 
 def generate_session_id():
@@ -55,7 +57,7 @@ def create_session(user_id, issue_type, priority, description=""):
             user_id,           # User_ID
             issue_type,        # Issue_Type
             str(priority),     # Priority
-            'queued',          # Status
+            SessionStatus.QUEUED,  # Status
             description,       # Description
             '',                # Queue_Position (set later)
             '',                # Assigned_Nurse
@@ -111,7 +113,7 @@ def add_to_queue(session_id, user_id, issue_type, priority):
             for row in all_values[1:]:
                 if len(row) >= len(headers):
                     record = dict(zip(headers, row))
-                    if record.get('Status') == 'waiting':
+                    if record.get('Status') == QueueStatus.WAITING:
                         waiting_count += 1
         
         queue_position = waiting_count + 1
@@ -135,7 +137,7 @@ def add_to_queue(session_id, user_id, issue_type, priority):
             user_id,              # User_ID
             issue_type,           # Issue_Type
             str(priority),        # Priority
-            'waiting',            # Status
+            QueueStatus.WAITING,  # Status
             str(estimated_wait)   # Estimated_Wait
         ]
         
@@ -204,12 +206,12 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
                     'values': [[new_status]]
                 }]
 
-                if new_status == 'in_progress':
+                if new_status == SessionStatus.IN_PROGRESS:
                     updates.append({
                         'range': f"{column_number_to_letter(started_col)}{row_num}",
                         'values': [[timestamp]]
                     })
-                elif new_status == 'completed':
+                elif new_status == SessionStatus.COMPLETED:
                     updates.append({
                         'range': f"{column_number_to_letter(completed_col)}{row_num}",
                         'values': [[timestamp]]
@@ -296,7 +298,7 @@ def remove_from_queue(session_id):
             row = all_values[i]
             if len(row) >= 3 and row[2] == session_id:  # Session_ID is column 3
                 row_num = i + 1
-                sheet.update_cell(row_num, status_col, 'removed')
+                sheet.update_cell(row_num, status_col, QueueStatus.REMOVED)
                 logger.info(f"Removed session {session_id} from queue")
                 return True
         
@@ -330,7 +332,7 @@ def get_queue_status():
         for row in all_values[1:]:
             if len(row) >= len(headers):
                 record = dict(zip(headers, row))
-                if record.get('Status') == 'waiting':
+                if record.get('Status') == QueueStatus.WAITING:
                     waiting.append(record)
         
         # Count by priority

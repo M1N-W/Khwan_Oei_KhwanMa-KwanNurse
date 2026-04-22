@@ -11,7 +11,8 @@ from config import (
     LOCAL_TZ,
     SHEET_FOLLOW_UP_REMINDERS,
     SHEET_REMINDER_SCHEDULES,
-    get_logger
+    ReminderStatus,
+    get_logger,
 )
 from database.sheets import get_worksheet, column_number_to_letter
 
@@ -48,7 +49,7 @@ def save_reminder_schedule(user_id, discharge_date, reminder_type, scheduled_dat
             discharge_str,      # Discharge_Date
             reminder_type,      # Reminder_Type
             scheduled_str,      # Scheduled_Date
-            'scheduled',        # Status
+            ReminderStatus.SCHEDULED,  # Status
             notes               # Notes
         ]
         
@@ -85,7 +86,7 @@ def save_reminder_sent(user_id, reminder_type, message_text=""):
             timestamp,          # Timestamp
             user_id,           # User_ID
             reminder_type,     # Reminder_Type
-            'sent',            # Status
+            ReminderStatus.SENT,  # Status
             '',                # Response_Text (empty for now)
             message_text,      # Message_Sent
             ''                 # Response_Timestamp (empty for now)
@@ -95,7 +96,7 @@ def save_reminder_sent(user_id, reminder_type, message_text=""):
         logger.info(f"Recorded reminder sent: {reminder_type} to {user_id}")
         
         # Update schedule status
-        update_schedule_status(user_id, reminder_type, 'sent')
+        update_schedule_status(user_id, reminder_type, ReminderStatus.SENT)
         
         return True
         
@@ -137,7 +138,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
                     
                     if (record.get('User_ID') == user_id and 
                         record.get('Reminder_Type') == reminder_type and
-                        record.get('Status') == 'sent'):
+                        record.get('Status') == ReminderStatus.SENT):
                         
                         # Update this row using batch_update (single API call)
                         row_num = i + 1  # +1 for 1-indexed
@@ -150,7 +151,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         sheet.batch_update([
                             {
                                 'range': f"{column_number_to_letter(status_col)}{row_num}",
-                                'values': [['responded']]
+                                'values': [[ReminderStatus.RESPONDED]]
                             },
                             {
                                 'range': f"{column_number_to_letter(response_col)}{row_num}",
@@ -165,7 +166,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         logger.info(f"Recorded response from {user_id} for {reminder_type}")
                         
                         # Update schedule status
-                        update_schedule_status(user_id, reminder_type, 'responded')
+                        update_schedule_status(user_id, reminder_type, ReminderStatus.RESPONDED)
                         
                         return True
         
@@ -175,7 +176,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
             timestamp,
             user_id,
             reminder_type,
-            'responded',
+            ReminderStatus.RESPONDED,
             response_text,
             '',  # Message_Sent (unknown)
             timestamp  # Response_Timestamp
@@ -273,7 +274,7 @@ def get_pending_reminders(user_id, reminder_type):
         # Filter pending reminders
         pending = []
         for record in records:
-            if record.get('User_ID') == user_id and record.get('Status') == 'sent':
+            if record.get('User_ID') == user_id and record.get('Status') == ReminderStatus.SENT:
                 if reminder_type is None or record.get('Reminder_Type') == reminder_type:
                     pending.append(record)
         
@@ -314,7 +315,7 @@ def get_scheduled_reminders():
                 records.append(record)
         
         # Filter for scheduled status
-        scheduled = [r for r in records if r.get('Status') == 'scheduled']
+        scheduled = [r for r in records if r.get('Status') == ReminderStatus.SCHEDULED]
         
         return scheduled
         
@@ -355,7 +356,7 @@ def check_no_response_reminders():
             if len(row) >= len(headers):
                 record = dict(zip(headers, row))
                 
-                if record.get('Status') == 'sent':
+                if record.get('Status') == ReminderStatus.SENT:
                     # Check if sent more than 24 hours ago
                     timestamp_str = record.get('Timestamp', '')
                     if timestamp_str:
@@ -369,7 +370,7 @@ def check_no_response_reminders():
                                 row_num = i + 1
                                 sheet.batch_update([{
                                     'range': f"{column_number_to_letter(status_col)}{row_num}",
-                                    'values': [['no_response']]
+                                    'values': [[ReminderStatus.NO_RESPONSE]]
                                 }])
 
                                 record['row_num'] = row_num
@@ -380,7 +381,7 @@ def check_no_response_reminders():
                                 update_schedule_status(
                                     record.get('User_ID'),
                                     record.get('Reminder_Type'),
-                                    'no_response'
+                                    ReminderStatus.NO_RESPONSE,
                                 )
                                 
                         except Exception as e:

@@ -155,3 +155,83 @@ ISSUE_CATEGORIES = {
 
 MAX_QUEUE_SIZE = 20
 NURSE_RESPONSE_TIMEOUT_MINUTES = 30
+
+
+# ---------------------------------------------------------------------------
+# Status Constants (Phase 1 tail: centralize magic strings)
+# ---------------------------------------------------------------------------
+# Reminder statuses (used in database/reminders.py, services/reminder.py,
+# services/scheduler.py). Values must match what is already persisted in
+# Google Sheets so do NOT rename without a data migration.
+class ReminderStatus:
+    SCHEDULED = "scheduled"
+    SENT = "sent"
+    RESPONDED = "responded"
+    NO_RESPONSE = "no_response"
+
+
+# Teleconsult session statuses (used in database/teleconsult.py,
+# services/teleconsult.py).
+class SessionStatus:
+    QUEUED = "queued"
+    IN_PROGRESS = "in_progress"
+    AFTER_HOURS_PENDING = "after_hours_pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    QUEUE_FAILED = "queue_failed"
+
+
+ACTIVE_SESSION_STATUSES = (
+    SessionStatus.QUEUED,
+    SessionStatus.IN_PROGRESS,
+    SessionStatus.AFTER_HOURS_PENDING,
+)
+
+
+# Teleconsult queue row statuses (in TeleconsultQueue sheet).
+class QueueStatus:
+    WAITING = "waiting"
+    REMOVED = "removed"
+
+
+# ---------------------------------------------------------------------------
+# Runtime config validation (Phase 1 tail: fail-visible startup check)
+# ---------------------------------------------------------------------------
+def validate_runtime_config():
+    """
+    Check that critical runtime configuration is present. Does NOT raise so
+    the process can still respond to health checks on platforms like Render
+    that would otherwise crash-loop. Missing items are logged loudly and the
+    returned dict lets callers decide whether to disable subsystems.
+    """
+    logger = get_logger(__name__)
+    missing = []
+
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        missing.append("CHANNEL_ACCESS_TOKEN")
+    if not NURSE_GROUP_ID:
+        missing.append("NURSE_GROUP_ID")
+    if not SPREADSHEET_NAME:
+        missing.append("SPREADSHEET_NAME")
+
+    # Credentials can come from either a file on disk or env-provided JSON.
+    creds_file_exists = os.path.exists("credentials.json")
+    creds_env = bool(GSPREAD_CREDENTIALS) or bool(os.environ.get("GOOGLE_CREDS_B64"))
+    if not creds_file_exists and not creds_env:
+        missing.append("credentials.json or GSPREAD_CREDENTIALS/GOOGLE_CREDS_B64")
+
+    if missing:
+        logger.error(
+            "Runtime config validation: missing %d required item(s): %s",
+            len(missing),
+            ", ".join(missing),
+        )
+    else:
+        logger.info("Runtime config validation: OK")
+
+    return {
+        "ok": not missing,
+        "missing": missing,
+        "can_notify": bool(LINE_CHANNEL_ACCESS_TOKEN) and bool(NURSE_GROUP_ID),
+        "can_persist": creds_file_exists or creds_env,
+    }

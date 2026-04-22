@@ -7,7 +7,7 @@ import json
 import os
 from datetime import datetime
 from flask import request, jsonify
-from config import get_logger, LOCAL_TZ, OFFICE_HOURS
+from config import get_logger, LOCAL_TZ, OFFICE_HOURS, DEBUG
 from utils import (
     parse_date_iso,
     resolve_time_from_params,
@@ -78,8 +78,16 @@ def register_routes(app):
                 "fulfillmentText": "เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้ง"
             }), 200
         
-        logger.info("Intent: %s | User: %s | Params: %s", 
-                   intent, user_id, json.dumps(params, ensure_ascii=False))
+        # Log intent + masked user id. Avoid dumping full params (may contain
+        # phone numbers, descriptions, or other PII). Full payload only in
+        # DEBUG mode.
+        masked_user = (user_id[:4] + "***" + user_id[-4:]) if len(user_id) > 10 else "***"
+        if DEBUG:
+            logger.info("Intent: %s | User: %s | Params: %s",
+                       intent, masked_user, json.dumps(params, ensure_ascii=False))
+        else:
+            logger.info("Intent: %s | User: %s | ParamKeys: %s",
+                       intent, masked_user, list(params.keys()))
         
         # Route to appropriate handler
         if intent == 'ReportSymptoms':
@@ -386,9 +394,23 @@ def handle_get_followup_summary(user_id):
 
 
 def handle_get_group_id():
-    """Handle GetGroupID debug intent"""
+    """
+    Handle GetGroupID debug intent.
+
+    Guarded so production does NOT leak the nurse group id in responses.
+    Enable by running with DEBUG=true (or env DEBUG=1).
+    """
+    if not DEBUG:
+        logger.warning("GetGroupID invoked with DEBUG=false; refusing to expose group id")
+        return jsonify({
+            "fulfillmentText": "ฟีเจอร์นี้ปิดอยู่ในโหมดใช้งานจริง"
+        }), 200
+
+    group_id = os.environ.get('NURSE_GROUP_ID', 'Not Set')
+    # Even in debug, show a truncated form to keep logs safer.
+    shown = group_id if len(group_id) <= 10 else f"{group_id[:4]}***{group_id[-4:]}"
     return jsonify({
-        "fulfillmentText": f"🔧 Debug Info:\nNURSE_GROUP_ID: {os.environ.get('NURSE_GROUP_ID', 'Not Set')}"
+        "fulfillmentText": f"🔧 Debug Info:\nNURSE_GROUP_ID: {shown}"
     }), 200
 
 

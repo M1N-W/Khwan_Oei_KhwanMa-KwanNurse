@@ -1,4 +1,4 @@
-# 🏥 KwanNurse-Bot v4.0
+# 🏥 KwanNurse-Bot v3.0 (Refactored)
 
 ## 📁 Project Structure
 
@@ -30,13 +30,11 @@ kwannurse-bot/
 
 ## 🎯 Features
 
-### Core Features
+### Core Features (Production Ready)
+
 1. **ReportSymptoms** - AI-powered symptom risk assessment
 2. **AssessRisk** - Personal health risk stratification
 3. **RequestAppointment** - Appointment booking and management
-4. **GetKnowledge** - Post-discharge care guides
-5. **FollowUpReminders** - Scheduled follow-up reminders
-6. **Teleconsult** - Nurse consultation queue and escalation
 
 ## 🚀 Quick Start
 
@@ -74,34 +72,28 @@ export PORT='5000'
 python app.py
 
 # Production (with gunicorn)
-gunicorn app:application --bind 0.0.0.0:5000
-```
-
-If you run multiple web workers, only one process should own reminder scheduling:
-
-```bash
-# Scheduler owner
-RUN_SCHEDULER=true gunicorn app:application --bind 0.0.0.0:5000
-
-# Non-owner workers
-RUN_SCHEDULER=false gunicorn app:application --bind 0.0.0.0:5000
+gunicorn app:app --bind 0.0.0.0:5000
 ```
 
 ## 📦 Module Documentation
 
 ### config.py
+
 Centralized configuration management. Contains all environment variables, constants, and application settings.
 
 **Key configurations:**
+
 - Timezone (Asia/Bangkok)
 - Google Sheets settings
 - LINE API settings
 - Risk assessment parameters
 
 ### utils/parsers.py
+
 Utility functions for parsing and normalizing various input formats.
 
 **Functions:**
+
 - `parse_date_iso()` - Parse date strings
 - `parse_time_hhmm()` - Parse time strings
 - `resolve_time_from_params()` - Resolve time from multiple sources
@@ -109,42 +101,52 @@ Utility functions for parsing and normalizing various input formats.
 - `is_valid_thai_mobile()` - Validate Thai mobile numbers
 
 ### database/sheets.py
+
 Google Sheets data layer. Handles all database operations.
 
 **Functions:**
+
 - `get_sheet_client()` - Get Sheets client (singleton)
 - `save_symptom_data()` - Save symptom reports
 - `save_profile_data()` - Save risk profiles
 - `save_appointment_data()` - Save appointments
 
 ### services/notification.py
+
 LINE notification service. Handles all LINE API interactions.
 
 **Functions:**
+
 - `send_line_push()` - Send push notifications
 - `build_symptom_notification()` - Build symptom alert messages
 - `build_risk_notification()` - Build risk assessment messages
 - `build_appointment_notification()` - Build appointment messages
 
 ### services/risk_assessment.py
+
 Risk assessment business logic. Contains all risk calculation algorithms.
 
 **Functions:**
+
 - `calculate_symptom_risk()` - Symptom-based risk scoring
 - `normalize_diseases()` - Disease name normalization
 - `calculate_personal_risk()` - Demographics-based risk scoring
 
 ### services/appointment.py
+
 Appointment management service. Handles booking workflows.
 
 **Functions:**
+
 - `create_appointment()` - Create new appointment
 - `format_thai_date()` - Format dates in Thai
 
 ### routes/webhook.py
+
 Dialogflow webhook endpoints. Handles all API routes.
 
 **Functions:**
+
 - `register_routes()` - Register Flask routes
 - `health_check()` - Health check endpoint
 - `webhook()` - Main webhook handler
@@ -157,6 +159,7 @@ Dialogflow webhook endpoints. Handles all API routes.
 ### Adding New Features
 
 1. **Add new service:**
+
    ```python
    # services/new_feature.py
    from config import get_logger
@@ -168,6 +171,7 @@ Dialogflow webhook endpoints. Handles all API routes.
    ```
 
 2. **Register route:**
+
    ```python
    # routes/webhook.py
    @app.route('/new-endpoint', methods=['POST'])
@@ -177,6 +181,7 @@ Dialogflow webhook endpoints. Handles all API routes.
    ```
 
 3. **Update imports:**
+
    ```python
    # services/__init__.py
    from .new_feature import new_function
@@ -193,13 +198,14 @@ Dialogflow webhook endpoints. Handles all API routes.
 ### Testing
 
 ```bash
-# Run the current regression suite
-python run_regression_tests.py
+# Run tests (when implemented)
+pytest
 
-# Or run suites individually
-python test_bug_fixes.py
-python -m unittest test_teleconsult.py -v
-python -m unittest test_reminder.py -v
+# Check code style
+flake8 .
+
+# Type checking
+mypy .
 ```
 
 ## 📊 Data Flow
@@ -233,12 +239,13 @@ curl https://your-app.onrender.com/
 ```
 
 Expected response:
+
 ```json
 {
   "status": "ok",
-  "service": "KwanNurse-Bot v4.0",
-  "version": "4.0 - Complete (6/6 Features)",
-  "features": ["ReportSymptoms", "AssessRisk", "RequestAppointment", "GetKnowledge", "FollowUpReminders", "Teleconsult"],
+  "service": "KwanNurse-Bot v3.0",
+  "version": "3.0 - Perfect Core (Refactored)",
+  "features": ["ReportSymptoms", "AssessRisk", "RequestAppointment"],
   "timestamp": "2026-01-03T14:30:00+07:00"
 }
 ```
@@ -246,6 +253,7 @@ Expected response:
 ### Logs
 
 View logs in Render Dashboard or use:
+
 ```bash
 heroku logs --tail  # If using Heroku
 ```
@@ -257,7 +265,7 @@ heroku logs --tail  # If using Heroku
 1. Connect GitHub repository
 2. Set environment variables
 3. Build command: `pip install -r requirements.txt`
-4. Start command: `gunicorn app:application`
+4. Start command: `gunicorn app:app`
 
 ### Heroku
 
@@ -267,25 +275,22 @@ heroku logs --tail  # If using Heroku
 
 ## 📝 Version History
 
-### v4.0 - 2026-04-22
-- ✅ Added follow-up reminders and teleconsult flows
-- ✅ Added scheduler ownership flag (`RUN_SCHEDULER`)
-- ✅ Reduced Google Sheets reopen overhead with worksheet caching
-- ✅ Added regression suites for teleconsult and reminder hot paths
-
 ### v3.0 (Refactored) - 2026-01-03
+
 - ✅ Refactored codebase into modular structure
 - ✅ Separated concerns (config, utils, services, routes)
 - ✅ Improved maintainability and testability
 - ✅ Added comprehensive documentation
 
 ### v3.0 (Perfect Core) - 2026-01-03
+
 - ✅ Enhanced UX with detailed messages
 - ✅ Improved risk assessment algorithms
 - ✅ Better notification formatting
 - ✅ Production-ready core features
 
 ### v2.0.1 - 2026-01-01
+
 - ✅ Fixed intent name mismatch
 - ✅ Added health check endpoint
 - ✅ Fixed Google Sheets structure

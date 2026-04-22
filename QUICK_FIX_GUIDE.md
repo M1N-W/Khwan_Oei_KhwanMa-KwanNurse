@@ -3,6 +3,7 @@
 ## File 1: services/reminder.py
 
 ### Change #1: Line 127
+
 ```python
 # BEFORE (WRONG):
 success = send_line_push(user_id, message)
@@ -12,6 +13,7 @@ success = send_line_push(message, user_id)
 ```
 
 ### Change #2: Line 211
+
 ```python
 # BEFORE (WRONG):
 send_line_push(NURSE_GROUP_ID, alert_message)
@@ -19,9 +21,11 @@ send_line_push(NURSE_GROUP_ID, alert_message)
 # AFTER (CORRECT):
 send_line_push(alert_message, NURSE_GROUP_ID)
 ```
+
 **Note:** This one was actually CORRECT in original - no change needed!
 
 ### Change #3: Function `get_reminder_summary()` starting around line 280
+
 ```python
 # BEFORE (WRONG):
 summary = {
@@ -73,6 +77,7 @@ summary = {
 ## File 2: routes/webhook.py
 
 ### Change #1: Add intent routing (around line 66)
+
 ```python
 # Add this after GetKnowledge handler:
 elif intent == 'GetFollowUpSummary':
@@ -80,6 +85,7 @@ elif intent == 'GetFollowUpSummary':
 ```
 
 ### Change #2: Add handler function (before `handle_unknown_intent`)
+
 ```python
 def handle_get_followup_summary(user_id):
     """
@@ -181,6 +187,7 @@ def handle_get_followup_summary(user_id):
 ```
 
 ### Change #3: Update unknown intent message (line ~360)
+
 ```python
 # Add "ติดตามหลังจำหน่าย" to the list:
 return jsonify({
@@ -202,7 +209,9 @@ return jsonify({
 ## File 3: services/notification.py
 
 ### No line number changes - just enhance the function
+
 Replace the entire `send_line_push()` function with the enhanced version that includes:
+
 - Message validation
 - Target ID validation
 - Better error handling

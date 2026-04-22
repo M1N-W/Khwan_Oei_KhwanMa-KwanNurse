@@ -16,7 +16,7 @@ Refactored for maintainability and scalability.
 import os
 
 from flask import Flask
-from config import PORT, DEBUG, get_logger
+from config import PORT, DEBUG, get_logger, validate_runtime_config
 from routes import register_routes
 from services.scheduler import init_scheduler
 
@@ -45,17 +45,27 @@ def create_app():
     flask_app = Flask(__name__)
     flask_app.config['DEBUG'] = DEBUG
 
+    # Runtime config validation (non-fatal: log loudly, let health check reply 200)
+    config_status = validate_runtime_config()
+    flask_app.config['RUNTIME_CONFIG'] = config_status
+
     # Register all routes
     register_routes(flask_app)
 
     # Scheduler ownership is now explicit so multi-worker deployments can
     # disable it on non-owner processes with RUN_SCHEDULER=false.
-    if should_run_scheduler():
+    # Also skip when persistence is not configured (scheduler would just log
+    # repeated credential errors).
+    if should_run_scheduler() and config_status.get('can_persist'):
         try:
             init_scheduler()
             logger.info("✅ Reminder scheduler initialized successfully")
         except Exception as e:
             logger.error(f"❌ Failed to initialize scheduler: {e}")
+    elif not config_status.get('can_persist'):
+        logger.warning(
+            "ℹ️ Reminder scheduler skipped: Google Sheets credentials not configured"
+        )
     else:
         logger.info("ℹ️ Reminder scheduler disabled for this process")
 
@@ -87,8 +97,12 @@ def create_app():
 # ---------------------------------------------------------------------------
 application = create_app()
 
+# Backward-compatible alias so deployments using `gunicorn app:app`
+# (e.g. existing Render start command) keep working. Canonical WSGI
+# entrypoint name remains `application`.
+app = application
+
 
 if __name__ == '__main__':
     # Local development only
-    app = application
     app.run(host='0.0.0.0', port=PORT, debug=DEBUG)
