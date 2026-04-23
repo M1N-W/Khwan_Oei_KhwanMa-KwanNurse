@@ -64,6 +64,22 @@ def register_routes(app):
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat()
         }), 200
     
+    @app.route('/metrics', methods=['GET'])
+    def metrics_snapshot():
+        """
+        Lightweight in-process metrics snapshot (Phase 2 hardening).
+
+        Poor-man's observability for single-node Render deploys. Counters
+        reset on process restart; consume via uptime checks or scripts.
+        Exposed without auth because no PII is stored here — only counter
+        names and integer values.
+        """
+        from services.metrics import snapshot
+        return jsonify({
+            "timestamp": datetime.now(tz=LOCAL_TZ).isoformat(),
+            "counters": snapshot(),
+        }), 200
+
     @app.route('/webhook', methods=['POST'])
     def webhook():
         """Main Dialogflow webhook endpoint"""

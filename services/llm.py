@@ -35,6 +35,7 @@ from config import (
     get_logger,
 )
 from utils.pii import scrub_pii
+from services.metrics import incr as _metric
 
 logger = get_logger(__name__)
 
@@ -168,10 +169,12 @@ def complete(system, user, max_tokens=None, want_json=False):
 
     if _circuit_open():
         logger.info("LLM skip: circuit open")
+        _metric("llm.skip_circuit_open")
         return None
 
     if not _try_consume_daily_quota():
         logger.warning("LLM skip: daily quota exhausted (%d)", LLM_DAILY_CALL_LIMIT)
+        _metric("llm.skip_quota")
         return None
 
     scrubbed_user = scrub_pii(user) or ""
@@ -188,18 +191,22 @@ def complete(system, user, max_tokens=None, want_json=False):
         logger.info("LLM ok provider=%s elapsed=%dms chars=%d",
                     LLM_PROVIDER, elapsed_ms, len(text))
         _register_success()
+        _metric("llm.call_success")
         return text
     except requests.exceptions.Timeout:
         logger.warning("LLM timeout after %.1fs", LLM_TIMEOUT_SECONDS)
         _register_failure()
+        _metric("llm.call_timeout")
         return None
     except requests.exceptions.RequestException as e:
         logger.warning("LLM network error: %s", e)
         _register_failure()
+        _metric("llm.call_network_error")
         return None
     except Exception:
         logger.exception("LLM unexpected error")
         _register_failure()
+        _metric("llm.call_error")
         return None
 
 

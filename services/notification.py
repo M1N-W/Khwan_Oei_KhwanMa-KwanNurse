@@ -13,6 +13,8 @@ from config import (
     WORKSHEET_LINK
 )
 
+from services.metrics import incr as _metric
+
 logger = get_logger(__name__)
 
 # Bounded retry policy for LINE push so transient network blips and 5xx
@@ -43,6 +45,7 @@ def send_line_push(message, target_id=None):
 
     if not access_token or not target_id:
         logger.warning("LINE token or target_id not configured")
+        _metric("line_push.skip_unconfigured")
         return False
 
     headers = {
@@ -68,8 +71,10 @@ def send_line_push(message, target_id=None):
             if resp.status_code // 100 == 2:
                 if attempt > 0:
                     logger.info("Push notification sent to %s after %d retries", target_id, attempt)
+                    _metric("line_push.success_after_retry")
                 else:
                     logger.info("Push notification sent to %s", target_id)
+                _metric("line_push.success")
                 return True
 
             if resp.status_code // 100 == 5:
@@ -81,6 +86,7 @@ def send_line_push(message, target_id=None):
             else:
                 # 4xx (auth, bad payload): do NOT retry
                 logger.error("LINE push failed (no retry): %s %s", resp.status_code, resp.text)
+                _metric("line_push.4xx")
                 return False
 
         except requests.exceptions.Timeout:
@@ -96,6 +102,7 @@ def send_line_push(message, target_id=None):
 
     logger.error("LINE push giving up after %d attempts (last status=%s)",
                  _LINE_PUSH_RETRIES + 1, last_status)
+    _metric("line_push.gave_up")
     return False
 
 

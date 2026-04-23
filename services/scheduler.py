@@ -60,7 +60,19 @@ def init_scheduler():
                 replace_existing=True,
             )
             logger.info("✅ Scheduled daily early-warning scan at 11:00")
-            
+
+            # Phase 2 hardening: hourly metrics summary log for
+            # poor-man's observability on single-node deploys.
+            from services.metrics import log_summary
+            scheduler.add_job(
+                func=log_summary,
+                trigger=CronTrigger(minute=0, timezone=LOCAL_TZ),
+                id='metrics_summary',
+                name='Hourly metrics summary log',
+                replace_existing=True,
+            )
+            logger.info("✅ Scheduled hourly metrics summary at :00")
+
             # Load and schedule pending reminders from database
             load_pending_reminders()
             

@@ -203,6 +203,11 @@ def check_user_early_warning(user_id, lookback_days=7, notify=True):
             if _last_alert_by_user.get(user_id) == today:
                 logger.debug("Early-warning already sent today for %s",
                              scrub_user_id(user_id))
+                try:
+                    from services.metrics import incr as _metric
+                    _metric("early_warning.dedup_skip")
+                except Exception:
+                    pass
             elif NURSE_GROUP_ID:
                 msg = _format_alert(user_id, analysis, reports)
                 send_line_push(msg, NURSE_GROUP_ID)
@@ -211,11 +216,21 @@ def check_user_early_warning(user_id, lookback_days=7, notify=True):
                     "Early-warning alert sent for %s: flags=%s",
                     scrub_user_id(user_id), analysis["flags"],
                 )
+                try:
+                    from services.metrics import incr as _metric
+                    _metric("early_warning.alert_sent")
+                except Exception:
+                    pass
             else:
                 logger.warning(
                     "Early-warning would fire for %s but NURSE_GROUP_ID is unset",
                     scrub_user_id(user_id),
                 )
+                try:
+                    from services.metrics import incr as _metric
+                    _metric("early_warning.nurse_group_missing")
+                except Exception:
+                    pass
         return analysis
     except Exception:
         logger.exception("Error in check_user_early_warning")
