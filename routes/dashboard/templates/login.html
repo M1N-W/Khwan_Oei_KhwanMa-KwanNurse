@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}เข้าสู่ระบบ · KwanNurse Dashboard{% endblock %}
+
+{% block body %}
+<main class="flex items-center justify-center min-h-screen px-4">
+    <div class="w-full max-w-md bg-white shadow-xl rounded-2xl p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">KwanNurse Dashboard</h1>
+            <p class="text-sm text-gray-500 mt-1">ระบบติดตามผู้ป่วยหลังผ่าตัดกระดูกและข้อ</p>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700"
+             role="alert">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('dashboard.login') }}" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">
+                    ชื่อผู้ใช้
+                </label>
+                <input type="text" id="username" name="username" required autofocus
+                       autocomplete="username"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg
+                              focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                              outline-none transition">
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+                    รหัสผ่าน
+                </label>
+                <input type="password" id="password" name="password" required
+                       autocomplete="current-password"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg
+                              focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                              outline-none transition">
+            </div>
+
+            <button type="submit"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold
+                           py-2.5 rounded-lg transition
+                           focus:ring-4 focus:ring-blue-200">
+                เข้าสู่ระบบ
+            </button>
+        </form>
+
+        <p class="mt-6 text-xs text-center text-gray-400">
+            ระบบนี้ใช้สำหรับพยาบาลของแผนกกระดูกและข้อเท่านั้น
+            <br>
+            <a href="/privacy" class="underline hover:text-gray-600">นโยบายความเป็นส่วนตัว</a>
+        </p>
+    </div>
+</main>
+{% endblock %}
