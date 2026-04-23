@@ -1,0 +1,28 @@
+[
+  {
+    "id": "2daa449e-5412-4467-a24b-626243f93a15",
+    "data": [
+      {
+        "text": "อาการผมตอนนี้คือ...",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "ea15272f-7fb5-4540-bc7b-701a2326f88a",
+    "data": [
+      {
+        "text": "เล่าอาการให้ฟัง",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

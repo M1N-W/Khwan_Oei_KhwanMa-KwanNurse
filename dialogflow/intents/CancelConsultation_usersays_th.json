@@ -1,0 +1,184 @@
+[
+  {
+    "id": "2651b822-ada7-456b-9194-6a805bf0cfee",
+    "data": [
+      {
+        "text": "อยากยกเลิก",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "645b12b5-7a57-43a4-a088-a4f04826e6b5",
+    "data": [
+      {
+        "text": "ขอยกเลิก",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b0692fdb-f29f-4810-b751-6c11344eed05",
+    "data": [
+      {
+        "text": "เลิกล่ะ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b4910d54-014b-430c-a12e-710fc1a7f0fc",
+    "data": [
+      {
+        "text": "don\u0027t want anymore",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "cfd40282-c65b-49e1-a380-e927b14e605e",
+    "data": [
+      {
+        "text": "no need anymore",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "2c0581b2-9e6b-4527-b38e-ed1c6586bbc9",
+    "data": [
+      {
+        "text": "cancel request",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "3e0d1451-e7e3-492b-849f-3d088e31da60",
+    "data": [
+      {
+        "text": "cancel consultation",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e0a62515-74f3-419a-b1ec-833ff48d1cc9",
+    "data": [
+      {
+        "text": "cancel",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "edcb517c-d55e-4422-ab22-d2d7b956a4eb",
+    "data": [
+      {
+        "text": "ไม่เอาแล้ว",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b3a50b0d-4456-43d3-bb0b-2819f81d4729",
+    "data": [
+      {
+        "text": "ยกเลิกการปรึกษา",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "293af0fa-2255-4280-9d2f-18112ca988e4",
+    "data": [
+      {
+        "text": "ไม่ต้องการแล้ว",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "2c4199c8-e9ef-4bb4-b5ae-bdb4a54069a5",
+    "data": [
+      {
+        "text": "ยกเลิกคำปรึกษา",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "79ff68ca-9cba-4534-ab86-030ada784e9e",
+    "data": [
+      {
+        "text": "ยกเลิกคำขอ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "5ca2e1cc-11d6-48ff-9cb1-d78454272f8c",
+    "data": [
+      {
+        "text": "ยกเลิก",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

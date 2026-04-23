@@ -1,0 +1,28 @@
+[
+  {
+    "id": "025b65a2-f43d-44f2-bb7d-179608c2385f",
+    "data": [
+      {
+        "text": "อ่านอะไรดี",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "f10ab8d1-85f0-46af-8948-0a3e04557aac",
+    "data": [
+      {
+        "text": "แนะนำความรู้",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

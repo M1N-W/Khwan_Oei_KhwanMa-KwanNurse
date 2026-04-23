@@ -1,0 +1,405 @@
+[
+  {
+    "id": "4095e630-e6b9-41fd-a28a-d41804d1020d",
+    "data": [
+      {
+        "text": "คู่มือหลังผ่าตัด",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "55bc806a-18f3-4ac7-958a-ff1c07a36ec3",
+    "data": [
+      {
+        "text": "แนะนำการดูแลตัวเอง",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e0c6d9d0-c876-4e79-890f-9623f0825ba9",
+    "data": [
+      {
+        "text": "health guide",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "5911a965-55f1-4a1c-8da0-ad00b77fb708",
+    "data": [
+      {
+        "text": "patient guide",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "a8423c24-3ab0-455f-b7f7-e3ada04c727b",
+    "data": [
+      {
+        "text": "knowledge",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "f5bcc149-fddb-4f17-823a-84637fd24d66",
+    "data": [
+      {
+        "text": "ขอคู่มือ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "5c7893aa-ba37-459a-8adf-9c1c7dc08050",
+    "data": [
+      {
+        "text": "ต้องการความรู้",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "40f153b8-fc36-4ca1-9bf6-782e5b18bfba",
+    "data": [
+      {
+        "text": "คู่มือผู้ป่วย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "121d0176-98bc-4f2c-a23c-bb0a5a3ef273",
+    "data": [
+      {
+        "text": "ความรู้ดูแลตัวเอง",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b5ff66ed-8974-4750-b20c-8a4631950d3e",
+    "data": [
+      {
+        "text": "ความรู้หลังผ่าตัด",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b7d54310-c4c7-47d5-a0ad-6f1286680898",
+    "data": [
+      {
+        "text": "ดูความรู้",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "0fae8a0e-7b11-4c05-92ae-28d4fc8d5306",
+    "data": [
+      {
+        "text": "ขอความรู้",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "33a7212c-a7f6-4b0a-bb56-3e92523adcc8",
+    "data": [
+      {
+        "text": "ความรู้สำหรับผู้ป่วย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "7984e96f-4d2c-4314-a3a6-7a6c572ab7d3",
+    "data": [
+      {
+        "text": "เมื่อไหร่ต้องพบหมอ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "877f0fab-0e75-4663-a9d1-e70ad7bde4ab",
+    "data": [
+      {
+        "text": "อาการอันตราย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e94e2947-1daf-42da-904f-2c6d8d61ce1d",
+    "data": [
+      {
+        "text": "สัญญาณอันตราย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "3990e816-a8e4-414b-9553-52f381763d25",
+    "data": [
+      {
+        "text": "รับประทานยา",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "6510c015-05ec-4cc7-acd4-a4c1c82bc9ee",
+    "data": [
+      {
+        "text": "วิธีทานยา",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "0dbb0756-de24-4aa7-ac9e-0763d0a5152c",
+    "data": [
+      {
+        "text": "ทานยา",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b6768e9f-e0ba-4260-ad70-7cdbf0bf21db",
+    "data": [
+      {
+        "text": "DVT คืออะไร",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e3a41aec-2fd8-4a3b-84d3-6144702418b9",
+    "data": [
+      {
+        "text": "DVT",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "674abdaa-88f4-410e-b4f3-c8ec40db7102",
+    "data": [
+      {
+        "text": "ลิ่มเลือด",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "2f19453f-0695-4dab-9964-b839adb7e335",
+    "data": [
+      {
+        "text": "ป้องกันลิ่มเลือด",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "768e87b2-247a-4270-bac3-4b441225f789",
+    "data": [
+      {
+        "text": "ออกกำลังกาย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "476f6853-8b40-4698-b686-2d3c51192e72",
+    "data": [
+      {
+        "text": "กายภาพ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "94398cf0-bd70-415d-8e0b-ccf9331dade3",
+    "data": [
+      {
+        "text": "กายภาพบำบัด",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "6b26b747-da81-4bf3-b5f6-5711dfd71099",
+    "data": [
+      {
+        "text": "การดูแลแผล",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "db084023-fb1d-4428-bf08-732623550a90",
+    "data": [
+      {
+        "text": "ดูแลแผลยังไง",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "ddd8319f-ceb8-4e38-b772-d1d5593ecad3",
+    "data": [
+      {
+        "text": "ดูแลแผล",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b12c1255-902e-4dd5-a535-7bab9aa93ab8",
+    "data": [
+      {
+        "text": "มีความรู้อะไรบ้าง",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "eb9d94c2-7750-4320-b50b-d5b738d952a1",
+    "data": [
+      {
+        "text": "ความรู้",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

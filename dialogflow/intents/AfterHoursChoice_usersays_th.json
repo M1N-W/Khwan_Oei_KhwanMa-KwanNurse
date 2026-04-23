@@ -1,0 +1,80 @@
+[
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000001",
+    "data": [
+      {
+        "text": "1",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000002",
+    "data": [
+      {
+        "text": "2",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000003",
+    "data": [
+      {
+        "text": "เลือก 1",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000004",
+    "data": [
+      {
+        "text": "เลือก 2",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000005",
+    "data": [
+      {
+        "text": "ข้อ 1",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000006",
+    "data": [
+      {
+        "text": "ข้อ 2",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

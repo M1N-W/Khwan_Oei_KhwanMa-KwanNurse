@@ -1,0 +1,262 @@
+[
+  {
+    "id": "6715b03c-e5dc-4f2a-8873-b96e0015a3f7",
+    "data": [
+      {
+        "text": "follow-up history",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "d05bc846-8981-4381-b07b-a636c5c019ed",
+    "data": [
+      {
+        "text": "history",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "6310fb66-ea1f-4c25-819f-51a2e6e11146",
+    "data": [
+      {
+        "text": "บันทึกการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "295615c5-c039-4531-bcd7-c9dcb85f89fe",
+    "data": [
+      {
+        "text": "ดูบันทึก",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "77573af9-d628-4ce8-a549-471ae3f4991e",
+    "data": [
+      {
+        "text": "ประวัติอาการ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "cfd262ae-28ec-4701-825a-504b97986802",
+    "data": [
+      {
+        "text": "สรุปอาการ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "ff7ec6e2-9ebc-455f-a482-8a470f904559",
+    "data": [
+      {
+        "text": "ดูสถานะ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "ef493c77-15a1-45c4-b139-b26ad0bc4a02",
+    "data": [
+      {
+        "text": "ข้อมูลการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "594daf86-cf4e-4177-aff0-c61687a24277",
+    "data": [
+      {
+        "text": "สถานะการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "a45ff705-9f23-4c74-aff2-78ed9f411a39",
+    "data": [
+      {
+        "text": "การติดตามอาการ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "570c9acc-ce19-43ab-a69d-e06e8393eff3",
+    "data": [
+      {
+        "text": "ตรวจสอบการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "469a3219-d1da-4e8c-ba84-c31888704f40",
+    "data": [
+      {
+        "text": "follow up summary",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c4225920-14f6-4ed7-a3cd-4d2ffb894761",
+    "data": [
+      {
+        "text": "follow up",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "68748861-f13a-494e-978b-219996250c6e",
+    "data": [
+      {
+        "text": "ดูข้อมูลการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e4fb42a8-dc0c-4164-9d72-2808e4f59de3",
+    "data": [
+      {
+        "text": "ประวัติ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "90fc14e5-a881-41cf-bf03-14ea2fc91482",
+    "data": [
+      {
+        "text": "ประวัติการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "96866676-c633-4423-9639-66f833fd29f9",
+    "data": [
+      {
+        "text": "สรุปการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "13807094-cd10-4bc0-a62d-522264c401f8",
+    "data": [
+      {
+        "text": "ดูประวัติการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e3f28065-01d5-411f-9a16-f9106cdbb0b0",
+    "data": [
+      {
+        "text": "ดูการติดตาม",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "b774d4cd-7873-4973-bc5d-d5bdd63111d5",
+    "data": [
+      {
+        "text": "ติดตามหลังจำหน่าย",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]
