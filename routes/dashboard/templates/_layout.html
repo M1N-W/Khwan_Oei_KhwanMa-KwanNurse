@@ -1,0 +1,44 @@
+{# layout สำหรับหน้าที่ login แล้ว — ต่อขยายจาก base.html #}
+{% extends "base.html" %}
+
+{% block body %}
+<header class="bg-white shadow-sm sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-6">
+            <a href="{{ url_for('dashboard.home') }}" class="flex items-center gap-2">
+                <span class="text-lg font-bold text-blue-600">KwanNurse</span>
+                <span class="text-sm text-gray-500">Dashboard</span>
+            </a>
+            <nav class="hidden md:flex gap-4 text-sm">
+                {% set active = request.endpoint %}
+                <a href="{{ url_for('dashboard.home') }}"
+                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.home' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
+                    หน้าหลัก
+                </a>
+                <a href="{{ url_for('dashboard.queue_view') }}"
+                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.queue_view' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
+                    คิวปรึกษา
+                </a>
+                <a href="{{ url_for('dashboard.alerts_view') }}"
+                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.alerts_view' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
+                    การแจ้งเตือน
+                </a>
+            </nav>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+            <span class="text-gray-500 hidden sm:inline">{{ nurse }}</span>
+            <form method="POST" action="{{ url_for('dashboard.logout') }}" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit"
+                        class="px-3 py-1.5 text-gray-600 hover:text-red-600 transition">
+                    ออกจากระบบ
+                </button>
+            </form>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+    {% block main %}{% endblock %}
+</main>
+{% endblock %}

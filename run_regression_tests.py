@@ -18,6 +18,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_integration_e2e.py", "-v"],
     [sys.executable, "-m", "unittest", "test_metrics.py", "-v"],
     [sys.executable, "-m", "unittest", "test_cache.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_dashboard_readers.py", "-v"],
     [sys.executable, "-m", "unittest", "test_dashboard_auth.py", "-v"],
 ]
 

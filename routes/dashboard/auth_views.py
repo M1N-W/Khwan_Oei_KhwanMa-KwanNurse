@@ -36,6 +36,8 @@ from services.auth import (
 )
 from services.metrics import incr
 
+# ``render_template`` ใช้เฉพาะในฟังก์ชัน ``login`` (home ย้ายไป views.py แล้ว)
+
 logger = get_logger(__name__)
 
 
@@ -121,22 +123,5 @@ def logout():
     return redirect(url_for("dashboard.login"))
 
 
-# Placeholder home เพื่อให้ login redirect มี target (views.py เต็มจะทำใน S1-2)
-@dashboard_bp.route("/", methods=["GET"])
-def home():
-    """
-    หน้าแรก placeholder — S1-2 จะเขียน view เต็มพร้อม queue + alerts.
-    ตอนนี้แค่ยืนยันว่า auth ทำงานถูก.
-    """
-    from services.auth import require_nurse_auth
-
-    # ใช้ decorator แบบ runtime เพื่อหลีกเลี่ยงการเรียก current_nurse นอก context
-    @require_nurse_auth
-    def _view():
-        return render_template(
-            "home_placeholder.html",
-            nurse=current_nurse(),
-            csrf_token=get_csrf_token(),
-        )
-
-    return _view()
+# หมายเหตุ: home route (``/``) ถูก implement จริงใน ``routes/dashboard/views.py``
+# ตั้งแต่ S1-2 เป็นต้นไป — หน้า placeholder เดิมถูกถอดออกเพื่อกันซ้ำ.

@@ -36,6 +36,7 @@ def _add_security_headers(response):
 # Import submodules เพื่อให้ route ถูก register เข้า blueprint
 # (วางหลัง blueprint init เพื่อหลีก circular import)
 from routes.dashboard import auth_views  # noqa: E402, F401
+from routes.dashboard import views  # noqa: E402, F401
 
 
 __all__ = ["dashboard_bp"]

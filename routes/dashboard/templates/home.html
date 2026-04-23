@@ -1,0 +1,67 @@
+{% extends "_layout.html" %}
+
+{% block title %}หน้าหลัก · KwanNurse Dashboard{% endblock %}
+
+{% block main %}
+<section class="mb-8">
+    <div class="flex items-baseline justify-between mb-4">
+        <h1 class="text-xl font-bold text-gray-800">ภาพรวมวันนี้</h1>
+        <p class="text-xs text-gray-400">อัพเดต: {{ stats.refreshed_at }}</p>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500">คิวปรึกษา</p>
+            <p class="text-3xl font-bold text-blue-600">{{ stats.queue_total }}</p>
+            <p class="text-xs text-gray-400 mt-1">คน</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500">คิวด่วนมาก</p>
+            <p class="text-3xl font-bold {% if stats.queue_high_priority > 0 %}text-red-600{% else %}text-gray-700{% endif %}">
+                {{ stats.queue_high_priority }}
+            </p>
+            <p class="text-xs text-gray-400 mt-1">คน</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500">แจ้งเตือนวันนี้</p>
+            <p class="text-3xl font-bold {% if stats.alerts_today > 0 %}text-orange-600{% else %}text-gray-700{% endif %}">
+                {{ stats.alerts_today }}
+            </p>
+            <p class="text-xs text-gray-400 mt-1">ครั้ง</p>
+        </div>
+        <div class="bg-white rounded-xl p-4 shadow-sm">
+            <p class="text-xs text-gray-500">แจ้งเตือน 7 วัน</p>
+            <p class="text-3xl font-bold text-gray-700">{{ stats.alerts_7d }}</p>
+            <p class="text-xs text-gray-400 mt-1">ครั้ง</p>
+        </div>
+    </div>
+</section>
+
+<section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-gray-800">คิวล่าสุด (5 รายการ)</h2>
+            <a href="{{ url_for('dashboard.queue_view') }}"
+               class="text-sm text-blue-600 hover:underline">ดูทั้งหมด →</a>
+        </div>
+        {% if queue %}
+            {% include "_queue_table.html" %}
+        {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">ยังไม่มีคิว</p>
+        {% endif %}
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-gray-800">การแจ้งเตือนล่าสุด</h2>
+            <a href="{{ url_for('dashboard.alerts_view') }}"
+               class="text-sm text-blue-600 hover:underline">ดูทั้งหมด →</a>
+        </div>
+        {% if alerts %}
+            {% include "_alerts_table.html" %}
+        {% else %}
+            <p class="text-sm text-gray-400 text-center py-6">ไม่มีการแจ้งเตือนใน 7 วันล่าสุด</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

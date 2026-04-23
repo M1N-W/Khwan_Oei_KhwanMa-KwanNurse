@@ -1,0 +1,43 @@
+{# Fragment: ตาราง alerts. ใช้ได้ทั้งจาก home.html/alerts.html และ HTMX partial. #}
+{% if alerts %}
+<div class="overflow-x-auto">
+    <table class="w-full text-sm">
+        <thead class="text-xs text-gray-500 uppercase border-b">
+            <tr>
+                <th class="text-left py-2 pr-3">เวลา</th>
+                <th class="text-left py-2 pr-3">ผู้ป่วย</th>
+                <th class="text-left py-2 pr-3">ระดับ</th>
+                <th class="text-left py-2 pr-3">คะแนน</th>
+                <th class="text-left py-2 pr-3">ปวด</th>
+                <th class="text-left py-2 pr-3">แผล</th>
+                <th class="text-left py-2 pr-3">ไข้</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for a in alerts %}
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                <td class="py-2 pr-3 text-gray-500 whitespace-nowrap" title="{{ a.timestamp_full }}">
+                    {{ a.timestamp }}
+                </td>
+                <td class="py-2 pr-3 font-mono text-xs">{{ a.user_id_short }}</td>
+                <td class="py-2 pr-3">
+                    {% if a.risk_level == 'high' %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-semibold">สูง</span>
+                    {% elif a.risk_level == 'medium' %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">ปานกลาง</span>
+                    {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">ต่ำ</span>
+                    {% endif %}
+                </td>
+                <td class="py-2 pr-3 text-gray-700 font-semibold">{{ a.risk_score }}</td>
+                <td class="py-2 pr-3 text-gray-600">{{ a.pain }}</td>
+                <td class="py-2 pr-3 text-gray-600">{{ a.wound }}</td>
+                <td class="py-2 pr-3 text-gray-600">{{ a.fever }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-sm text-gray-400 text-center py-6">ไม่มีการแจ้งเตือน</p>
+{% endif %}

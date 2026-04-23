@@ -268,5 +268,70 @@ class LogoutTests(DashboardAuthTestBase):
         self.assertEqual(resp.status_code, 400)
 
 
+class DashboardViewsTests(DashboardAuthTestBase):
+    """S1-2: smoke test สำหรับ home / queue / alerts views หลัง login."""
+
+    def _login(self):
+        import re
+        resp_get = self.client.get("/dashboard/login")
+        csrf = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp_get.get_data(as_text=True)).group(1)
+        self.client.post(
+            "/dashboard/login",
+            data={"username": "nurse_kwan", "password": "CorrectPass1", "csrf_token": csrf},
+        )
+
+    def _patch_sheets_empty(self):
+        """Mock Sheets ให้ว่าง เพื่อหลีกเลี่ยงการเรียก gspread จริง."""
+        from unittest.mock import patch
+        p1 = patch("database.sheets.get_worksheet", return_value=None)
+        p2 = patch("database.sheets.get_recent_symptom_reports", return_value=[])
+        p1.start(); p2.start()
+        self.addCleanup(p1.stop); self.addCleanup(p2.stop)
+
+    def test_home_renders_with_empty_data(self):
+        self._login()
+        self._patch_sheets_empty()
+        resp = self.client.get("/dashboard/")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("ภาพรวมวันนี้", body)
+        self.assertIn("คิวปรึกษา", body)
+
+    def test_queue_view_renders(self):
+        self._login()
+        self._patch_sheets_empty()
+        resp = self.client.get("/dashboard/queue")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("ยังไม่มีคิว", resp.get_data(as_text=True))
+
+    def test_alerts_view_renders_with_filters(self):
+        self._login()
+        self._patch_sheets_empty()
+        resp = self.client.get("/dashboard/alerts?days=3&level=high")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        # ตัวเลือก days=3 ต้อง selected
+        self.assertIn('value="3" selected', body)
+        # ตัวเลือก level=high ต้อง selected
+        self.assertIn('value="high"   selected', body)
+
+    def test_queue_partial_returns_fragment_without_layout(self):
+        self._login()
+        self._patch_sheets_empty()
+        resp = self.client.get("/dashboard/partials/queue")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        # Partial ต้องไม่มี <html> tag (เป็น fragment)
+        self.assertNotIn("<html", body.lower())
+
+    def test_views_require_login(self):
+        # ไม่ login → ทุก route ต้อง redirect ไป login
+        for path in ("/dashboard/", "/dashboard/queue", "/dashboard/alerts",
+                     "/dashboard/partials/queue", "/dashboard/partials/alerts"):
+            resp = self.client.get(path, follow_redirects=False)
+            self.assertEqual(resp.status_code, 302, f"path={path}")
+            self.assertIn("/dashboard/login", resp.location, f"path={path}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

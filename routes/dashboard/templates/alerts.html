@@ -1,0 +1,39 @@
+{% extends "_layout.html" %}
+
+{% block title %}การแจ้งเตือน · KwanNurse Dashboard{% endblock %}
+
+{% block main %}
+<section class="bg-white rounded-xl shadow-sm p-5">
+    <div class="flex flex-wrap items-center justify-between mb-4 gap-3">
+        <h1 class="text-lg font-bold text-gray-800">การแจ้งเตือน ({{ alerts|length }} รายการ)</h1>
+
+        <form method="GET" action="{{ url_for('dashboard.alerts_view') }}"
+              class="flex items-center gap-2 text-sm">
+            <label class="text-gray-500">ช่วง:</label>
+            <select name="days" aria-label="ช่วงเวลา" class="border border-gray-300 rounded-lg px-2 py-1"
+                    onchange="this.form.submit()">
+                {% for d in [1, 3, 7, 14, 30] %}
+                    <option value="{{ d }}" {% if filter_days == d %}selected{% endif %}>
+                        {{ d }} วัน
+                    </option>
+                {% endfor %}
+            </select>
+
+            <label class="text-gray-500">ระดับ:</label>
+            <select name="level" aria-label="ระดับความเสี่ยง" class="border border-gray-300 rounded-lg px-2 py-1"
+                    onchange="this.form.submit()">
+                <option value="high"   {% if filter_level == 'high' %}selected{% endif %}>สูงเท่านั้น</option>
+                <option value="medium" {% if filter_level == 'medium' %}selected{% endif %}>ปานกลาง+สูง</option>
+                <option value="low"    {% if filter_level == 'low' %}selected{% endif %}>ทั้งหมด</option>
+            </select>
+        </form>
+    </div>
+
+    <div id="alerts-table"
+         hx-get="{{ url_for('dashboard.alerts_partial') }}?days={{ filter_days }}&level={{ filter_level }}"
+         hx-trigger="every 30s"
+         hx-swap="innerHTML">
+        {% include "_alerts_table.html" %}
+    </div>
+</section>
+{% endblock %}

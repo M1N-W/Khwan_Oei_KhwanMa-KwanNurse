@@ -1,0 +1,24 @@
+{% extends "_layout.html" %}
+
+{% block title %}คิวปรึกษา · KwanNurse Dashboard{% endblock %}
+
+{% block main %}
+<section class="bg-white rounded-xl shadow-sm p-5">
+    <div class="flex items-center justify-between mb-4">
+        <h1 class="text-lg font-bold text-gray-800">คิวปรึกษา ({{ queue|length }} คน)</h1>
+        <button type="button"
+                hx-get="{{ url_for('dashboard.queue_partial') }}"
+                hx-target="#queue-table"
+                hx-swap="innerHTML"
+                class="text-sm px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100">
+            ↻ รีเฟรช
+        </button>
+    </div>
+    <div id="queue-table"
+         hx-get="{{ url_for('dashboard.queue_partial') }}"
+         hx-trigger="every 15s"
+         hx-swap="innerHTML">
+        {% include "_queue_table.html" %}
+    </div>
+</section>
+{% endblock %}
