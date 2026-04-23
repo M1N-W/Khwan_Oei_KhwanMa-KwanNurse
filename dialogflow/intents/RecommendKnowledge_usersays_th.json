@@ -14,15 +14,42 @@
   },
   {
     "id": "f10ab8d1-85f0-46af-8948-0a3e04557aac",
-    "data": [
-      {
-        "text": "แนะนำความรู้",
-        "userDefined": false
-      }
-    ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "th",
-    "updated": 0
+    "data": [{"text": "แนะนำความรู้", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000001",
+    "data": [{"text": "แนะนำบทความให้หน่อย", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000002",
+    "data": [{"text": "ควรอ่านอะไรดี", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000003",
+    "data": [{"text": "อยากรู้ความรู้ที่เหมาะกับฉัน", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000004",
+    "data": [{"text": "มีบทความอะไรแนะนำบ้าง", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000005",
+    "data": [{"text": "ความรู้ที่เหมาะกับคนไข้", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000006",
+    "data": [{"text": "แนะนำอ่านอะไรดี", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "rk000001-0000-0000-0000-000000000007",
+    "data": [{"text": "ขอคำแนะนำเฉพาะราย", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
   }
 ]

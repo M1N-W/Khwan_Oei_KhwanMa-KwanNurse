@@ -14,6 +14,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_llm.py", "-v"],
     [sys.executable, "-m", "unittest", "test_symptom_risk.py", "-v"],
     [sys.executable, "-m", "unittest", "test_presession.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_early_warning.py", "-v"],
 ]
 
 

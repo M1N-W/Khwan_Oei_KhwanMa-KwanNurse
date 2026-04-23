@@ -72,4 +72,7 @@ __all__ = [
     'format_triage_message',
     'recommend_guides',
     'format_recommendations_message',
+    'analyze_symptom_trend',
+    'check_user_early_warning',
+    'run_early_warning_scan',
 ]

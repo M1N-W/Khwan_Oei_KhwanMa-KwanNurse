@@ -22,15 +22,14 @@ class NeuroSymptomTests(unittest.TestCase):
 
     def _run_symptom(self, **kwargs):
         # Default all required params to low-risk values so we isolate neuro.
-        # NOTE: fever uses "ปกติ" rather than "ไม่มี" because the pre-existing
-        # keyword matcher treats "ไม่มี" as containing the substring "มี"
-        # which would add +2. That is an unrelated quirk; this test isolates
-        # the neuro branch by avoiding the substring collision.
+        # Fever uses "ไม่มี" which is the natural Thai answer from a user;
+        # the fever matcher was fixed (see test_fever_negation_* below) so
+        # this no longer triggers a false-positive +2.
         defaults = {
             "user_id": "test_user",
             "pain": 2,
             "wound": "ปกติ",
-            "fever": "ปกติ",
+            "fever": "ไม่มี",
             "mobility": "เดินได้",
         }
         defaults.update(kwargs)
@@ -72,6 +71,45 @@ class NeuroSymptomTests(unittest.TestCase):
         msg = self._run_symptom(wound="แผลมีหนอง", neuro="อ่อนแรง")
         # wound_pus (+3) + weakness (+3) >= 5 → danger tier
         self.assertIn("อันตราย", msg)
+
+
+class FeverNegationTests(unittest.TestCase):
+    """Regression coverage for the 'ไม่มี contains มี' fever substring bug."""
+
+    def _run(self, fever_text):
+        with patch("services.risk_assessment.save_symptom_data", return_value=True), \
+             patch("services.risk_assessment.send_line_push", return_value=True):
+            from services.risk_assessment import calculate_symptom_risk
+            return calculate_symptom_risk(
+                "u", 0, "ปกติ", fever_text, "เดินได้",
+            )
+
+    def test_no_fever_thai(self):
+        msg = self._run("ไม่มี")
+        self.assertIn("ไม่มีไข้", msg)
+        self.assertNotIn("มีไข้ - อาจมีการติดเชื้อ", msg)
+
+    def test_no_fever_thai_full_phrase(self):
+        msg = self._run("ไม่มีไข้")
+        self.assertIn("ไม่มีไข้", msg)
+        self.assertNotIn("มีไข้ - อาจมีการติดเชื้อ", msg)
+
+    def test_no_fever_english(self):
+        msg = self._run("no fever")
+        self.assertIn("ไม่มีไข้", msg)
+
+    def test_positive_fever_still_detected(self):
+        msg = self._run("มีไข้ 38.5")
+        self.assertIn("มีไข้ - อาจมีการติดเชื้อ", msg)
+
+    def test_positive_fever_body_hot(self):
+        msg = self._run("ตัวร้อน")
+        self.assertIn("มีไข้ - อาจมีการติดเชื้อ", msg)
+
+    def test_normal_fever_is_negative(self):
+        msg = self._run("ปกติ")
+        self.assertIn("ไม่มีไข้", msg)
+        self.assertNotIn("มีไข้ - อาจมีการติดเชื้อ", msg)
 
 
 if __name__ == "__main__":

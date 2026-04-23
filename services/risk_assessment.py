@@ -62,9 +62,19 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=None):
     elif any(x in wound_text for x in ["ปกติ", "ดี", "แห้ง", "normal", "dry", "good"]):
         risk_details.append("🟢 สภาพแผลปกติ")
     
-    # Fever Check
-    fever_text = str(fever or "").lower()
-    if any(x in fever_text for x in ["มี", "ตัวร้อน", "fever", "hot", "ไข้"]):
+    # Fever Check — Phase 2 bug fix: check negation BEFORE positive keyword
+    # match so that "ไม่มี" (no fever) does not trigger the "มี" substring.
+    fever_text = str(fever or "").strip().lower()
+    is_no_fever = (
+        fever_text in ("", "ไม่", "no")
+        or any(neg in fever_text for neg in [
+            "ไม่มี", "ไม่ไข้", "ไม่มีไข้", "ไม่ร้อน", "ปกติ", "normal", "no fever"
+        ])
+    )
+    has_fever = (not is_no_fever) and any(x in fever_text for x in [
+        "มี", "ตัวร้อน", "fever", "hot", "ไข้", "ร้อน"
+    ])
+    if has_fever:
         risk_score += 2
         risk_details.append("🔴 มีไข้ - อาจมีการติดเชื้อ")
     else:
@@ -142,7 +152,15 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=None):
             user_id, pain, wound, fever, mobility, risk_level, risk_score
         )
         send_line_push(notify_msg)
-    
+
+    # Phase 2-D: check cumulative trend after the new data point is saved.
+    # Best-effort, never blocks the user response.
+    try:
+        from services.early_warning import check_user_early_warning
+        check_user_early_warning(user_id)
+    except Exception:
+        logger.exception("Early-warning check failed for %s", user_id)
+
     return message
 
 

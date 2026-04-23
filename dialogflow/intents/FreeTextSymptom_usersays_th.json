@@ -1,28 +1,52 @@
 [
   {
     "id": "2daa449e-5412-4467-a24b-626243f93a15",
-    "data": [
-      {
-        "text": "อาการผมตอนนี้คือ...",
-        "userDefined": false
-      }
-    ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "th",
-    "updated": 0
+    "data": [{"text": "อาการผมตอนนี้คือ...", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
   },
   {
     "id": "ea15272f-7fb5-4540-bc7b-701a2326f88a",
-    "data": [
-      {
-        "text": "เล่าอาการให้ฟัง",
-        "userDefined": false
-      }
-    ],
-    "isTemplate": false,
-    "count": 0,
-    "lang": "th",
-    "updated": 0
+    "data": [{"text": "เล่าอาการให้ฟัง", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000001",
+    "data": [{"text": "ตอนนี้รู้สึกไม่ค่อยสบาย", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000002",
+    "data": [{"text": "ขอปรึกษาอาการหน่อย", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000003",
+    "data": [{"text": "อยากเล่าอาการ", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000004",
+    "data": [{"text": "มีอาการแบบนี้", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000005",
+    "data": [{"text": "ช่วยประเมินอาการให้หน่อย", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000006",
+    "data": [{"text": "อธิบายอาการ", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000007",
+    "data": [{"text": "รู้สึกแย่ลง", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "ff000001-0000-0000-0000-000000000008",
+    "data": [{"text": "ขอพิมพ์อาการเอง", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
   }
 ]

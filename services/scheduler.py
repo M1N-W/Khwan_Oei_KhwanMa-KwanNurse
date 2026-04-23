@@ -49,6 +49,17 @@ def init_scheduler():
                 replace_existing=True
             )
             logger.info("✅ Scheduled daily no-response check at 10:00")
+
+            # Phase 2-D: daily early-warning trend scan across all patients
+            from services.early_warning import run_early_warning_scan
+            scheduler.add_job(
+                func=run_early_warning_scan,
+                trigger=CronTrigger(hour=11, minute=0, timezone=LOCAL_TZ),
+                id='early_warning_scan',
+                name='Daily early-warning trend scan',
+                replace_existing=True,
+            )
+            logger.info("✅ Scheduled daily early-warning scan at 11:00")
             
             # Load and schedule pending reminders from database
             load_pending_reminders()

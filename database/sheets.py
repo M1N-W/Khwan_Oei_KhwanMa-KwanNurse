@@ -7,7 +7,7 @@ import gspread
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from config import (
     get_logger,
     LOCAL_TZ,
@@ -167,6 +167,74 @@ def save_symptom_data(user_id, pain, wound, fever, mobility, risk_level, risk_sc
     except Exception:
         logger.exception("Error saving symptom data")
         return False
+
+
+def get_recent_symptom_reports(user_id=None, days=7, limit=50):
+    """
+    Read recent rows from SymptomLog (Phase 2-D).
+
+    Args:
+        user_id: If set, return only reports from this user. If None, return
+                 reports from all users (used by the daily early-warning scan).
+        days:    Look-back window in days (based on the timestamp column).
+        limit:   Safety cap on returned rows (most recent first).
+
+    Returns:
+        list[dict]: newest-first rows with keys:
+            timestamp (datetime|None), user_id, pain, wound, fever, mobility,
+            risk_level, risk_score (int)
+        On error or empty sheet, returns [].
+    """
+    try:
+        sheet = get_worksheet(SHEET_SYMPTOM_LOG)
+        if not sheet:
+            return []
+
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return []
+
+        # First row = header; rows added via save_symptom_data have columns:
+        # [timestamp, user_id, pain, wound, fever, mobility, risk_level, risk_score]
+        cutoff = datetime.now(tz=LOCAL_TZ) - timedelta(days=days)
+        out = []
+        for row in values[1:]:
+            if len(row) < 8:
+                continue
+            ts_raw = (row[0] or "").strip()
+            try:
+                ts = datetime.strptime(ts_raw, "%Y-%m-%d %H:%M:%S")
+                ts = ts.replace(tzinfo=LOCAL_TZ)
+            except (ValueError, TypeError):
+                ts = None
+            if ts and ts < cutoff:
+                continue
+            uid = (row[1] or "").strip()
+            if user_id and uid != user_id:
+                continue
+            try:
+                score = int(str(row[7]).strip() or 0)
+            except (ValueError, TypeError):
+                score = 0
+            out.append({
+                "timestamp": ts,
+                "user_id": uid,
+                "pain": row[2],
+                "wound": row[3],
+                "fever": row[4],
+                "mobility": row[5],
+                "risk_level": row[6],
+                "risk_score": score,
+            })
+
+        # Newest first; rows without timestamp are pushed to the end.
+        out.sort(key=lambda r: r["timestamp"] or datetime.min.replace(tzinfo=LOCAL_TZ),
+                 reverse=True)
+        return out[:limit]
+
+    except Exception:
+        logger.exception("Error reading symptom reports")
+        return []
 
 
 def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level, risk_score):

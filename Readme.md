@@ -282,6 +282,36 @@ heroku logs --tail  # If using Heroku
 - ✅ Improved maintainability and testability
 - ✅ Added comprehensive documentation
 
+### v4.2 (Phase 2 Complete) - 2026-04-23
+
+- ✅ **P2-A Neuro symptom branch** — added `neuro_status` parameter to
+  `ReportSymptoms`; `services/risk_assessment.py` now scores stroke-warning
+  keywords (weakness, slurred speech, severe headache, confusion).
+- ✅ **P2-B Pre-consult briefing** — `services/presession.py` builds a
+  structured summary from recent symptom/risk history; auto-attached to
+  nurse alerts in `services/teleconsult.py` (both standard and emergency).
+- ✅ **P2-D Early-warning trend detection** — `services/early_warning.py`
+  runs per-user trend analysis (rising risk, persistent fever, worsening
+  wound, silence-after-high-risk, repeated high-risk) and fires daily scans
+  via `services/scheduler.py`. Also invoked inline after every symptom
+  report so alerts surface within minutes.
+- ✅ **Fever negation bug fix** — `services/risk_assessment.py` and
+  `services/early_warning.py` now check `ไม่มี / ไม่มีไข้ / ปกติ` BEFORE the
+  positive `มี / ไข้ / ตัวร้อน` substrings. Regression covered in
+  `test_symptom_risk.py` and `test_early_warning.py`.
+- ✅ **Expanded Dialogflow training phrases** — `FreeTextSymptom`
+  (2 → 10 phrases) and `RecommendKnowledge` (2 → 9 phrases) for better
+  intent routing coverage.
+- ✅ **Regression runner now covers 82 tests** across 7 suites
+  (`test_bug_fixes`, `test_teleconsult`, `test_reminder`, `test_llm`,
+  `test_symptom_risk`, `test_presession`, `test_early_warning`).
+
+Run the full suite:
+
+```bash
+RUN_SCHEDULER=false python run_regression_tests.py
+```
+
 ### v4.1 (LLM-Powered Triage & Education) - 2026-04-22
 
 - ✅ Phase 2 P2-E: Free-text symptom triage via Gemini + rule-based fallback
