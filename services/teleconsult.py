@@ -257,7 +257,16 @@ def handle_emergency(user_id, description):
             f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที\n"
             f"Session ID: {session['session_id']}"
         )
-        
+
+        # Phase 2-B: append pre-consult briefing for emergencies too
+        try:
+            from services.presession import build_pre_consult_briefing
+            briefing = build_pre_consult_briefing(user_id, 'emergency', description)
+            if briefing:
+                alert_message += briefing
+        except Exception:
+            logger.exception("Emergency briefing failed; sending alert without it")
+
         send_line_push(alert_message, NURSE_GROUP_ID)
         
         message = (
@@ -479,7 +488,21 @@ def alert_nurse_new_request(session, queue_info):
             f"⏱️ เวลารอ: {queue_info.get('estimated_wait', '?')} นาที\n\n"
             f"Session ID: {session['session_id']}"
         )
-        
+
+        # Phase 2-B: append pre-consult briefing so nurse can prep before
+        # picking up the call. Best-effort: never block the alert.
+        try:
+            from services.presession import build_pre_consult_briefing
+            briefing = build_pre_consult_briefing(
+                session.get('user_id'),
+                issue_type,
+                session.get('description', ''),
+            )
+            if briefing:
+                message += briefing
+        except Exception:
+            logger.exception("Pre-consult briefing failed; sending alert without it")
+
         send_line_push(message, NURSE_GROUP_ID)
         
         logger.info(f"Sent nurse alert for session {session['session_id']}")
