@@ -2,38 +2,66 @@
 {% extends "base.html" %}
 
 {% block body %}
+{% set _nav_items = [
+    ('dashboard.home', url_for('dashboard.home'), 'หน้าหลัก'),
+    ('dashboard.queue_view', url_for('dashboard.queue_view'), 'คิวปรึกษา'),
+    ('dashboard.alerts_view', url_for('dashboard.alerts_view'), 'การแจ้งเตือน'),
+] %}
+{% set _active = request.endpoint %}
+
 <header class="bg-white shadow-sm sticky top-0 z-10">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-6">
-            <a href="{{ url_for('dashboard.home') }}" class="flex items-center gap-2">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-4 md:gap-6 min-w-0">
+            <a href="{{ url_for('dashboard.home') }}" class="flex items-center gap-2 shrink-0">
                 <span class="text-lg font-bold text-blue-600">KwanNurse</span>
-                <span class="text-sm text-gray-500">Dashboard</span>
+                <span class="text-sm text-gray-500 hidden sm:inline">Dashboard</span>
             </a>
-            <nav class="hidden md:flex gap-4 text-sm">
-                {% set active = request.endpoint %}
-                <a href="{{ url_for('dashboard.home') }}"
-                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.home' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
-                    หน้าหลัก
+            {# Desktop nav #}
+            <nav class="hidden md:flex gap-2 text-sm">
+                {% for endpoint, href, label in _nav_items %}
+                <a href="{{ href }}"
+                   class="px-3 py-1.5 rounded-lg {% if _active == endpoint %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
+                    {{ label }}
                 </a>
-                <a href="{{ url_for('dashboard.queue_view') }}"
-                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.queue_view' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
-                    คิวปรึกษา
-                </a>
-                <a href="{{ url_for('dashboard.alerts_view') }}"
-                   class="px-3 py-1.5 rounded-lg {% if active == 'dashboard.alerts_view' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-600 hover:text-blue-600{% endif %}">
-                    การแจ้งเตือน
-                </a>
+                {% endfor %}
             </nav>
         </div>
-        <div class="flex items-center gap-3 text-sm">
-            <span class="text-gray-500 hidden sm:inline">{{ nurse }}</span>
-            <form method="POST" action="{{ url_for('dashboard.logout') }}" class="inline">
+
+        <div class="flex items-center gap-2 text-sm">
+            {# Bell (เริ่มเป็น count=0, จะ poll เปลี่ยนทุก 30s) #}
+            <div hx-get="{{ url_for('dashboard.bell_partial') }}"
+                 hx-trigger="load, every 30s"
+                 hx-swap="innerHTML">
+                {# placeholder ก่อน HTMX โหลด — กัน layout shift #}
+                <span class="inline-block w-9 h-9"></span>
+            </div>
+
+            <span class="text-gray-500 hidden sm:inline truncate max-w-[140px]">{{ nurse }}</span>
+            <form method="POST" action="{{ url_for('dashboard.logout') }}" class="inline"
+                  onsubmit="return confirm('ยืนยันออกจากระบบ?')">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit"
-                        class="px-3 py-1.5 text-gray-600 hover:text-red-600 transition">
+                        class="px-2 md:px-3 py-1.5 text-gray-600 hover:text-red-600 transition">
                     ออกจากระบบ
                 </button>
             </form>
+
+            {# Mobile menu toggle — ใช้ <details> ไม่ต้องเขียน JS #}
+            <details class="relative md:hidden">
+                <summary aria-label="เมนู" class="list-none cursor-pointer px-2 py-1.5 rounded-lg hover:bg-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-600">
+                        <path fill-rule="evenodd" d="M3 5h14a1 1 0 100-2H3a1 1 0 000 2zm0 6h14a1 1 0 100-2H3a1 1 0 000 2zm0 6h14a1 1 0 100-2H3a1 1 0 100 2z" clip-rule="evenodd"/>
+                    </svg>
+                </summary>
+                <nav class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border py-1 text-sm">
+                    {% for endpoint, href, label in _nav_items %}
+                    <a href="{{ href }}"
+                       class="block px-4 py-2 {% if _active == endpoint %}bg-blue-50 text-blue-700 font-semibold{% else %}text-gray-700 hover:bg-gray-50{% endif %}">
+                        {{ label }}
+                    </a>
+                    {% endfor %}
+                </nav>
+            </details>
         </div>
     </div>
 </header>

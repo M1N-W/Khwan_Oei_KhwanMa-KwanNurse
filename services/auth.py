@@ -133,6 +133,72 @@ def is_dashboard_enabled() -> bool:
 
 
 # -----------------------------------------------------------------------------
+# Password policy (S1-4)
+# -----------------------------------------------------------------------------
+# ยาวขั้นต่ำ 10 ตัวอักษร — ยาวกว่า OWASP baseline (8) เล็กน้อยเพราะเป็นระบบ
+# เข้าถึง PHI และจำนวนผู้ใช้น้อย (คนละ 1 รหัส) → ไม่รบกวนพยาบาลมาก.
+MIN_PASSWORD_LENGTH = 10
+# bcrypt มี hard limit ที่ 72 bytes (UTF-8) ส่วนเกินจะถูกตัดเงียบ ๆ — อันตราย
+# เพราะ "MyLongPass123xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxAAA"
+# กับ "MyLongPass123xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxBBB"
+# จะ hash เป็น hash เดียวกัน. กันไว้ที่ 72 bytes.
+MAX_PASSWORD_BYTES = 72
+
+# Common weak passwords — รายการสั้นๆ ป้องกันรหัสยอดฮิตในไทย/ทั่วไป
+_COMMON_PASSWORDS = frozenset({
+    "password", "password1", "password123", "12345678", "123456789", "1234567890",
+    "qwerty123", "admin1234", "letmein123", "welcome1234", "iloveyou1",
+    "nurse1234", "dashboard1", "kwannurse", "kwanbot123",
+})
+
+
+def validate_nurse_password(password: str, username: str = "") -> list[str]:
+    """
+    ตรวจสอบนโยบายรหัสผ่านพยาบาล — คืน list ของข้อความปัญหา (ภาษาไทย).
+    ถ้า list ว่าง = ผ่าน.
+
+    เกณฑ์:
+    - ความยาว ≥ 10 ตัวอักษร, ≤ 72 bytes (UTF-8) — bcrypt limit
+    - ต้องมีตัวพิมพ์ใหญ่ + พิมพ์เล็ก + ตัวเลข อย่างน้อย 1 ตัวแต่ละประเภท
+    - ห้ามเหมือน username หรือเป็นส่วนหนึ่งของ username (case-insensitive)
+    - ห้ามอยู่ใน common password list
+
+    การ return errors เป็น list เพื่อให้ script/UI แสดงปัญหาทั้งหมดพร้อมกันได้
+    แทนที่จะให้ผู้ใช้แก้ทีละข้อ.
+    """
+    errors: list[str] = []
+    if not password:
+        return ["รหัสผ่านต้องไม่ว่าง"]
+
+    # ความยาว
+    if len(password) < MIN_PASSWORD_LENGTH:
+        errors.append(f"ต้องยาวอย่างน้อย {MIN_PASSWORD_LENGTH} ตัวอักษร (ปัจจุบัน {len(password)})")
+    if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        errors.append(f"ต้องยาวไม่เกิน {MAX_PASSWORD_BYTES} bytes (bcrypt จำกัด)")
+
+    # character classes
+    if not any(c.isupper() for c in password):
+        errors.append("ต้องมีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว (A-Z)")
+    if not any(c.islower() for c in password):
+        errors.append("ต้องมีตัวพิมพ์เล็กอย่างน้อย 1 ตัว (a-z)")
+    if not any(c.isdigit() for c in password):
+        errors.append("ต้องมีตัวเลขอย่างน้อย 1 ตัว (0-9)")
+
+    # ห้ามเหมือน username
+    if username:
+        uname_low = username.lower()
+        pwd_low = password.lower()
+        if pwd_low == uname_low or (len(uname_low) >= 4 and uname_low in pwd_low):
+            errors.append("รหัสผ่านต้องไม่มีชื่อผู้ใช้อยู่ภายใน")
+
+    # common passwords
+    if password.lower() in _COMMON_PASSWORDS:
+        errors.append("รหัสผ่านนี้เป็นรหัสยอดฮิต — เสี่ยงถูกเดาง่าย")
+
+    return errors
+
+
+# -----------------------------------------------------------------------------
 # Session helpers
 # -----------------------------------------------------------------------------
 _SESSION_USER_KEY = "nurse_user"

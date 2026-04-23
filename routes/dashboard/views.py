@@ -117,6 +117,29 @@ def alerts_partial():
 
 
 # -----------------------------------------------------------------------------
+# Notification bell (S1-4)
+# -----------------------------------------------------------------------------
+@dashboard_bp.route("/partials/bell", methods=["GET"])
+@require_nurse_auth
+def bell_partial():
+    """
+    HTMX fragment สำหรับ notification bell — แสดงจำนวนรายการที่ "ต้องสนใจ":
+    คิวด่วนมาก (priority=1) + alert วันนี้ที่ยังไม่ dismiss.
+
+    Poll จาก layout ทุก 30s เพื่อให้ badge อัพเดต. รีใช้ ``get_home_stats``
+    ที่ cache อยู่แล้ว → ไม่โหลดเพิ่ม.
+    """
+    stats = get_home_stats()
+    total = int(stats.get("queue_high_priority", 0)) + int(stats.get("alerts_today", 0))
+    return render_template(
+        "_bell.html",
+        count=total,
+        queue_high=stats.get("queue_high_priority", 0),
+        alerts_today=stats.get("alerts_today", 0),
+    )
+
+
+# -----------------------------------------------------------------------------
 # Patient detail
 # -----------------------------------------------------------------------------
 @dashboard_bp.route("/patient/<user_id>", methods=["GET"])
