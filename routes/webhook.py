@@ -69,17 +69,25 @@ def register_routes(app):
         """
         Liveness probe สำหรับ UptimeRobot / Render health check.
 
-        คืน plain text สั้นๆ ``healthy`` เพื่อให้ keyword monitor (ซึ่ง
-        ปกติเช็คว่าคำนี้มีอยู่ใน response) ทำงานได้แม้ upstream proxy จะ
-        compress ด้วย brotli/gzip — เราส่ง header ``Cache-Control: no-transform``
-        เพื่อขอไม่ให้ CDN/proxy แก้ body.
+        คืน plain text ``healthy`` ที่ **ต้องไม่ถูก compress** โดย Cloudflare
+        เพราะ UptimeRobot free tier อ่าน body แบบ raw bytes เพื่อหา keyword
+        — ถ้า body เป็น brotli compressed bytes, keyword "healthy" จะไม่เจอ.
 
-        สาเหตุที่แยกจาก ``/`` : ``/`` ตอบ JSON ยาว ~250B ที่ Cloudflare จะ
-        brotli-compress → UptimeRobot free tier หา keyword ใน compressed
-        body ไม่เจอ. Endpoint นี้ตอบ plain text 7 byte ที่ไม่ถูก compress.
+        การทดลอง (2026-04-24) พบว่า Cloudflare เมิน ``Cache-Control: no-transform``
+        และ compress body ขนาด 8 byte เป็น br ทันทีที่ client ส่ง
+        ``Accept-Encoding: br`` (ซึ่ง UptimeRobot ทำ). วิธีแก้ที่ได้ผล:
+        ส่ง header ``Content-Encoding: identity`` อย่างชัดเจน — ทำให้
+        Cloudflare รู้ว่า response นี้ "encode แล้วเป็น identity" และ
+        จะไม่ re-encode ซ้ำ.
+
+        หมายเหตุ: endpoint นี้แยกจาก ``/`` ซึ่งตอบ JSON ยาวและโดน compress ได้
+        โดยไม่กระทบ monitoring (เพราะ monitoring ใช้ /healthz เท่านั้น).
         """
-        resp = Response("healthy\n", mimetype="text/plain; charset=utf-8")
+        resp = Response("healthy\n", mimetype="text/plain")
         resp.headers["Cache-Control"] = "no-store, no-transform"
+        # บังคับ Cloudflare ไม่ให้ compress (ดู docstring ด้านบน)
+        resp.headers["Content-Encoding"] = "identity"
+        resp.headers["Vary"] = "Accept-Encoding"
         return resp
 
     @app.route('/metrics', methods=['GET'])
