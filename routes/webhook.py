@@ -6,7 +6,7 @@ Handles Dialogflow webhook endpoints
 import json
 import os
 from datetime import datetime
-from flask import request, jsonify
+from flask import request, jsonify, Response
 from config import get_logger, LOCAL_TZ, OFFICE_HOURS, DEBUG
 from utils import (
     parse_date_iso,
@@ -63,7 +63,25 @@ def register_routes(app):
             ],
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat()
         }), 200
-    
+
+    @app.route('/healthz', methods=['GET', 'HEAD'])
+    def healthz():
+        """
+        Liveness probe สำหรับ UptimeRobot / Render health check.
+
+        คืน plain text สั้นๆ ``healthy`` เพื่อให้ keyword monitor (ซึ่ง
+        ปกติเช็คว่าคำนี้มีอยู่ใน response) ทำงานได้แม้ upstream proxy จะ
+        compress ด้วย brotli/gzip — เราส่ง header ``Cache-Control: no-transform``
+        เพื่อขอไม่ให้ CDN/proxy แก้ body.
+
+        สาเหตุที่แยกจาก ``/`` : ``/`` ตอบ JSON ยาว ~250B ที่ Cloudflare จะ
+        brotli-compress → UptimeRobot free tier หา keyword ใน compressed
+        body ไม่เจอ. Endpoint นี้ตอบ plain text 7 byte ที่ไม่ถูก compress.
+        """
+        resp = Response("healthy\n", mimetype="text/plain; charset=utf-8")
+        resp.headers["Cache-Control"] = "no-store, no-transform"
+        return resp
+
     @app.route('/metrics', methods=['GET'])
     def metrics_snapshot():
         """
