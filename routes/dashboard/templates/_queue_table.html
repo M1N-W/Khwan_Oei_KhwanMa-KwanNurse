@@ -10,13 +10,17 @@
                 <th class="text-left py-2 pr-3">ความเร่งด่วน</th>
                 <th class="text-left py-2 pr-3">รอมา</th>
                 <th class="text-left py-2 pr-3">คิวเวลา</th>
+                <th class="text-right py-2 pr-3">จัดการ</th>
             </tr>
         </thead>
         <tbody>
         {% for item in queue %}
             <tr class="border-b border-gray-100 hover:bg-gray-50">
                 <td class="py-2 pr-3 text-gray-500">{{ loop.index }}</td>
-                <td class="py-2 pr-3 font-mono text-xs">{{ item.user_id_short }}</td>
+                <td class="py-2 pr-3 font-mono text-xs">
+                    <a href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}"
+                       class="text-blue-600 hover:underline">{{ item.user_id_short }}</a>
+                </td>
                 <td class="py-2 pr-3">{{ item.issue_type }}</td>
                 <td class="py-2 pr-3">
                     {% if item.priority == 1 %}
@@ -37,6 +41,31 @@
                     {{ item.waited_minutes }} นาที
                 </td>
                 <td class="py-2 pr-3 text-gray-500">{{ item.queued_at }}</td>
+                <td class="py-2 pr-3 text-right whitespace-nowrap">
+                    {% if csrf_token %}
+                    <form method="POST"
+                          action="{{ url_for('dashboard.queue_assign', queue_id=item.queue_id) }}"
+                          class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit"
+                                class="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">
+                            รับคิว
+                        </button>
+                    </form>
+                    <form method="POST"
+                          action="{{ url_for('dashboard.queue_complete', queue_id=item.queue_id) }}"
+                          class="inline"
+                          onsubmit="return confirm('ยืนยันปิดเคสนี้?')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit"
+                                class="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
+                            ปิด
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
             </tr>
         {% endfor %}
         </tbody>

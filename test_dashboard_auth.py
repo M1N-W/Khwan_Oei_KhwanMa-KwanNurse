@@ -333,5 +333,129 @@ class DashboardViewsTests(DashboardAuthTestBase):
             self.assertIn("/dashboard/login", resp.location, f"path={path}")
 
 
+class DashboardActionsViewTests(DashboardAuthTestBase):
+    """S1-3: smoke test สำหรับ POST actions + patient detail view."""
+
+    def _login(self):
+        """Login แล้วคืน csrf token **ใหม่** (ที่ถูกสร้างใน session หลัง login)."""
+        import re
+        from unittest.mock import patch
+        resp_get = self.client.get("/dashboard/login")
+        csrf_pre = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp_get.get_data(as_text=True)).group(1)
+        self.client.post(
+            "/dashboard/login",
+            data={"username": "nurse_kwan", "password": "CorrectPass1", "csrf_token": csrf_pre},
+        )
+        # ``login_user`` จะ ``session.clear()`` + generate token ใหม่ — ดึงจากหน้าที่ต้อง login
+        with patch("database.sheets.get_recent_symptom_reports", return_value=[]), \
+             patch("database.sheets.get_worksheet", return_value=None):
+            resp_home = self.client.get("/dashboard/queue")
+        m = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp_home.get_data(as_text=True))
+        return m.group(1) if m else csrf_pre
+
+    def test_patient_view_renders_empty(self):
+        from unittest.mock import patch
+        self._login()
+        with patch("database.sheets.get_recent_symptom_reports", return_value=[]), \
+             patch("database.sheets.get_worksheet", return_value=None):
+            resp = self.client.get("/dashboard/patient/Uabc123def456")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.get_data(as_text=True)
+        self.assertIn("ไทม์ไลน์", body)
+        self.assertIn("Uabc123def456", body)
+
+    def test_patient_view_rejects_overlong_user_id(self):
+        self._login()
+        resp = self.client.get("/dashboard/patient/" + "A" * 100)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_assign_requires_csrf(self):
+        self._login()
+        # ไม่ส่ง csrf_token → 400
+        resp = self.client.post("/dashboard/queue/q1/assign", data={})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_assign_with_csrf_calls_action(self):
+        from unittest.mock import patch
+        from services.dashboard_actions import ActionResult
+        csrf = self._login()
+        with patch("routes.dashboard.views.assign_nurse_to_session",
+                   return_value=ActionResult(ok=True, message="ok")) as m:
+            resp = self.client.post(
+                "/dashboard/queue/q1/assign",
+                data={"csrf_token": csrf},
+                follow_redirects=False,
+            )
+        self.assertEqual(resp.status_code, 302)
+        m.assert_called_once_with("q1", "nurse_kwan")
+
+    def test_complete_passes_notes(self):
+        from unittest.mock import patch
+        from services.dashboard_actions import ActionResult
+        csrf = self._login()
+        with patch("routes.dashboard.views.mark_session_completed",
+                   return_value=ActionResult(ok=True, message="ok")) as m:
+            self.client.post(
+                "/dashboard/queue/q9/complete",
+                data={"csrf_token": csrf, "notes": "OK แล้ว"},
+            )
+        m.assert_called_once()
+        kwargs = m.call_args.kwargs
+        self.assertEqual(kwargs.get("notes"), "OK แล้ว")
+
+    def test_dismiss_alert_calls_action(self):
+        from unittest.mock import patch
+        from services.dashboard_actions import ActionResult
+        csrf = self._login()
+        with patch("routes.dashboard.views.dismiss_alert",
+                   return_value=ActionResult(ok=True, message="ok")) as m:
+            self.client.post(
+                "/dashboard/alerts/dismiss",
+                data={
+                    "csrf_token": csrf,
+                    "user_id": "U1",
+                    "timestamp": "2026-04-24T10:00:00",
+                },
+            )
+        m.assert_called_once_with("U1", "2026-04-24T10:00:00", "nurse_kwan")
+
+    def test_action_redirect_respects_safe_next(self):
+        from unittest.mock import patch
+        from services.dashboard_actions import ActionResult
+        csrf = self._login()
+        with patch("routes.dashboard.views.assign_nurse_to_session",
+                   return_value=ActionResult(ok=True, message="ok")):
+            resp = self.client.post(
+                "/dashboard/queue/q1/assign",
+                data={"csrf_token": csrf, "next": "/dashboard/queue"},
+                follow_redirects=False,
+            )
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp.location.endswith("/dashboard/queue"))
+
+    def test_action_rejects_open_redirect(self):
+        from unittest.mock import patch
+        from services.dashboard_actions import ActionResult
+        csrf = self._login()
+        with patch("routes.dashboard.views.assign_nurse_to_session",
+                   return_value=ActionResult(ok=True, message="ok")):
+            resp = self.client.post(
+                "/dashboard/queue/q1/assign",
+                data={"csrf_token": csrf, "next": "https://evil.example/phish"},
+                follow_redirects=False,
+            )
+        # ต้อง fallback ไป queue_view ไม่ใช่ external
+        self.assertNotIn("evil.example", resp.location or "")
+
+    def test_actions_require_login(self):
+        # ไม่ login → POST ต้อง redirect ไป login
+        for path in ("/dashboard/queue/q1/assign",
+                     "/dashboard/queue/q1/complete",
+                     "/dashboard/alerts/dismiss"):
+            resp = self.client.post(path, data={})
+            self.assertEqual(resp.status_code, 302, f"path={path}")
+            self.assertIn("/dashboard/login", resp.location, f"path={path}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

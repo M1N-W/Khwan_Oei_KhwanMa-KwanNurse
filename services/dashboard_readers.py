@@ -264,16 +264,183 @@ def get_home_stats(*, force_refresh: bool = False) -> dict[str, Any]:
     return stats
 
 
-def invalidate_dashboard_cache() -> int:
+def get_patient_timeline(
+    user_id: str,
+    days: int = 30,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
     """
-    ลบ cache ทั้งหมดของ dashboard. เรียกหลังเขียนข้อมูล (S1-3 จะใช้).
+    Timeline ของผู้ป่วย 1 คน: รวม symptom reports + teleconsult sessions
+    ย้อนหลัง ``days`` วัน → sort newest first.
 
     Returns:
-        int: จำนวน cache entry ที่ถูกลบ.
+        dict มี key:
+            - ``user_id``: str
+            - ``user_id_short``: str
+            - ``symptom_count``, ``session_count``: int
+            - ``events``: list ของ event dict (type + timestamp + details)
+            - ``latest_risk_level``: str ล่าสุดของ user
     """
-    count = ttl_cache.invalidate_prefix("dash:")
-    logger.info("Invalidated %d dashboard cache entries", count)
-    return count
+    if not user_id:
+        return _empty_timeline("")
+
+    key = f"dash:patient:v1:{user_id}:d={days}"
+    if not force_refresh:
+        cached = ttl_cache.get(key)
+        if cached is not None:
+            incr("dashboard.cache_hit.patient")
+            return cached
+
+    incr("dashboard.cache_miss.patient")
+
+    symptoms = _load_patient_symptoms(user_id, days)
+    sessions = _load_patient_sessions(user_id, limit=50)
+
+    events: list[dict[str, Any]] = []
+    for s in symptoms:
+        ts = s.get("timestamp")
+        events.append({
+            "type": "symptom",
+            "type_label": "รายงานอาการ",
+            "timestamp": ts,
+            "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
+            "risk_level": (s.get("risk_level") or "").lower(),
+            "risk_score": int(s.get("risk_score") or 0),
+            "pain": s.get("pain") or "-",
+            "wound": s.get("wound") or "-",
+            "fever": s.get("fever") or "-",
+            "mobility": s.get("mobility") or "-",
+        })
+    for sess in sessions:
+        ts = sess.get("timestamp")
+        events.append({
+            "type": "teleconsult",
+            "type_label": "ปรึกษาทางไกล",
+            "timestamp": ts,
+            "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
+            "session_id": sess.get("session_id") or "",
+            "issue_type": sess.get("issue_type") or "",
+            "status": sess.get("status") or "",
+            "assigned_nurse": sess.get("assigned_nurse") or "",
+            "notes": sess.get("notes") or "",
+        })
+
+    # Newest first; events ที่ไม่มี timestamp → ล่างสุด
+    events.sort(key=lambda e: e["timestamp"] or datetime.min.replace(tzinfo=LOCAL_TZ),
+                reverse=True)
+
+    latest_risk = ""
+    for ev in events:
+        if ev["type"] == "symptom" and ev.get("risk_level"):
+            latest_risk = ev["risk_level"]
+            break
+
+    result = {
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "symptom_count": len(symptoms),
+        "session_count": len(sessions),
+        "latest_risk_level": latest_risk,
+        "events": events,
+    }
+    ttl_cache.set(key, result, 30)  # TTL 30s — patient view ไม่เปิดค้างนาน
+    return result
+
+
+def _empty_timeline(user_id: str) -> dict[str, Any]:
+    return {
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "symptom_count": 0,
+        "session_count": 0,
+        "latest_risk_level": "",
+        "events": [],
+    }
+
+
+def _load_patient_symptoms(user_id: str, days: int) -> list[dict[str, Any]]:
+    """อ่าน SymptomLog ของ user 1 คนย้อนหลัง ``days`` วัน."""
+    try:
+        from database.sheets import get_recent_symptom_reports
+        return get_recent_symptom_reports(user_id=user_id, days=days, limit=100)
+    except Exception:
+        logger.exception("Error loading patient symptoms user_id=%s", user_id)
+        return []
+
+
+def _load_patient_sessions(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    """
+    อ่านทุก TeleconsultSessions ของ user 1 คน (ไม่กรอง status — แสดงทั้ง
+    queued/in_progress/completed/cancelled เพื่อดูประวัติ).
+    """
+    try:
+        from config import SHEET_TELECONSULT_SESSIONS
+        from database.sheets import get_worksheet
+    except ImportError:
+        return []
+
+    try:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
+            return []
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return []
+
+        headers = values[0]
+
+        def col(name: str, default: int) -> int:
+            return headers.index(name) if name in headers else default
+
+        idx_sid = col("Session_ID", 0)
+        idx_ts = col("Timestamp", 1)
+        idx_uid = col("User_ID", 2)
+        idx_issue = col("Issue_Type", 3)
+        idx_status = col("Status", 5)
+        idx_nurse = col("Assigned_Nurse", 8)
+        idx_notes = col("Notes", 11)
+
+        out: list[dict[str, Any]] = []
+        for row in values[1:]:
+            if len(row) <= idx_uid:
+                continue
+            if row[idx_uid] != user_id:
+                continue
+            ts = _parse_queue_timestamp(row[idx_ts] if len(row) > idx_ts else "")
+            out.append({
+                "session_id": row[idx_sid] if len(row) > idx_sid else "",
+                "timestamp": ts,
+                "user_id": row[idx_uid],
+                "issue_type": row[idx_issue] if len(row) > idx_issue else "",
+                "status": row[idx_status] if len(row) > idx_status else "",
+                "assigned_nurse": row[idx_nurse] if len(row) > idx_nurse else "",
+                "notes": row[idx_notes] if len(row) > idx_notes else "",
+            })
+        out.sort(key=lambda s: s["timestamp"] or datetime.min.replace(tzinfo=LOCAL_TZ),
+                 reverse=True)
+        return out[:limit]
+    except Exception:
+        logger.exception("Error loading patient sessions user_id=%s", user_id)
+        return []
+
+
+def invalidate_dashboard_cache() -> int:
+    """
+    ลบ cache ของ dashboard views (queue/alerts/stats/patient) เรียกหลังเขียนข้อมูล.
+
+    **สำคัญ:** ไม่ลบ ``dash:dismissed:*`` (state การ dismiss alert) เพราะต้องการ
+    ให้อยู่ครบ 24 ชั่วโมงแม้มีการ write action อื่นเข้ามา. เดิมเรา invalidate
+    ด้วย prefix ``dash:`` เดียวจะล้าง dismissal ด้วย — เป็นบั๊ก.
+
+    Returns:
+        int: จำนวน cache entry ที่ถูกลบรวมจากทุก prefix ที่ invalidate.
+    """
+    total = 0
+    for prefix in ("dash:queue:", "dash:alerts:", "dash:stats:", "dash:patient:"):
+        total += ttl_cache.invalidate_prefix(prefix)
+    logger.info("Invalidated %d dashboard cache entries", total)
+    return total
 
 
 # -----------------------------------------------------------------------------
@@ -381,6 +548,9 @@ def _load_alerts_from_sheets(
         logger.exception("Failed to import get_recent_symptom_reports")
         return []
 
+    # Import ในนี้เพื่อหลีก circular import — dashboard_actions import readers
+    from services.dashboard_actions import is_alert_dismissed
+
     try:
         min_rank = _RISK_RANK.get(min_risk_level.lower(), 2)
         rows = get_recent_symptom_reports(user_id=None, days=days, limit=500)
@@ -388,6 +558,9 @@ def _load_alerts_from_sheets(
         for r in rows:
             risk = (r.get("risk_level") or "").strip().lower()
             if _RISK_RANK.get(risk, 0) < min_rank:
+                continue
+            # กรอง alert ที่พยาบาล dismiss ไปแล้ว (เก็บ in-memory 24h)
+            if is_alert_dismissed(r.get("user_id") or "", r.get("timestamp")):
                 continue
             items.append(
                 AlertItem(

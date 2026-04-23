@@ -11,6 +11,7 @@
                 <th class="text-left py-2 pr-3">ปวด</th>
                 <th class="text-left py-2 pr-3">แผล</th>
                 <th class="text-left py-2 pr-3">ไข้</th>
+                <th class="text-right py-2 pr-3">จัดการ</th>
             </tr>
         </thead>
         <tbody>
@@ -19,7 +20,10 @@
                 <td class="py-2 pr-3 text-gray-500 whitespace-nowrap" title="{{ a.timestamp_full }}">
                     {{ a.timestamp }}
                 </td>
-                <td class="py-2 pr-3 font-mono text-xs">{{ a.user_id_short }}</td>
+                <td class="py-2 pr-3 font-mono text-xs">
+                    <a href="{{ url_for('dashboard.patient_view', user_id=a.user_id) }}"
+                       class="text-blue-600 hover:underline">{{ a.user_id_short }}</a>
+                </td>
                 <td class="py-2 pr-3">
                     {% if a.risk_level == 'high' %}
                         <span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-semibold">สูง</span>
@@ -33,6 +37,23 @@
                 <td class="py-2 pr-3 text-gray-600">{{ a.pain }}</td>
                 <td class="py-2 pr-3 text-gray-600">{{ a.wound }}</td>
                 <td class="py-2 pr-3 text-gray-600">{{ a.fever }}</td>
+                <td class="py-2 pr-3 text-right whitespace-nowrap">
+                    {% if csrf_token %}
+                    <form method="POST"
+                          action="{{ url_for('dashboard.alerts_dismiss') }}"
+                          class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="user_id" value="{{ a.user_id }}">
+                        <input type="hidden" name="timestamp" value="{{ a.timestamp_full.replace(' ', 'T') }}">
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button type="submit"
+                                class="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                                title="ซ่อน alert นี้ 24 ชั่วโมง">
+                            ซ่อน
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
             </tr>
         {% endfor %}
         </tbody>
