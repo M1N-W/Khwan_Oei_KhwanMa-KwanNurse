@@ -38,6 +38,7 @@ from services.teleconsult import (
 from services.nlp import analyze_free_text, format_triage_message
 from services.education import recommend_guides, format_recommendations_message
 from services.notification import send_line_push
+from services.security import require_line_signature, require_dialogflow_token
 from database.education_logs import save_education_view
 from config import NURSE_GROUP_ID
 
@@ -108,8 +109,9 @@ def register_routes(app):
         }), 200
 
     @app.route('/webhook', methods=['POST'])
+    @require_dialogflow_token
     def webhook():
-        """Main Dialogflow webhook endpoint"""
+        """Main Dialogflow webhook endpoint (P4-1: bearer token required when configured)."""
         req = request.get_json(silent=True, force=True)
         if not req:
             return jsonify({"fulfillmentText": "Request body empty"}), 400
@@ -176,9 +178,15 @@ def register_routes(app):
             return handle_unknown_intent(intent)
 
     @app.route('/line/webhook', methods=['POST'])
+    @require_line_signature
     def line_webhook():
         """
-        Direct LINE Messaging API webhook (Sprint 2 S2-2).
+        Direct LINE Messaging API webhook (Sprint 2 S2-2; P4-1 hardened).
+
+        Signature: every request must carry ``X-Line-Signature`` matching
+        HMAC-SHA256 of the raw body keyed by ``LINE_CHANNEL_SECRET``. The
+        ``@require_line_signature`` decorator enforces this when the secret
+        is configured.
 
         Unlike ``/webhook`` which receives Dialogflow's intent-extracted
         format, this endpoint accepts the *raw* LINE event envelope
