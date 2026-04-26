@@ -16,6 +16,7 @@ Design:
 """
 import base64
 import json
+import re
 import threading
 import time
 from datetime import date, datetime
@@ -42,6 +43,20 @@ from utils.pii import scrub_pii
 from services.metrics import incr as _metric
 
 logger = get_logger(__name__)
+
+# Matches `?key=<token>` or `&key=<token>` segments in any URL or error
+# string so we can scrub the Gemini API key before logging. The Google
+# REST client puts the key in the URL query string which means raw
+# ``RequestException`` messages leak it into logs (security incident).
+_API_KEY_QS_RE = re.compile(r"([?&])key=[^&\s]+", re.IGNORECASE)
+
+
+def _redact_api_key(text):
+    """Strip ``key=...`` query-string values from any string before logging."""
+    if text is None:
+        return text
+    return _API_KEY_QS_RE.sub(r"\1key=***", str(text))
+
 
 # ---------------------------------------------------------------------------
 # In-memory state (per worker process)
@@ -217,7 +232,7 @@ def complete(system, user, max_tokens=None, want_json=False):
         _metric("llm.call_timeout")
         return None
     except requests.exceptions.RequestException as e:
-        logger.warning("LLM network error: %s", e)
+        logger.warning("LLM network error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.call_network_error")
         return None
@@ -358,7 +373,7 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
         _metric("llm.vision_call_timeout")
         return None
     except requests.exceptions.RequestException as e:
-        logger.warning("LLM vision network error: %s", e)
+        logger.warning("LLM vision network error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.vision_call_network_error")
         return None
