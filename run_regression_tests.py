@@ -26,6 +26,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_personalized_education.py", "-v"],
     [sys.executable, "-m", "unittest", "test_bugfix_office_and_knowledge.py", "-v"],
     [sys.executable, "-m", "unittest", "test_hotfix_logsec_and_choice.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_quickwins_d3.py", "-v"],
 ]
 
 

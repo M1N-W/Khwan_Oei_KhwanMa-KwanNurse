@@ -298,6 +298,8 @@ def get_patient_timeline(
 
     symptoms = _load_patient_symptoms(user_id, days)
     sessions = _load_patient_sessions(user_id, limit=50)
+    wounds = _load_patient_wounds(user_id, days)
+    educations = _load_patient_educations(user_id, days)
 
     events: list[dict[str, Any]] = []
     for s in symptoms:
@@ -327,6 +329,31 @@ def get_patient_timeline(
             "assigned_nurse": sess.get("assigned_nurse") or "",
             "notes": sess.get("notes") or "",
         })
+    for w in wounds:
+        ts = w.get("timestamp")
+        events.append({
+            "type": "wound",
+            "type_label": "วิเคราะห์รูปแผล",
+            "timestamp": ts,
+            "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
+            "severity": (w.get("severity") or "").lower(),
+            "observations": w.get("observations") or [],
+            "advice": w.get("advice") or "",
+            "confidence": float(w.get("confidence") or 0.0),
+        })
+    for e in educations:
+        ts = e.get("timestamp")
+        topic_key = e.get("topic") or ""
+        events.append({
+            "type": "education",
+            "type_label": "อ่านความรู้",
+            "timestamp": ts,
+            "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
+            "topic": topic_key,
+            "topic_label": _EDUCATION_TOPIC_LABELS.get(topic_key, topic_key),
+            "source": e.get("source") or "",
+            "personalized": bool(e.get("personalized")),
+        })
 
     # Newest first; events ที่ไม่มี timestamp → ล่างสุด
     events.sort(key=lambda e: e["timestamp"] or datetime.min.replace(tzinfo=LOCAL_TZ),
@@ -343,6 +370,8 @@ def get_patient_timeline(
         "user_id_short": _short_user_id(user_id),
         "symptom_count": len(symptoms),
         "session_count": len(sessions),
+        "wound_count": len(wounds),
+        "education_count": len(educations),
         "latest_risk_level": latest_risk,
         "events": events,
     }
@@ -356,9 +385,41 @@ def _empty_timeline(user_id: str) -> dict[str, Any]:
         "user_id_short": _short_user_id(user_id),
         "symptom_count": 0,
         "session_count": 0,
+        "wound_count": 0,
+        "education_count": 0,
         "latest_risk_level": "",
         "events": [],
     }
+
+
+# Display labels for canonical topic keys (Quick-win D3-A).
+_EDUCATION_TOPIC_LABELS = {
+    "wound_care": "การดูแลแผล",
+    "physical_therapy": "กายภาพบำบัด",
+    "dvt_prevention": "ป้องกันลิ่มเลือด",
+    "medication": "การรับประทานยา",
+    "warning_signs": "สัญญาณอันตราย",
+}
+
+
+def _load_patient_wounds(user_id: str, days: int) -> list[dict[str, Any]]:
+    """อ่าน WoundAnalysisLog ของ user 1 คนย้อนหลัง ``days`` วัน."""
+    try:
+        from database.wound_logs import get_recent_wound_analyses
+        return get_recent_wound_analyses(user_id=user_id, days=days, limit=100)
+    except Exception:
+        logger.exception("Error loading patient wounds user_id=%s", user_id)
+        return []
+
+
+def _load_patient_educations(user_id: str, days: int) -> list[dict[str, Any]]:
+    """อ่าน EducationLog ของ user 1 คนย้อนหลัง ``days`` วัน."""
+    try:
+        from database.education_logs import get_recent_education
+        return get_recent_education(user_id=user_id, days=days, limit=100)
+    except Exception:
+        logger.exception("Error loading patient educations user_id=%s", user_id)
+        return []
 
 
 def _load_patient_symptoms(user_id: str, days: int) -> list[dict[str, Any]]:
