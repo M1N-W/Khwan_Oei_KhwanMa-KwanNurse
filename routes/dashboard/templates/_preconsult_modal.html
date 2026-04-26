@@ -100,7 +100,8 @@
                 <div class="text-xs text-gray-500 font-semibold mb-2">
                     📅 ประวัติล่าสุด ({{ packet.symptom_count }} symptoms · {{ packet.session_count }} sessions)
                 </div>
-                <ul class="space-y-1.5 text-sm">{% for ev in packet.recent_events %}
+                <ul class="space-y-1.5 text-sm">
+                    {%- for ev in packet.recent_events %}
                     <li class="flex items-start gap-2">
                         <span class="text-xs text-gray-400 font-mono whitespace-nowrap">{{ ev.timestamp_label }}</span>
                         {% if ev.type == 'symptom' %}
@@ -115,7 +116,8 @@
                                 ปรึกษา {{ ev.issue_type }} · {{ ev.status }}
                             </span>
                         {% endif %}
-                    </li>{% endfor %}
+                    </li>
+                    {%- endfor %}
                 </ul>
             </div>
             {% endif %}
@@ -126,8 +128,10 @@
                 <div class="text-xs text-gray-500 font-semibold mb-2">
                     ⏰ Reminder ที่ยังรอตอบ ({{ packet.pending_reminders|length }})
                 </div>
-                <ul class="space-y-1 text-sm text-gray-700">{% for r in packet.pending_reminders %}
-                    <li>{{ r.reminder_type or '-' }} · กำหนด {{ r.scheduled_for or '-' }}</li>{% endfor %}
+                <ul class="space-y-1 text-sm text-gray-700">
+                    {%- for r in packet.pending_reminders %}
+                    <li>{{ r.reminder_type or '-' }} · กำหนด {{ r.scheduled_for or '-' }}</li>
+                    {%- endfor %}
                 </ul>
             </div>
             {% endif %}
