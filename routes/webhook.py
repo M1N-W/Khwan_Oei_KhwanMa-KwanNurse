@@ -174,6 +174,148 @@ def register_routes(app):
         else:
             return handle_unknown_intent(intent)
 
+    @app.route('/line/webhook', methods=['POST'])
+    def line_webhook():
+        """
+        Direct LINE Messaging API webhook (Sprint 2 S2-2).
+
+        Unlike ``/webhook`` which receives Dialogflow's intent-extracted
+        format, this endpoint accepts the *raw* LINE event envelope
+        (``{"events": [...]}``) so we can handle media messages — currently
+        only images for wound analysis.
+
+        Behavior:
+        - 200 always (LINE retries on non-2xx; we should ack quickly even
+          if individual events fail).
+        - For each ``message`` event with ``message.type == 'image'``: run
+          wound-image flow (download → analyze → save → reply + alert).
+        - All other event types are ignored here — text messages should
+          continue to flow through Dialogflow → ``/webhook`` as today.
+        """
+        body = request.get_json(silent=True) or {}
+        events = body.get("events") or []
+        for event in events:
+            try:
+                if event.get("type") != "message":
+                    continue
+                msg = event.get("message") or {}
+                if msg.get("type") == "image":
+                    handle_line_image_event(event)
+            except Exception:
+                logger.exception("Error processing LINE event: %s", event.get("type"))
+        return jsonify({"status": "ok", "events_received": len(events)}), 200
+
+
+def handle_line_image_event(event):
+    """
+    Process a single LINE image event end-to-end.
+
+    Steps:
+    1. Download bytes from LINE Content API.
+    2. Call ``services.wound_analysis.analyze_wound_image``.
+    3. Persist to ``WoundAnalysisLog``.
+    4. Reply to user (LINE Reply API).
+    5. Push nurse alert if severity in {medium, high}.
+
+    Never raises — all failures are logged and produce a fallback user reply.
+    """
+    # Local imports to keep webhook module load light + avoid circular imports
+    from services.notification import (
+        build_wound_alert_message,
+        build_wound_user_reply,
+        download_line_content,
+        reply_line_message,
+        send_line_push,
+    )
+    from services.wound_analysis import analyze_wound_image
+    from database.wound_logs import save_wound_analysis
+
+    source = event.get("source") or {}
+    user_id = source.get("userId") or "unknown"
+    reply_token = event.get("replyToken") or ""
+    msg = event.get("message") or {}
+    message_id = msg.get("id") or ""
+
+    masked_user = (user_id[:4] + "***" + user_id[-4:]) if len(user_id) > 10 else "***"
+    logger.info("LINE image event user=%s message_id=%s", masked_user, message_id)
+
+    if not message_id:
+        if reply_token:
+            reply_line_message(reply_token, "ไม่พบรหัสรูปภาพ กรุณาส่งใหม่อีกครั้ง")
+        return
+
+    # 1. Download
+    image_bytes = download_line_content(message_id)
+    if not image_bytes:
+        if reply_token:
+            reply_line_message(
+                reply_token,
+                "ขออภัย ไม่สามารถดาวน์โหลดรูปได้ในขณะนี้\nกรุณาลองส่งใหม่ในอีกสักครู่",
+            )
+        return
+
+    # 2. Analyze
+    result = analyze_wound_image(image_bytes, mime_type="image/jpeg")
+    if not result:
+        # LLM disabled / failed / quota — friendly fallback to user
+        if reply_token:
+            reply_line_message(
+                reply_token,
+                "📸 ได้รับรูปแล้ว\nระบบ AI กำลังบำรุงรักษา พยาบาลจะตรวจสอบรูปและติดต่อกลับ",
+            )
+        # Still push to nurses with raw notice (no AI analysis)
+        if NURSE_GROUP_ID:
+            try:
+                send_line_push(
+                    f"📸 ผู้ป่วยส่งรูปแผล (AI ไม่พร้อม)\n👤 User: {user_id}\n"
+                    f"กรุณาตรวจสอบรูปใน LINE",
+                    NURSE_GROUP_ID,
+                )
+            except Exception:
+                logger.exception("Failed to push raw wound notice")
+        return
+
+    # 3. Persist (best-effort — don't block user reply on Sheets failure)
+    try:
+        save_wound_analysis(
+            user_id=user_id,
+            severity=result["severity"],
+            observations=result["observations"],
+            advice=result["advice"],
+            confidence=result["confidence"],
+            image_size_kb=len(image_bytes) // 1024,
+            message_id=message_id,
+        )
+    except Exception:
+        logger.exception("Failed to persist wound analysis user=%s", user_id)
+
+    # 4. Reply to user
+    if reply_token:
+        reply_line_message(
+            reply_token,
+            build_wound_user_reply(
+                severity=result["severity"],
+                observations=result["observations"],
+                advice=result["advice"],
+            ),
+        )
+
+    # 5. Alert nurse if medium or high
+    if result["severity"] in ("medium", "high") and NURSE_GROUP_ID:
+        try:
+            send_line_push(
+                build_wound_alert_message(
+                    user_id=user_id,
+                    severity=result["severity"],
+                    observations=result["observations"],
+                    advice=result["advice"],
+                    confidence=result["confidence"],
+                ),
+                NURSE_GROUP_ID,
+            )
+        except Exception:
+            logger.exception("Failed to push wound alert user=%s", user_id)
+
 
 def handle_report_symptoms(user_id, params):
     """Handle ReportSymptoms intent"""

@@ -36,6 +36,19 @@ alerts cannot fire.
 Leave `LLM_PROVIDER=none` for pure rule-based operation. All LLM-using
 handlers have rule-based fallbacks and never block the webhook.
 
+### Sprint 2 S2-2 Vision (wound image analysis — optional)
+
+| Variable | Required? | Default | Notes |
+|---|---|---|---|
+| `LLM_VISION_DAILY_CAP` | no | `200` | Separate daily counter from text LLM |
+| `LLM_VISION_TIMEOUT_SECONDS` | no | `12` | Image processing is slower than text |
+| `LLM_VISION_MODEL` | no | _(falls back to `LLM_MODEL`)_ | Override only if you want a different vision model |
+| `LLM_VISION_MAX_IMAGE_BYTES` | no | `8388608` (8 MB) | Reject oversized uploads before calling Gemini |
+
+Image flow only runs when `LLM_PROVIDER=gemini`. With provider=`none` the
+`/line/webhook` endpoint will still 200 OK, save a raw "AI not available"
+nurse notice, and reply to the patient with a friendly fallback.
+
 ### Scheduler ownership
 
 | Variable | Default | Notes |
@@ -63,12 +76,32 @@ handlers have rule-based fallbacks and never block the webhook.
 4. Paste the env vars from §1.
 5. Trigger a deploy and watch the startup log for the banner:
 
-   ```
+   ```text
    ✅ Scheduler started successfully
    ✅ Scheduled daily no-response check at 10:00
    ✅ Scheduled daily early-warning scan at 11:00
    ✅ Scheduled hourly metrics summary at :00
    ```
+
+### 2.1 LINE Channel webhook URLs (Sprint 2 S2-2)
+
+The bot now exposes **two** webhook endpoints:
+
+| Endpoint | Format | Purpose |
+|---|---|---|
+| `POST /webhook` | Dialogflow | Text intents (legacy + still primary) |
+| `POST /line/webhook` | Raw LINE event | Image messages → wound analysis |
+
+There are two ways to wire LINE → both endpoints:
+
+- **Option A (recommended for v4 → v5 transition)**: Keep Dialogflow as the
+  primary LINE webhook for text. Configure a **secondary integration** or
+  Channel-level handler that POSTs raw image events to `/line/webhook`.
+- **Option B (when you migrate off Dialogflow)**: Set `/line/webhook` as the
+  sole LINE webhook URL and forward text events to Dialogflow yourself
+  inside the route. (Out of scope for S2-2; tracked in `PRODUCT_VISION.md`.)
+
+For the pilot, Option A is fine — only image flow uses `/line/webhook`.
 
 ---
 

@@ -35,11 +35,14 @@ SHEET_FOLLOW_UP_REMINDERS = "FollowUpReminders"
 SHEET_REMINDER_SCHEDULES = "ReminderSchedules"
 SHEET_TELECONSULT_SESSIONS = "TeleconsultSessions"
 SHEET_TELECONSULT_QUEUE = "TeleconsultQueue"
+SHEET_WOUND_ANALYSIS_LOG = "WoundAnalysisLog"
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
 NURSE_GROUP_ID = os.environ.get("NURSE_GROUP_ID")
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
+LINE_REPLY_API_URL = "https://api.line.me/v2/bot/message/reply"
+LINE_CONTENT_API_URL = "https://api-data.line.me/v2/bot/message"  # /<id>/content
 
 # Logging Configuration
 logging.basicConfig(
@@ -180,6 +183,16 @@ LLM_MAX_OUTPUT_TOKENS = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "500"))
 LLM_DAILY_CALL_LIMIT = int(os.environ.get("LLM_DAILY_CALL_LIMIT", "1000"))
 LLM_CIRCUIT_FAILURE_THRESHOLD = int(os.environ.get("LLM_CIRCUIT_FAILURE_THRESHOLD", "3"))
 LLM_CIRCUIT_COOLDOWN_SECONDS = int(os.environ.get("LLM_CIRCUIT_COOLDOWN_SECONDS", "60"))
+
+# Vision-specific budgets (S2-2). Image calls cost more and take longer than
+# text completions, so we keep their daily cap and timeout separate from the
+# text counters in services/llm.py.
+LLM_VISION_DAILY_CAP = int(os.environ.get("LLM_VISION_DAILY_CAP", "200"))
+LLM_VISION_TIMEOUT_SECONDS = float(os.environ.get("LLM_VISION_TIMEOUT_SECONDS", "12"))
+LLM_VISION_MODEL = os.environ.get("LLM_VISION_MODEL", "").strip()
+# Max image bytes we accept before short-circuiting (LINE caps ~10MB, but
+# Gemini billing scales with size; reject anything obviously too large).
+LLM_VISION_MAX_IMAGE_BYTES = int(os.environ.get("LLM_VISION_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
 
 
 # ---------------------------------------------------------------------------
