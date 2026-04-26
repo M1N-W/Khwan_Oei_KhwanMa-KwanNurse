@@ -46,6 +46,16 @@ LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 LINE_REPLY_API_URL = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_API_URL = "https://api-data.line.me/v2/bot/message"  # /<id>/content
 
+# Phase 4 P4-1: Webhook signature/token verification
+# - LINE_CHANNEL_SECRET: from LINE Developer Console → Channel → Basic settings.
+#   When set, /line/webhook rejects requests with bad/missing X-Line-Signature.
+# - DIALOGFLOW_WEBHOOK_TOKEN: shared secret bearer token. When set, /webhook
+#   rejects requests without matching ``Authorization: Bearer <token>`` header.
+#   Configure the same value on the Dialogflow ES fulfillment URL.
+# - WEBHOOK_VERIFY_DISABLED: dev-only escape hatch. NEVER set in production.
+LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+DIALOGFLOW_WEBHOOK_TOKEN = os.environ.get("DIALOGFLOW_WEBHOOK_TOKEN", "")
+
 # Logging Configuration
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
