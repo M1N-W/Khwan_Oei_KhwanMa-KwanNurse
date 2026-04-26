@@ -392,6 +392,152 @@ def _empty_timeline(user_id: str) -> dict[str, Any]:
     }
 
 
+# -----------------------------------------------------------------------------
+# Phase 5 P5-1: trend chart data for the patient page
+# -----------------------------------------------------------------------------
+
+# Wound severity → numeric Y-axis value. 0 reserved for 'no wound today'.
+_WOUND_SEVERITY_SCORE = {"low": 1, "medium": 2, "high": 3}
+
+
+def _extract_pain_score(raw: Any) -> Optional[int]:
+    """
+    Pain field in symptom rows is a free-form string ('3', 'ปวดมาก', '').
+    For trend charts we only plot numeric values; everything else returns
+    None so the chart simply skips the point.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s == "-":
+        return None
+    # Allow either "3" or "3/10"
+    head = s.split("/", 1)[0].strip()
+    try:
+        n = int(float(head))
+    except (TypeError, ValueError):
+        return None
+    if n < 0 or n > 10:
+        return None
+    return n
+
+
+def get_patient_trend(
+    user_id: str,
+    days: int = 30,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    """
+    Build chart-ready time-series data for one patient.
+
+    Returns three parallel series the dashboard will plot together:
+
+    - ``risk_series``:  ``[{ts_iso, value (0-10), level}]`` from SymptomLog
+    - ``pain_series``:  ``[{ts_iso, value (0-10)}]`` derived from
+      ``symptoms.pain`` (only rows where pain is numeric; non-numeric
+      free text is skipped — see ``_extract_pain_score``)
+    - ``wound_series``: ``[{ts_iso, value (1-3), level, confidence}]``
+      from WoundAnalysisLog, with severity mapped low→1, medium→2, high→3
+
+    Plus a ``summary`` block with quick aggregates that show as KPIs
+    above the chart (max risk in window, average risk, etc.).
+
+    Caching: re-uses the same TTL cache as ``get_patient_timeline`` so a
+    nurse loading the patient page only pays one Sheets round-trip even
+    though both readers run.
+    """
+    if not user_id:
+        return _empty_trend(user_id, days)
+
+    key = ("trend", user_id, days)
+    if not force_refresh:
+        cached = ttl_cache.get(key)
+        if cached is not None:
+            incr("dashboard.trend.cache_hit")
+            return cached
+    incr("dashboard.trend.cache_miss")
+
+    symptoms = _load_patient_symptoms(user_id, days)
+    wounds = _load_patient_wounds(user_id, days)
+
+    risk_series: list[dict[str, Any]] = []
+    pain_series: list[dict[str, Any]] = []
+    for s in symptoms:
+        ts = s.get("timestamp")
+        if not ts:
+            continue
+        ts_iso = ts.isoformat()
+        risk_score = int(s.get("risk_score") or 0)
+        risk_series.append({
+            "ts_iso": ts_iso,
+            "value": risk_score,
+            "level": (s.get("risk_level") or "").lower(),
+        })
+        pain_val = _extract_pain_score(s.get("pain"))
+        if pain_val is not None:
+            pain_series.append({"ts_iso": ts_iso, "value": pain_val})
+
+    wound_series: list[dict[str, Any]] = []
+    for w in wounds:
+        ts = w.get("timestamp")
+        if not ts:
+            continue
+        sev = (w.get("severity") or "").lower()
+        score = _WOUND_SEVERITY_SCORE.get(sev)
+        if score is None:
+            continue
+        wound_series.append({
+            "ts_iso": ts.isoformat(),
+            "value": score,
+            "level": sev,
+            "confidence": float(w.get("confidence") or 0.0),
+        })
+
+    # Sort oldest-first so chart x-axis flows left-to-right naturally.
+    risk_series.sort(key=lambda p: p["ts_iso"])
+    pain_series.sort(key=lambda p: p["ts_iso"])
+    wound_series.sort(key=lambda p: p["ts_iso"])
+
+    risk_values = [p["value"] for p in risk_series if p["value"] > 0]
+    pain_values = [p["value"] for p in pain_series]
+    summary = {
+        "risk_max": max(risk_values) if risk_values else 0,
+        "risk_avg": round(sum(risk_values) / len(risk_values), 1) if risk_values else 0.0,
+        "pain_max": max(pain_values) if pain_values else 0,
+        "wound_high_count": sum(1 for p in wound_series if p["level"] == "high"),
+        "wound_total": len(wound_series),
+        "data_points": len(risk_series) + len(wound_series),
+    }
+
+    result = {
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "days": days,
+        "risk_series": risk_series,
+        "pain_series": pain_series,
+        "wound_series": wound_series,
+        "summary": summary,
+    }
+    ttl_cache.set(key, result, 30)
+    return result
+
+
+def _empty_trend(user_id: str, days: int) -> dict[str, Any]:
+    return {
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "days": days,
+        "risk_series": [],
+        "pain_series": [],
+        "wound_series": [],
+        "summary": {
+            "risk_max": 0, "risk_avg": 0.0, "pain_max": 0,
+            "wound_high_count": 0, "wound_total": 0, "data_points": 0,
+        },
+    }
+
+
 # Display labels for canonical topic keys (Quick-win D3-A).
 _EDUCATION_TOPIC_LABELS = {
     "wound_care": "การดูแลแผล",
