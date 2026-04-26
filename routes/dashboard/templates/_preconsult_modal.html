@@ -1,0 +1,172 @@
+{# Fragment: modal สรุปก่อนรับเคส teleconsult (Sprint 2 S2-1).
+   ถูก swap เข้า #preconsult-modal ใน _layout.html ผ่าน hx-get จากปุ่ม "ดูสรุป"
+   ในตารางคิว. ปิด modal โดย hx-get ไปที่ endpoint คืน empty (หรือ JS เรียก
+   document.getElementById('preconsult-modal').innerHTML = '' ก็ได้). #}
+{% if packet %}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+     onclick="if (event.target === this) this.remove()">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+         role="dialog" aria-modal="true" aria-labelledby="preconsult-title">
+
+        {# Header #}
+        <div class="flex items-start justify-between p-5 border-b">
+            <div>
+                <h2 id="preconsult-title" class="text-lg font-semibold text-gray-800">
+                    📋 สรุปก่อนรับเคส
+                </h2>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    คิว <span class="font-mono">{{ packet.queue_id }}</span>
+                    · เข้าคิว {{ packet.queued_at }}
+                    · รอมา <strong>{{ packet.waited_minutes }}</strong> นาที
+                </p>
+            </div>
+            <button type="button"
+                    class="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                    onclick="this.closest('.fixed').remove()"
+                    aria-label="ปิด">×</button>
+        </div>
+
+        {# Patient summary block #}
+        <div class="p-5 space-y-4">
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                    <div class="text-xs text-gray-500">ผู้ป่วย</div>
+                    <a href="{{ url_for('dashboard.patient_view', user_id=packet.user_id) }}"
+                       class="font-mono text-blue-600 hover:underline">{{ packet.user_id_short }}</a>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">ประเภทเคส</div>
+                    <div class="font-medium text-gray-800">{{ packet.issue_label }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">ความเร่งด่วน</div>
+                    <div>
+                        {% if packet.priority == 1 %}
+                            <span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-semibold">{{ packet.priority_label }}</span>
+                        {% elif packet.priority == 2 %}
+                            <span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">{{ packet.priority_label }}</span>
+                        {% else %}
+                            <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">{{ packet.priority_label }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-500">Risk ล่าสุด</div>
+                    <div class="font-medium
+                                {% if packet.latest_risk_level == 'high' %}text-red-600
+                                {% elif packet.latest_risk_level == 'medium' %}text-amber-600
+                                {% else %}text-gray-600{% endif %}">
+                        {{ packet.latest_risk_level or '—' }}
+                    </div>
+                </div>
+            </div>
+
+            {# Description ที่ผู้ป่วยพิมพ์ตอน contact #}
+            {% if packet.description %}
+            <div class="bg-blue-50 rounded p-3 text-sm text-gray-700 border border-blue-100">
+                <div class="text-xs text-blue-700 font-semibold mb-1">💬 ผู้ป่วยอธิบาย</div>
+                {{ packet.description }}
+            </div>
+            {% endif %}
+
+            {# Briefing (rule-based / LLM) #}
+            {% if packet.briefing %}
+            <div class="bg-emerald-50 rounded p-3 border border-emerald-100">
+                <div class="text-xs text-emerald-700 font-semibold mb-1">🩺 Pre-consult briefing</div>
+                <pre class="text-sm text-gray-800 whitespace-pre-wrap font-sans">{{ packet.briefing }}</pre>
+            </div>
+            {% endif %}
+
+            {# Risk profile #}
+            {% if packet.risk_profile %}
+            <div class="border rounded p-3">
+                <div class="text-xs text-gray-500 font-semibold mb-2">📊 Risk profile</div>
+                <div class="grid grid-cols-3 gap-2 text-sm">
+                    <div><span class="text-gray-500">อายุ:</span> {{ packet.risk_profile.age or '-' }}</div>
+                    <div><span class="text-gray-500">เพศ:</span> {{ packet.risk_profile.sex or '-' }}</div>
+                    <div><span class="text-gray-500">BMI:</span> {{ packet.risk_profile.bmi or '-' }}</div>
+                </div>
+                {% if packet.risk_profile.diseases %}
+                    <div class="text-xs text-gray-600 mt-1">
+                        <span class="text-gray-500">โรคประจำตัว:</span> {{ packet.risk_profile.diseases }}
+                    </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# Recent timeline (5 events) #}
+            {% if packet.recent_events %}
+            <div class="border rounded p-3">
+                <div class="text-xs text-gray-500 font-semibold mb-2">
+                    📅 ประวัติล่าสุด ({{ packet.symptom_count }} symptoms · {{ packet.session_count }} sessions)
+                </div>
+                <ul class="space-y-1.5 text-sm">{% for ev in packet.recent_events %}
+                    <li class="flex items-start gap-2">
+                        <span class="text-xs text-gray-400 font-mono whitespace-nowrap">{{ ev.timestamp_label }}</span>
+                        {% if ev.type == 'symptom' %}
+                            <span class="text-gray-700">
+                                อาการ
+                                {% if ev.risk_level == 'high' %}<span class="text-red-600 font-semibold">[HIGH]</span>
+                                {% elif ev.risk_level == 'medium' %}<span class="text-amber-600">[MED]</span>{% endif %}
+                                · ปวด {{ ev.pain }} · ไข้ {{ ev.fever }}
+                            </span>
+                        {% else %}
+                            <span class="text-gray-700">
+                                ปรึกษา {{ ev.issue_type }} · {{ ev.status }}
+                            </span>
+                        {% endif %}
+                    </li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {# Pending reminders #}
+            {% if packet.pending_reminders %}
+            <div class="border rounded p-3">
+                <div class="text-xs text-gray-500 font-semibold mb-2">
+                    ⏰ Reminder ที่ยังรอตอบ ({{ packet.pending_reminders|length }})
+                </div>
+                <ul class="space-y-1 text-sm text-gray-700">{% for r in packet.pending_reminders %}
+                    <li>{{ r.reminder_type or '-' }} · กำหนด {{ r.scheduled_for or '-' }}</li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Footer actions #}
+        <div class="flex items-center justify-end gap-2 p-4 border-t bg-gray-50 rounded-b-xl">
+            <button type="button"
+                    class="px-3 py-1.5 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    onclick="this.closest('.fixed').remove()">
+                ปิด
+            </button>
+            {% if csrf_token %}
+            <form method="POST"
+                  action="{{ url_for('dashboard.queue_assign', queue_id=packet.queue_id) }}"
+                  class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="next" value="{{ url_for('dashboard.queue_view') }}">
+                <button type="submit"
+                        class="px-3 py-1.5 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+                    รับคิวนี้
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+     onclick="if (event.target === this) this.remove()">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-center">
+        <div class="text-4xl mb-2">🔍</div>
+        <p class="text-gray-700 font-medium">ไม่พบข้อมูลคิวนี้</p>
+        <p class="text-sm text-gray-500 mt-1">อาจถูกพยาบาลคนอื่นรับไปแล้ว หรือถูกยกเลิก</p>
+        <button type="button"
+                class="mt-4 px-4 py-1.5 text-sm rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                onclick="this.closest('.fixed').remove()">
+            ปิด
+        </button>
+    </div>
+</div>
+{% endif %}

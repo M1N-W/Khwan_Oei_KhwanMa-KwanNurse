@@ -34,6 +34,7 @@ from services.dashboard_actions import (
 from services.dashboard_readers import (
     get_home_stats,
     get_patient_timeline,
+    get_preconsult_packet,
     get_queue_snapshot,
     get_recent_alerts,
 )
@@ -136,6 +137,35 @@ def bell_partial():
         count=total,
         queue_high=stats.get("queue_high_priority", 0),
         alerts_today=stats.get("alerts_today", 0),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Pre-consult preview (S2-1) — HTMX modal partial
+# -----------------------------------------------------------------------------
+@dashboard_bp.route("/queue/<queue_id>/preview", methods=["GET"])
+@require_nurse_auth
+def queue_preview(queue_id: str):
+    """
+    HTMX partial: รวบรวม context ของผู้ป่วยใน queue 1 รายการ
+    (อาการล่าสุด, risk profile, reminders, briefing) ให้พยาบาลเห็นก่อนรับเคส.
+
+    การเรียกใช้: ปุ่ม "ดูสรุป" ใน ``_queue_table.html`` ส่ง ``hx-get`` มาที่นี่
+    แล้ว swap ผลลัพธ์เข้า ``#preconsult-modal`` ใน ``_layout.html``.
+    """
+    if not queue_id or len(queue_id) > 64:
+        abort(404)
+    packet = get_preconsult_packet(queue_id)
+    # คืน 200 ทุกกรณีเพื่อให้ HTMX render ข้อความ "ไม่พบ" ได้ — ไม่ต้องการให้
+    # client retry หรือแสดง error toast.
+    logger.info(
+        "preconsult preview nurse=%s queue_id=%s found=%s",
+        current_nurse(), queue_id, packet is not None,
+    )
+    return render_template(
+        "_preconsult_modal.html",
+        packet=packet,
+        csrf_token=get_csrf_token(),
     )
 
 

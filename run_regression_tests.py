@@ -21,6 +21,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_dashboard_actions.py", "-v"],
     [sys.executable, "-m", "unittest", "test_dashboard_auth.py", "-v"],
     [sys.executable, "-m", "unittest", "test_dashboard_polish.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_preconsult_summary.py", "-v"],
 ]
 
 

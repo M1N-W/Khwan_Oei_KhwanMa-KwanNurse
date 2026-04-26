@@ -42,10 +42,12 @@ logger = get_logger(__name__)
 CACHE_KEY_QUEUE = "dash:queue:v1"
 CACHE_KEY_STATS = "dash:stats:v1"
 CACHE_KEY_ALERTS_PREFIX = "dash:alerts:v1"
+CACHE_KEY_PRECONSULT_PREFIX = "dash:preconsult:v1"
 
 TTL_QUEUE_SECONDS = 10
 TTL_ALERTS_SECONDS = 30
 TTL_STATS_SECONDS = 15
+TTL_PRECONSULT_SECONDS = 30
 
 
 # -----------------------------------------------------------------------------
@@ -427,7 +429,7 @@ def _load_patient_sessions(user_id: str, limit: int = 50) -> list[dict[str, Any]
 
 def invalidate_dashboard_cache() -> int:
     """
-    ลบ cache ของ dashboard views (queue/alerts/stats/patient) เรียกหลังเขียนข้อมูล.
+    ลบ cache ของ dashboard views (queue/alerts/stats/patient/preconsult) เรียกหลังเขียนข้อมูล.
 
     **สำคัญ:** ไม่ลบ ``dash:dismissed:*`` (state การ dismiss alert) เพราะต้องการ
     ให้อยู่ครบ 24 ชั่วโมงแม้มีการ write action อื่นเข้ามา. เดิมเรา invalidate
@@ -437,7 +439,13 @@ def invalidate_dashboard_cache() -> int:
         int: จำนวน cache entry ที่ถูกลบรวมจากทุก prefix ที่ invalidate.
     """
     total = 0
-    for prefix in ("dash:queue:", "dash:alerts:", "dash:stats:", "dash:patient:"):
+    for prefix in (
+        "dash:queue:",
+        "dash:alerts:",
+        "dash:stats:",
+        "dash:patient:",
+        "dash:preconsult:",
+    ):
         total += ttl_cache.invalidate_prefix(prefix)
     logger.info("Invalidated %d dashboard cache entries", total)
     return total
@@ -579,3 +587,195 @@ def _load_alerts_from_sheets(
     except Exception:
         logger.exception("Error loading alerts from Sheets")
         return []
+
+
+# -----------------------------------------------------------------------------
+# Pre-consult packet (S2-1)
+# -----------------------------------------------------------------------------
+def _issue_label(issue_type: str) -> str:
+    """แปลง issue_type code → ชื่อภาษาไทย โดยอิงจาก ``ISSUE_CATEGORIES``."""
+    try:
+        from config import ISSUE_CATEGORIES
+        return ISSUE_CATEGORIES.get(issue_type, {}).get("name_th", issue_type or "อื่น ๆ")
+    except Exception:
+        return issue_type or "อื่น ๆ"
+
+
+def _find_queue_row(queue_id: str) -> Optional[dict[str, Any]]:
+    """
+    หา queue row จาก ``queue_id`` — ใช้ cached snapshot ก่อนลด round trip.
+    คืน dict (ตามรูปของ ``QueueItem.to_dict``) หรือ None ถ้าไม่เจอ.
+    """
+    if not queue_id:
+        return None
+    snapshot = get_queue_snapshot(limit=500)
+    for item in snapshot:
+        if item.get("queue_id") == queue_id:
+            return item
+    return None
+
+
+def _load_session_description(session_id: str) -> str:
+    """อ่าน Description ของ session (ผู้ป่วยพิมพ์ตอน contact-nurse)."""
+    if not session_id:
+        return ""
+    try:
+        from config import SHEET_TELECONSULT_SESSIONS
+        from database.sheets import get_worksheet
+    except ImportError:
+        return ""
+    try:
+        sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
+        if not sheet:
+            return ""
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return ""
+        headers = values[0]
+        idx_sid = headers.index("Session_ID") if "Session_ID" in headers else 0
+        idx_desc = headers.index("Description") if "Description" in headers else 6
+        for row in values[1:]:
+            if len(row) > idx_sid and row[idx_sid] == session_id:
+                return row[idx_desc] if len(row) > idx_desc else ""
+        return ""
+    except Exception:
+        logger.exception("Error loading session description session_id=%s", session_id)
+        return ""
+
+
+def _load_pending_reminders_safe(user_id: str) -> list[dict[str, Any]]:
+    """ดึง pending reminders ของ user — never raise."""
+    try:
+        from database.reminders import get_pending_reminders
+    except ImportError:
+        return []
+    try:
+        rows = get_pending_reminders(user_id, None) or []
+    except Exception:
+        logger.exception("Error loading pending reminders user_id=%s", user_id)
+        return []
+    out: list[dict[str, Any]] = []
+    for r in rows[:5]:  # เอา 5 รายการพอ — modal ไม่ต้องการเยอะ
+        out.append({
+            "reminder_type": r.get("Reminder_Type") or r.get("reminder_type") or "",
+            "scheduled_for": r.get("Scheduled_For") or r.get("scheduled_for") or "",
+            "status": r.get("Status") or r.get("status") or "",
+        })
+    return out
+
+
+def _load_latest_risk_profile(user_id: str) -> Optional[dict[str, Any]]:
+    """อ่าน RiskProfile ล่าสุดของ user — never raise. คืน None ถ้าไม่มี."""
+    if not user_id:
+        return None
+    try:
+        from config import SHEET_RISK_PROFILE
+        from database.sheets import get_worksheet
+    except ImportError:
+        return None
+    try:
+        sheet = get_worksheet(SHEET_RISK_PROFILE)
+        if not sheet:
+            return None
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return None
+        headers = values[0]
+        # หา row ล่าสุดของ user_id (สแกนจากท้าย)
+        idx_uid = headers.index("User_ID") if "User_ID" in headers else 1
+        for row in reversed(values[1:]):
+            if len(row) > idx_uid and row[idx_uid] == user_id:
+                record = dict(zip(headers, row + [""] * (len(headers) - len(row))))
+                return {
+                    "age": record.get("Age", ""),
+                    "sex": record.get("Sex", ""),
+                    "bmi": record.get("BMI", ""),
+                    "diseases": record.get("Diseases", ""),
+                    "risk_level": record.get("Risk_Level", ""),
+                    "timestamp": record.get("Timestamp", ""),
+                }
+        return None
+    except Exception:
+        logger.exception("Error loading risk profile user_id=%s", user_id)
+        return None
+
+
+def _build_briefing_safe(user_id: str, issue_type: str, description: str) -> str:
+    """ห่อ ``build_pre_consult_briefing`` ไม่ให้โยน exception ขึ้นมาทำลาย packet."""
+    try:
+        from services.presession import build_pre_consult_briefing
+        return build_pre_consult_briefing(user_id, issue_type, description) or ""
+    except Exception:
+        logger.exception("Error building pre-consult briefing user_id=%s", user_id)
+        return ""
+
+
+def get_preconsult_packet(
+    queue_id: str,
+    *,
+    force_refresh: bool = False,
+) -> Optional[dict[str, Any]]:
+    """
+    รวบรวม context ของผู้ป่วยใน queue 1 รายการเป็น packet ให้พยาบาล "ดูสรุป"
+    ก่อนรับเคส teleconsult.
+
+    Packet ประกอบด้วย:
+    - **Queue context**: queue_id, issue_type/label, priority, queued_at, รอมา
+    - **Patient identifier**: user_id (เต็มและย่อ)
+    - **Description**: ที่ผู้ป่วยพิมพ์ตอน ContactNurse (truncate 500 chars)
+    - **Recent timeline**: 5 events ล่าสุด (symptom + session) จาก ``get_patient_timeline``
+    - **Latest risk profile**: age/sex/BMI/diseases/risk_level
+    - **Pending reminders**: 5 รายการที่ยัง pending
+    - **Briefing**: rule-based summary + 2-3 คำถามที่ควรถาม (LLM ถ้าเปิด)
+
+    คืน ``None`` ถ้าหา queue row ไม่เจอ (queue ถูกรับแล้วหรือ id ผิด).
+    """
+    if not queue_id:
+        return None
+
+    cache_key = f"{CACHE_KEY_PRECONSULT_PREFIX}:{queue_id}"
+    if not force_refresh:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            incr("dashboard.cache_hit.preconsult")
+            return cached
+
+    incr("dashboard.cache_miss.preconsult")
+
+    queue_row = _find_queue_row(queue_id)
+    if not queue_row:
+        return None
+
+    user_id = queue_row.get("user_id") or ""
+    session_id = queue_row.get("session_id") or ""
+    issue_type = queue_row.get("issue_type") or ""
+
+    description = _load_session_description(session_id)
+    timeline = get_patient_timeline(user_id, days=14) if user_id else _empty_timeline("")
+    pending = _load_pending_reminders_safe(user_id)
+    risk_profile = _load_latest_risk_profile(user_id)
+    briefing = _build_briefing_safe(user_id, issue_type, description)
+
+    packet = {
+        "queue_id": queue_id,
+        "session_id": session_id,
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "issue_type": issue_type,
+        "issue_label": _issue_label(issue_type),
+        "priority": queue_row.get("priority", 3),
+        "priority_label": queue_row.get("priority_label", ""),
+        "queued_at": queue_row.get("queued_at_full", ""),
+        "waited_minutes": queue_row.get("waited_minutes", 0),
+        "description": (description or "")[:500],
+        "latest_risk_level": timeline.get("latest_risk_level", ""),
+        "symptom_count": timeline.get("symptom_count", 0),
+        "session_count": timeline.get("session_count", 0),
+        "recent_events": (timeline.get("events") or [])[:5],
+        "pending_reminders": pending,
+        "risk_profile": risk_profile,
+        "briefing": briefing,
+    }
+
+    ttl_cache.set(cache_key, packet, TTL_PRECONSULT_SECONDS)
+    return packet
