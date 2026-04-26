@@ -28,6 +28,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_hotfix_logsec_and_choice.py", "-v"],
     [sys.executable, "-m", "unittest", "test_quickwins_d3.py", "-v"],
     [sys.executable, "-m", "unittest", "test_phase4_observability.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_phase4_security.py", "-v"],
 ]
 
 
