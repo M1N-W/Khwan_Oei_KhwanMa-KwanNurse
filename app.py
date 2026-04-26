@@ -68,6 +68,11 @@ def create_app():
     config_status = validate_runtime_config()
     flask_app.config['RUNTIME_CONFIG'] = config_status
 
+    # Phase 4 P4-2: structured logging + request correlation IDs
+    from services.observability import configure_logging, register_request_id_middleware
+    configure_logging()
+    register_request_id_middleware(flask_app)
+
     # Register all routes
     register_routes(flask_app)
 
