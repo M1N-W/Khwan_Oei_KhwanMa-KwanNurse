@@ -14,6 +14,7 @@ Design:
   window to protect webhook latency.
 - Daily call counter: soft cap, in-memory, resets on calendar day boundary.
 """
+import base64
 import json
 import threading
 import time
@@ -32,6 +33,9 @@ from config import (
     LLM_DAILY_CALL_LIMIT,
     LLM_CIRCUIT_FAILURE_THRESHOLD,
     LLM_CIRCUIT_COOLDOWN_SECONDS,
+    LLM_VISION_DAILY_CAP,
+    LLM_VISION_MODEL,
+    LLM_VISION_TIMEOUT_SECONDS,
     get_logger,
 )
 from utils.pii import scrub_pii
@@ -48,6 +52,9 @@ _state = {
     "circuit_open_until": 0.0,   # epoch seconds
     "call_date": date.today(),
     "calls_today": 0,
+    # Vision-specific counter (S2-2). Shares the circuit breaker but has its
+    # own daily quota because image calls are 5-10x costlier than text.
+    "vision_calls_today": 0,
 }
 
 
@@ -71,6 +78,7 @@ def _reset_daily_counter_if_needed():
     if _state["call_date"] != today:
         _state["call_date"] = today
         _state["calls_today"] = 0
+        _state["vision_calls_today"] = 0
 
 
 def _circuit_open():
@@ -101,6 +109,16 @@ def _try_consume_daily_quota():
         if _state["calls_today"] >= LLM_DAILY_CALL_LIMIT:
             return False
         _state["calls_today"] += 1
+        return True
+
+
+def _try_consume_vision_quota():
+    """Vision daily quota — separate counter from text completions."""
+    with _state_lock:
+        _reset_daily_counter_if_needed()
+        if _state["vision_calls_today"] >= LLM_VISION_DAILY_CAP:
+            return False
+        _state["vision_calls_today"] += 1
         return True
 
 
@@ -234,6 +252,138 @@ def complete_json(system, user, max_tokens=None):
         return None
 
 
+# ---------------------------------------------------------------------------
+# Vision (Gemini multimodal) — Sprint 2 S2-2
+# ---------------------------------------------------------------------------
+def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens):
+    """
+    Low-level Gemini Vision REST call (multimodal: text + inline image).
+    Returns text response or raises.
+    """
+    model = LLM_VISION_MODEL or _resolve_model()
+    url = f"{GEMINI_API_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+
+    parts = []
+    if system:
+        parts.append({"text": f"[SYSTEM INSTRUCTIONS]\n{system}\n\n"})
+    if user_text:
+        parts.append({"text": user_text})
+
+    image_b64 = base64.b64encode(image_bytes).decode("ascii")
+    parts.append({
+        "inlineData": {
+            "mimeType": mime_type or "image/jpeg",
+            "data": image_b64,
+        }
+    })
+
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+        },
+    }
+
+    resp = requests.post(
+        url,
+        json=payload,
+        timeout=LLM_VISION_TIMEOUT_SECONDS,
+        headers={"Content-Type": "application/json"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError(f"Gemini vision returned no candidates: {data}")
+    content = candidates[0].get("content") or {}
+    parts_out = content.get("parts") or []
+    texts = [p.get("text", "") for p in parts_out if isinstance(p, dict)]
+    return "".join(texts).strip()
+
+
+def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", max_tokens=None):
+    """
+    Run a single multimodal LLM completion expected to return JSON.
+
+    Args:
+        system: system/instruction text (clinical guidance for the model)
+        user_text: short prompt accompanying the image
+        image_bytes: raw image bytes (jpeg/png from LINE Content API)
+        mime_type: MIME type of the image (default 'image/jpeg')
+        max_tokens: override LLM_MAX_OUTPUT_TOKENS
+
+    Returns:
+        dict / list parsed from response, or None if disabled / circuit-open /
+        quota-exhausted / request failed / response not valid JSON. Callers
+        must handle None with a rule-based fallback message.
+    """
+    if not is_enabled() or not image_bytes:
+        return None
+
+    if _circuit_open():
+        logger.info("LLM vision skip: circuit open")
+        _metric("llm.vision_skip_circuit_open")
+        return None
+
+    if not _try_consume_vision_quota():
+        logger.warning("LLM vision skip: daily quota exhausted (%d)", LLM_VISION_DAILY_CAP)
+        _metric("llm.vision_skip_quota")
+        return None
+
+    # Note: image bytes are NOT PII-scrubbed (no text), but `system` and
+    # `user_text` go through scrub_pii like the text path.
+    scrubbed_system = scrub_pii(system) if system else None
+    scrubbed_user = scrub_pii(user_text) if user_text else ""
+    tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+
+    start = time.time()
+    try:
+        if LLM_PROVIDER == "gemini":
+            raw = _call_gemini_vision(scrubbed_system, scrubbed_user, image_bytes, mime_type, tokens)
+        else:
+            return None
+        elapsed_ms = int((time.time() - start) * 1000)
+        logger.info(
+            "LLM vision ok provider=%s elapsed=%dms image_kb=%d chars=%d",
+            LLM_PROVIDER, elapsed_ms, len(image_bytes) // 1024, len(raw),
+        )
+        _register_success()
+        _metric("llm.vision_call_success")
+    except requests.exceptions.Timeout:
+        logger.warning("LLM vision timeout after %.1fs", LLM_VISION_TIMEOUT_SECONDS)
+        _register_failure()
+        _metric("llm.vision_call_timeout")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.warning("LLM vision network error: %s", e)
+        _register_failure()
+        _metric("llm.vision_call_network_error")
+        return None
+    except Exception:
+        logger.exception("LLM vision unexpected error")
+        _register_failure()
+        _metric("llm.vision_call_error")
+        return None
+
+    # Parse JSON (some providers wrap in fences despite responseMimeType hint)
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if "\n" in cleaned:
+            first_line, rest = cleaned.split("\n", 1)
+            if first_line.lower().strip() in ("json", ""):
+                cleaned = rest
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.warning("LLM vision JSON parse failed: %s | raw=%r", e, raw[:200])
+        _metric("llm.vision_call_parse_error")
+        return None
+
+
 # Debug-only introspection used by tests.
 def _get_state_snapshot():
     with _state_lock:
@@ -247,3 +397,4 @@ def _reset_state_for_tests():
         _state["circuit_open_until"] = 0.0
         _state["call_date"] = date.today()
         _state["calls_today"] = 0
+        _state["vision_calls_today"] = 0
