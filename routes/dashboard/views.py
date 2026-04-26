@@ -34,6 +34,7 @@ from services.dashboard_actions import (
 from services.dashboard_readers import (
     get_home_stats,
     get_patient_timeline,
+    get_patient_trend,
     get_preconsult_packet,
     get_queue_snapshot,
     get_recent_alerts,
@@ -181,11 +182,13 @@ def patient_view(user_id: str):
     if not user_id or len(user_id) > 64:
         abort(404)
     timeline = get_patient_timeline(user_id, days=days)
+    trend = get_patient_trend(user_id, days=days)
     return render_template(
         "patient.html",
         nurse=current_nurse(),
         csrf_token=get_csrf_token(),
         patient=timeline,
+        trend=trend,
         filter_days=days,
     )
 
