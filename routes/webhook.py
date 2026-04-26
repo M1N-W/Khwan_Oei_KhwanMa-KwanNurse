@@ -744,23 +744,22 @@ def handle_free_text_symptom(user_id, params, query_text):
 
 def handle_recommend_knowledge(user_id, params):
     """
-    Handle RecommendKnowledge intent (Phase 2-C).
+    Handle RecommendKnowledge intent (Phase 2-C, refined in S2-3).
 
     Returns a personalized list of knowledge guides ordered by relevance to
-    the patient's profile. Profile fields come from Dialogflow params:
-    age, sex, surgery_type, diseases.
+    the patient's profile. Profile is assembled by
+    ``services.patient_profile.get_or_build_profile`` which merges:
+
+    1. Override fields from current Dialogflow params (highest priority)
+    2. Stored sticky profile from ``PatientProfile`` sheet
+    3. Latest demographics from ``RiskProfile`` (age + diseases)
+
+    Newly discovered sticky fields (sex, surgery_type, surgery_date) are
+    persisted back so future calls don't need to re-ask.
     """
     try:
-        profile = {
-            'age': params.get('age'),
-            'sex': params.get('sex'),
-            'surgery_type': (
-                params.get('surgery_type')
-                or params.get('surgery')
-                or params.get('operation')
-            ),
-            'diseases': params.get('diseases') or params.get('disease'),
-        }
+        from services.patient_profile import get_or_build_profile
+        profile = get_or_build_profile(user_id, params)
         recommendations = recommend_guides(profile, top_n=3)
         message = format_recommendations_message(recommendations)
         if not message:
@@ -769,8 +768,9 @@ def handle_recommend_knowledge(user_id, params):
                 "เพื่อดูเมนูทั้งหมดค่ะ"
             )
         logger.info(
-            "RecommendKnowledge for %s: %s",
+            "RecommendKnowledge for %s: source=%s keys=%s",
             user_id,
+            profile.get("source"),
             [r.get('key') for r in recommendations],
         )
         return jsonify({"fulfillmentText": message}), 200
