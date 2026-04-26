@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}หน้าหลัก · KwanNurse Dashboard{% endblock %}
+
+{% block body %}
+<header class="bg-white shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">KwanNurse Dashboard</h1>
+            <p class="text-xs text-gray-500">พยาบาล: <span class="font-semibold">{{ nurse }}</span></p>
+        </div>
+        <form method="POST" action="{{ url_for('dashboard.logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit"
+                    class="text-sm text-gray-600 hover:text-red-600 transition">
+                ออกจากระบบ
+            </button>
+        </form>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-8">
+    <div class="bg-white rounded-2xl shadow-sm p-8 text-center">
+        <h2 class="text-lg font-semibold text-gray-800">หน้าหลัก (ชั่วคราว)</h2>
+        <p class="text-sm text-gray-500 mt-2">
+            Sprint S1-1 เสร็จแล้ว: ระบบ login ทำงาน.<br>
+            หน้า queue / alerts / patient timeline จะถูกพัฒนาใน Sprint S1-2 และ S1-3.
+        </p>
+    </div>
+</main>
+{% endblock %}

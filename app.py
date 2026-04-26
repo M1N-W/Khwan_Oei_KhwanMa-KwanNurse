@@ -45,12 +45,35 @@ def create_app():
     flask_app = Flask(__name__)
     flask_app.config['DEBUG'] = DEBUG
 
+    # Session secret key สำหรับ Nurse Dashboard (cookie signing).
+    # ต้องกำหนด ``NURSE_DASHBOARD_SESSION_KEY`` ใน env ก่อนเปิด dashboard จริง
+    # ถ้าไม่ได้ตั้งจะ fallback เป็นค่า random ต่อ process — หมายความว่า session
+    # พยาบาลจะหลุดทุกครั้งที่ Render restart (ยอมรับได้ใน Sprint 1 แต่ production
+    # ต้องตั้ง env ให้ชัด).
+    flask_app.secret_key = (
+        os.environ.get("NURSE_DASHBOARD_SESSION_KEY")
+        or os.urandom(32)
+    )
+    # Cookie security: กัน XSS (HttpOnly) + กัน CSRF ข้าม origin (SameSite)
+    # + ส่งเฉพาะ HTTPS เมื่อไม่ใช่ DEBUG
+    flask_app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=not DEBUG,
+        # permanent session อายุ = idle timeout ขั้นสูงสุด
+        PERMANENT_SESSION_LIFETIME=60 * 60 * 24,  # 24 ชั่วโมงเป็นเพดาน (idle check ภายใน)
+    )
+
     # Runtime config validation (non-fatal: log loudly, let health check reply 200)
     config_status = validate_runtime_config()
     flask_app.config['RUNTIME_CONFIG'] = config_status
 
     # Register all routes
     register_routes(flask_app)
+
+    # ลงทะเบียน Nurse Dashboard blueprint (feature-flagged ภายใน route ด้วย auth module)
+    from routes.dashboard import dashboard_bp
+    flask_app.register_blueprint(dashboard_bp)
 
     # Scheduler ownership is now explicit so multi-worker deployments can
     # disable it on non-owner processes with RUN_SCHEDULER=false.
