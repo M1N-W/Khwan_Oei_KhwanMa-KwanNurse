@@ -38,6 +38,7 @@ from services.teleconsult import (
 from services.nlp import analyze_free_text, format_triage_message
 from services.education import recommend_guides, format_recommendations_message
 from services.notification import send_line_push
+from services.metrics import incr
 from services.security import require_line_signature, require_dialogflow_token
 from database.education_logs import save_education_view
 from config import NURSE_GROUP_ID
@@ -137,45 +138,24 @@ def register_routes(app):
         else:
             logger.info("Intent: %s | User: %s | ParamKeys: %s",
                        intent, masked_user, list(params.keys()))
-        
-        # Route to appropriate handler
-        if intent == 'ReportSymptoms':
-            return handle_report_symptoms(user_id, params)
-        
-        elif intent == 'AssessPersonalRisk' or intent == 'AssessRisk':
-            return handle_assess_risk(user_id, params)
-        
-        elif intent == 'RequestAppointment':
-            return handle_request_appointment(user_id, params)
-        
-        elif intent == 'GetKnowledge':
-            return handle_get_knowledge(user_id, params, query_text)
-        
-        elif intent == 'GetFollowUpSummary':
-            return handle_get_followup_summary(user_id)
-        
-        elif intent == 'ContactNurse':
-            return handle_contact_nurse(user_id, params, query_text)
-        
-        elif intent == 'AfterHoursChoice':
-            # Bug #2 fix: รับคำตอบ 1/2 จากผู้ใช้หลังแสดงเมนูนอกเวลาทำการ
-            result = handle_after_hours_choice(user_id, query_text)
-            return jsonify({"fulfillmentText": result['message']}), 200
-        
-        elif intent == 'CancelConsultation':
-            return handle_cancel_consultation(user_id)
-        
-        elif intent == 'GetGroupID':
-            return handle_get_group_id()
 
-        elif intent == 'FreeTextSymptom':
-            return handle_free_text_symptom(user_id, params, query_text)
+        # P4-2: count every intent dispatch so /metrics surfaces traffic shape
+        # and error rate. Errors caught here = handler raised; individual
+        # handlers also have their own try/except for graceful user replies.
+        intent_for_metric = (intent or "unknown").replace(".", "_")[:64]
+        incr(f"webhook.intent.{intent_for_metric}")
 
-        elif intent == 'RecommendKnowledge':
-            return handle_recommend_knowledge(user_id, params)
-
-        else:
-            return handle_unknown_intent(intent)
+        try:
+            return _dispatch_intent(intent, user_id, params, query_text)
+        except Exception:
+            incr(f"webhook.error.{intent_for_metric}")
+            logger.exception(
+                "Unhandled exception in intent dispatch (intent=%s user=%s)",
+                intent, masked_user,
+            )
+            return jsonify({
+                "fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"
+            }), 200
 
     @app.route('/line/webhook', methods=['POST'])
     @require_line_signature
@@ -213,6 +193,40 @@ def register_routes(app):
             except Exception:
                 logger.exception("Error processing LINE event: %s", event.get("type"))
         return jsonify({"status": "ok", "events_received": len(events)}), 200
+
+
+def _dispatch_intent(intent, user_id, params, query_text):
+    """
+    Map a Dialogflow intent name to its handler. Extracted from the
+    ``/webhook`` route so we can wrap dispatch in a single try/except
+    + metric counter (P4-2).
+    """
+    if intent == 'ReportSymptoms':
+        return handle_report_symptoms(user_id, params)
+    elif intent == 'AssessPersonalRisk' or intent == 'AssessRisk':
+        return handle_assess_risk(user_id, params)
+    elif intent == 'RequestAppointment':
+        return handle_request_appointment(user_id, params)
+    elif intent == 'GetKnowledge':
+        return handle_get_knowledge(user_id, params, query_text)
+    elif intent == 'GetFollowUpSummary':
+        return handle_get_followup_summary(user_id)
+    elif intent == 'ContactNurse':
+        return handle_contact_nurse(user_id, params, query_text)
+    elif intent == 'AfterHoursChoice':
+        # Bug #2 fix: รับคำตอบ 1/2 จากผู้ใช้หลังแสดงเมนูนอกเวลาทำการ
+        result = handle_after_hours_choice(user_id, query_text)
+        return jsonify({"fulfillmentText": result['message']}), 200
+    elif intent == 'CancelConsultation':
+        return handle_cancel_consultation(user_id)
+    elif intent == 'GetGroupID':
+        return handle_get_group_id()
+    elif intent == 'FreeTextSymptom':
+        return handle_free_text_symptom(user_id, params, query_text)
+    elif intent == 'RecommendKnowledge':
+        return handle_recommend_knowledge(user_id, params)
+    else:
+        return handle_unknown_intent(intent)
 
 
 def handle_line_image_event(event):
