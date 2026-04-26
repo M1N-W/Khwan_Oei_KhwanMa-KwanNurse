@@ -43,6 +43,13 @@
                 <td class="py-2 pr-3 text-gray-500">{{ item.queued_at }}</td>
                 <td class="py-2 pr-3 text-right whitespace-nowrap">
                     {% if csrf_token %}
+                    <button type="button"
+                            class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                            hx-get="{{ url_for('dashboard.queue_preview', queue_id=item.queue_id) }}"
+                            hx-target="#preconsult-modal"
+                            hx-swap="innerHTML">
+                        ดูสรุป
+                    </button>
                     <form method="POST"
                           action="{{ url_for('dashboard.queue_assign', queue_id=item.queue_id) }}"
                           class="inline">

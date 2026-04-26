@@ -83,4 +83,8 @@
     {% endwith %}
     {% block main %}{% endblock %}
 </main>
+
+{# HTMX target สำหรับ pre-consult modal (S2-1). ปุ่ม "ดูสรุป" ใน queue table
+   จะ hx-swap modal partial เข้ามาในนี้. ปิด modal โดย JS ลบ child element ออก. #}
+<div id="preconsult-modal"></div>
 {% endblock %}
