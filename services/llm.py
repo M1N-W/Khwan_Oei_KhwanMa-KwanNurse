@@ -399,6 +399,132 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
         return None
 
 
+# ---------------------------------------------------------------------------
+# Audio transcription (Phase 5 P5-2)
+#
+# Gemini multimodal accepts inline audio bytes alongside a text prompt the
+# same way it accepts images. We use this to transcribe LINE voice messages
+# into Thai/English so the existing NLP triage pipeline (text → risk score)
+# can run unchanged. Reusing Gemini means no extra API key / provider —
+# just one more env-gated feature that shares the vision daily cap because
+# multimodal calls have similar cost tiers.
+#
+# Supported MIME types per Gemini docs: audio/wav, audio/mp3, audio/aiff,
+# audio/aac, audio/ogg, audio/flac. LINE actually sends m4a (audio/mp4)
+# which the API also accepts in practice; we pass it through.
+# ---------------------------------------------------------------------------
+_TRANSCRIBE_PROMPT = (
+    "You are a voice-to-text transcriber for a Thai healthcare chatbot. "
+    "Transcribe the audio VERBATIM in its original language (mostly Thai, "
+    "sometimes English). Do not translate, summarize, or add commentary. "
+    "Output ONLY the transcription as plain text — no quotes, no JSON, "
+    "no labels. If the audio is silent or unintelligible, output exactly: "
+    "[ไม่สามารถถอดความได้]"
+)
+
+
+def _call_gemini_audio(audio_bytes, mime_type, max_tokens):
+    """Low-level Gemini multimodal call for audio → text transcription."""
+    model = LLM_VISION_MODEL or _resolve_model()
+    url = f"{GEMINI_API_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+    parts = [
+        {"text": _TRANSCRIBE_PROMPT},
+        {"inlineData": {"mimeType": mime_type or "audio/mp4", "data": audio_b64}},
+    ]
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": 0.0,  # transcription should be deterministic
+        },
+    }
+
+    resp = requests.post(
+        url, json=payload,
+        timeout=LLM_VISION_TIMEOUT_SECONDS,
+        headers={"Content-Type": "application/json"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError(f"Gemini audio returned no candidates: {data}")
+    content = candidates[0].get("content") or {}
+    parts_out = content.get("parts") or []
+    texts = [p.get("text", "") for p in parts_out if isinstance(p, dict)]
+    return "".join(texts).strip()
+
+
+def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None):
+    """
+    Transcribe a voice message to text via Gemini multimodal.
+
+    Args:
+        audio_bytes: raw bytes from LINE Content API (typically m4a/aac).
+        mime_type: e.g. ``audio/mp4`` (LINE default), ``audio/aac``,
+            ``audio/wav``. Falls back to ``audio/mp4`` when unset.
+        max_tokens: upper bound on transcription length (token budget).
+
+    Returns:
+        Transcribed text string, or ``None`` if disabled / circuit-open /
+        quota-exhausted / API failure / empty bytes. Callers must handle
+        ``None`` with a graceful Thai fallback message.
+
+    Quota: shares the vision daily cap (``LLM_VISION_DAILY_CAP``) since
+    audio multimodal requests have similar pricing to vision requests.
+    """
+    if not is_enabled() or not audio_bytes:
+        return None
+
+    if _circuit_open():
+        logger.info("LLM audio skip: circuit open")
+        _metric("llm.audio_skip_circuit_open")
+        return None
+
+    if not _try_consume_vision_quota():
+        logger.warning(
+            "LLM audio skip: daily multimodal quota exhausted (%d)",
+            LLM_VISION_DAILY_CAP,
+        )
+        _metric("llm.audio_skip_quota")
+        return None
+
+    tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+
+    start = time.time()
+    try:
+        if LLM_PROVIDER == "gemini":
+            raw = _call_gemini_audio(audio_bytes, mime_type, tokens)
+        else:
+            return None
+        elapsed_ms = int((time.time() - start) * 1000)
+        logger.info(
+            "LLM audio ok provider=%s elapsed=%dms audio_kb=%d chars=%d",
+            LLM_PROVIDER, elapsed_ms, len(audio_bytes) // 1024, len(raw),
+        )
+        _register_success()
+        _metric("llm.audio_call_success")
+        return raw or None
+    except requests.exceptions.Timeout:
+        logger.warning("LLM audio timeout after %.1fs", LLM_VISION_TIMEOUT_SECONDS)
+        _register_failure()
+        _metric("llm.audio_call_timeout")
+        return None
+    except requests.exceptions.RequestException as e:
+        logger.warning("LLM audio network error: %s", _redact_api_key(e))
+        _register_failure()
+        _metric("llm.audio_call_network_error")
+        return None
+    except Exception:
+        logger.exception("LLM audio unexpected error")
+        _register_failure()
+        _metric("llm.audio_call_error")
+        return None
+
+
 # Debug-only introspection used by tests.
 def _get_state_snapshot():
     with _state_lock:

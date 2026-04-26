@@ -38,6 +38,7 @@ SHEET_TELECONSULT_QUEUE = "TeleconsultQueue"
 SHEET_WOUND_ANALYSIS_LOG = "WoundAnalysisLog"
 SHEET_PATIENT_PROFILE = "PatientProfile"
 SHEET_EDUCATION_LOG = "EducationLog"
+SHEET_VOICE_LOG = "VoiceMessageLog"  # Phase 5 P5-2 audit trail
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
