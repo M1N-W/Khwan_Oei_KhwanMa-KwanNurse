@@ -226,7 +226,9 @@ class PatientTimelineTests(unittest.TestCase):
                 return session_values
 
         with patch("database.sheets.get_recent_symptom_reports", return_value=symptoms), \
-             patch("database.sheets.get_worksheet", return_value=_SessionsSheet()):
+             patch("database.sheets.get_worksheet", return_value=_SessionsSheet()), \
+             patch("services.dashboard_readers._load_patient_wounds", return_value=[]), \
+             patch("services.dashboard_readers._load_patient_educations", return_value=[]):
             timeline = dashboard_readers.get_patient_timeline("U1", days=30, force_refresh=True)
 
         self.assertEqual(timeline["user_id"], "U1")

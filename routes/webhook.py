@@ -38,6 +38,7 @@ from services.teleconsult import (
 from services.nlp import analyze_free_text, format_triage_message
 from services.education import recommend_guides, format_recommendations_message
 from services.notification import send_line_push
+from database.education_logs import save_education_view
 from config import NURSE_GROUP_ID
 
 logger = get_logger(__name__)
@@ -146,7 +147,7 @@ def register_routes(app):
             return handle_request_appointment(user_id, params)
         
         elif intent == 'GetKnowledge':
-            return handle_get_knowledge(params, query_text)
+            return handle_get_knowledge(user_id, params, query_text)
         
         elif intent == 'GetFollowUpSummary':
             return handle_get_followup_summary(user_id)
@@ -435,6 +436,16 @@ def handle_request_appointment(user_id, params):
     return jsonify({"fulfillmentText": message}), 200
 
 
+# Reverse map: display_name -> canonical key (used for EducationLog audit).
+# Keep in sync with the values used in _KNOWLEDGE_TOPIC_MAP below.
+_TOPIC_DISPLAY_TO_KEY = {
+    'การดูแลแผล': 'wound_care',
+    'กายภาพบำบัด': 'physical_therapy',
+    'ป้องกันลิ่มเลือด': 'dvt_prevention',
+    'การรับประทานยา': 'medication',
+    'สัญญาณอันตราย': 'warning_signs',
+}
+
 # Map of topic keywords (Thai + English) → (display name, guide function).
 # Used by ``handle_get_knowledge`` for both Dialogflow-extracted ``topic``
 # parameters and as a substring fallback against ``query_text`` when the
@@ -505,7 +516,7 @@ def _resolve_knowledge_topic(text):
     return matches[0][1]
 
 
-def handle_get_knowledge(params, query_text=""):
+def handle_get_knowledge(user_id, params, query_text=""):
     """
     Handle GetKnowledge intent.
 
@@ -514,6 +525,10 @@ def handle_get_knowledge(params, query_text=""):
     the entity is missing or the agent failed to extract it, we fall back
     to scanning the raw ``query_text`` against the same keyword map. This
     keeps the bot useful even when Dialogflow training is incomplete.
+
+    Side-effect: every successful guide delivery is logged to ``EducationLog``
+    (Quick-win D3-A) so the nurse dashboard can show what topics the patient
+    has been reading. Failures are swallowed — audit must never break replies.
     """
     topic_param = params.get('topic') or params.get('knowledge_topic')
     topic_str = str(topic_param).strip() if topic_param else ""
@@ -537,6 +552,17 @@ def handle_get_knowledge(params, query_text=""):
             "Knowledge request: %s (param=%r query=%r)",
             topic_name, topic_str, query_text,
         )
+        # Audit: log topic view (best-effort, never raises)
+        try:
+            canonical = _TOPIC_DISPLAY_TO_KEY.get(topic_name, topic_name)
+            save_education_view(
+                user_id=user_id,
+                topic=canonical,
+                source="GetKnowledge",
+                personalized=False,
+            )
+        except Exception:
+            logger.exception("EducationLog write failed (non-fatal)")
         return jsonify({"fulfillmentText": guide_func()}), 200
 
     # Topic not found in either source
@@ -832,6 +858,20 @@ def handle_recommend_knowledge(user_id, params):
             profile.get("source"),
             [r.get('key') for r in recommendations],
         )
+        # Audit: log each recommendation (best-effort, never raises)
+        try:
+            for rec in recommendations:
+                key = rec.get('key')
+                if not key:
+                    continue
+                save_education_view(
+                    user_id=user_id,
+                    topic=key,
+                    source="RecommendKnowledge",
+                    personalized=True,
+                )
+        except Exception:
+            logger.exception("EducationLog write failed (non-fatal)")
         return jsonify({"fulfillmentText": message}), 200
 
     except Exception:
