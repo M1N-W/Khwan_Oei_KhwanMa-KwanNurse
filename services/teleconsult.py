@@ -350,21 +350,47 @@ def handle_after_hours(user_id, issue_type, description):
 
 def handle_after_hours_choice(user_id, choice_text):
     """
-    Process the user's answer (1 or 2) after receiving the after-hours menu.
+    Process the user's "1"/"2" reply after a teleconsult menu.
 
-    ADDED (Bug #2 fix): จัดการคำตอบของผู้ใช้ที่แจ้งนอกเวลาทำการ
-    - เลือก 1 → escalate เป็น emergency
-    - เลือก 2 → ยืนยันบันทึกและแจ้งพยาบาล
+    Two menus can produce digit replies:
+    1. **In-hours category menu** (5 options: 1=ฉุกเฉิน, 2=ถามเรื่องยา,
+       3=แผลผ่าตัด, 4=นัดหมาย/เอกสาร, 5=อื่นๆ).
+    2. **After-hours menu** (2 options: 1=ฉุกเฉิน, 2=ไม่เร่งด่วน).
+
+    Dialogflow's ``AfterHoursChoice`` intent matches both because its
+    training phrases include bare "1" and "2" without context filters.
+    Without further disambiguation we'd treat in-hours users as if they
+    had picked from the after-hours menu — see Bug #3 (2026-04-26):
+    user typed "1" at 15:54 (Sun, in-hours) and got an emergency session
+    with empty description even though the visible menu offered 5 categories.
+
+    Resolution: at handler entry, check ``is_office_hours()``. If we're
+    currently in-hours, route the digit through ``parse_category_choice``
+    + ``start_teleconsult`` instead of the after-hours flow.
 
     Args:
         user_id: Patient ID
-        choice_text: "1" or "2" (or Thai equivalent)
+        choice_text: "1"-"5" (or Thai equivalent)
 
     Returns:
         dict: Response with 'message' key
     """
     try:
         stripped = str(choice_text).strip()
+
+        # Bug #3 (2026-04-26) — in-hours users see the 5-item category menu;
+        # treat their "1"/"2" reply as a category pick, not after-hours emergency.
+        if is_office_hours():
+            category = parse_category_choice(stripped)
+            if category:
+                logger.info(
+                    "AfterHoursChoice during office hours — "
+                    "rerouting %r to category=%s for %s",
+                    stripped, category, user_id,
+                )
+                return start_teleconsult(user_id, category, '')
+            # Fall through: digit didn't match any category → use legacy
+            # branches below to show a clarifying menu.
 
         if stripped == "1" or "ฉุกเฉิน" in stripped:
             # Escalate — ดึง pending session แล้ว escalate
