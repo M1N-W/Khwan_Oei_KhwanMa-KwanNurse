@@ -158,31 +158,64 @@ def analyze_free_text(text):
 # ---------------------------------------------------------------------------
 # Message builder for webhook response
 # ---------------------------------------------------------------------------
-def format_triage_message(result):
-    """Build a patient-facing Thai message from an analyze_free_text() dict."""
+def format_triage_message(result, lang: str = "th"):
+    """
+    Build a patient-facing message from an ``analyze_free_text()`` dict.
+
+    Args:
+        result: triage dict with ``risk_level``, ``flags``, ``summary``.
+        lang: ``"th"`` (default) or ``"en"``. Phase 5 P5-3 adds an English
+            translation track so the bot can reply in EN when the patient
+            wrote in EN. Default stays Thai for backward compatibility.
+
+    Unknown languages fall back to Thai so we never deliver an empty
+    message.
+    """
     level = result.get("risk_level", "low")
     flags = result.get("flags") or []
     summary = result.get("summary") or ""
 
-    if level == "high":
-        header = "🚨 อาการเข้าเกณฑ์เสี่ยงสูง - ต้องปรึกษาพยาบาลทันทีค่ะ"
-    elif level == "medium":
-        header = "⚠️ อาการควรเฝ้าระวัง แนะนำปรึกษาพยาบาลค่ะ"
+    if lang == "en":
+        if level == "high":
+            header = "🚨 High-risk symptoms — please contact a nurse immediately."
+        elif level == "medium":
+            header = "⚠️ Symptoms warrant monitoring. Recommend nurse consultation."
+        else:
+            header = "🟢 No clear high-risk signals detected."
     else:
-        header = "🟢 อาการยังไม่มีสัญญาณเสี่ยงชัดเจนค่ะ"
+        if level == "high":
+            header = "🚨 อาการเข้าเกณฑ์เสี่ยงสูง - ต้องปรึกษาพยาบาลทันทีค่ะ"
+        elif level == "medium":
+            header = "⚠️ อาการควรเฝ้าระวัง แนะนำปรึกษาพยาบาลค่ะ"
+        else:
+            header = "🟢 อาการยังไม่มีสัญญาณเสี่ยงชัดเจนค่ะ"
 
     parts = [header]
     if summary:
-        parts.append(f"\n📋 สรุปอาการ: {summary}")
+        if lang == "en":
+            parts.append(f"\n📋 Summary: {summary}")
+        else:
+            parts.append(f"\n📋 สรุปอาการ: {summary}")
     if flags:
         pretty = ", ".join(flags)
-        parts.append(f"🔎 ที่พบ: {pretty}")
+        if lang == "en":
+            parts.append(f"🔎 Detected: {pretty}")
+        else:
+            parts.append(f"🔎 ที่พบ: {pretty}")
 
-    if level == "high":
-        parts.append("\n💡 พิมพ์ 'ปรึกษาพยาบาล' เพื่อเข้าคิว หรือ 1669 หากฉุกเฉิน")
-    elif level == "medium":
-        parts.append("\n💡 หากอาการแย่ลง พิมพ์ 'ปรึกษาพยาบาล' ได้เลยนะคะ")
+    if lang == "en":
+        if level == "high":
+            parts.append("\n💡 Type 'nurse' to join the queue, or call 1669 in an emergency.")
+        elif level == "medium":
+            parts.append("\n💡 If symptoms worsen, type 'nurse' to consult.")
+        else:
+            parts.append("\n💡 If unsure, type 'nurse' to consult.")
     else:
-        parts.append("\n💡 หากไม่แน่ใจ พิมพ์ 'ปรึกษาพยาบาล' ได้ค่ะ")
+        if level == "high":
+            parts.append("\n💡 พิมพ์ 'ปรึกษาพยาบาล' เพื่อเข้าคิว หรือ 1669 หากฉุกเฉิน")
+        elif level == "medium":
+            parts.append("\n💡 หากอาการแย่ลง พิมพ์ 'ปรึกษาพยาบาล' ได้เลยนะคะ")
+        else:
+            parts.append("\n💡 หากไม่แน่ใจ พิมพ์ 'ปรึกษาพยาบาล' ได้ค่ะ")
 
     return "\n".join(parts)

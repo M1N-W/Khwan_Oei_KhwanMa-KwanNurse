@@ -856,12 +856,19 @@ def handle_free_text_symptom(user_id, params, query_text):
             }), 200
 
         result = analyze_free_text(str(text))
+
+        # Phase 5 P5-3: detect language from the patient's own text so the
+        # reply matches their input language. No persistence — re-detected
+        # on every message.
+        from services.i18n import detect_language
+        lang = detect_language(str(text))
+
         logger.info(
-            "FreeTextSymptom triage: level=%s source=%s flags=%s",
-            result.get('risk_level'), result.get('source'), result.get('flags'),
+            "FreeTextSymptom triage: level=%s source=%s flags=%s lang=%s",
+            result.get('risk_level'), result.get('source'), result.get('flags'), lang,
         )
 
-        reply = format_triage_message(result)
+        reply = format_triage_message(result, lang=lang)
 
         # Escalate to nurse group on high risk. Keep this best-effort: retry
         # logic already lives inside send_line_push.
