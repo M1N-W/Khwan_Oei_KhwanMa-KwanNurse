@@ -35,6 +35,7 @@ from typing import Any, Optional
 
 from config import LOCAL_TZ, SHEET_EDUCATION_LOG, get_logger
 from database.sheets import get_spreadsheet, get_worksheet
+from database.retry import retry_sheet_op
 
 logger = get_logger(__name__)
 
@@ -103,7 +104,10 @@ def save_education_view(
             source or "",
             "true" if personalized else "false",
         ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="education_logs.append",
+        )
         logger.info(
             "education_logs: appended row user=%s topic=%s source=%s personalized=%s",
             user_id, topic, source, personalized,
