@@ -146,7 +146,7 @@ def register_routes(app):
             return handle_request_appointment(user_id, params)
         
         elif intent == 'GetKnowledge':
-            return handle_get_knowledge(params)
+            return handle_get_knowledge(params, query_text)
         
         elif intent == 'GetFollowUpSummary':
             return handle_get_followup_summary(user_id)
@@ -435,56 +435,115 @@ def handle_request_appointment(user_id, params):
     return jsonify({"fulfillmentText": message}), 200
 
 
-def handle_get_knowledge(params):
-    """Handle GetKnowledge intent"""
-    topic = params.get('topic') or params.get('knowledge_topic')
-    
-    # Map topics to guide functions
-    knowledge_map = {
-        'wound_care': ('การดูแลแผล', get_wound_care_guide),
-        'ดูแลแผล': ('การดูแลแผล', get_wound_care_guide),
-        'แผล': ('การดูแลแผล', get_wound_care_guide),
-        
-        'physical_therapy': ('กายภาพบำบัด', get_physical_therapy_guide),
-        'กายภาพบำบัด': ('กายภาพบำบัด', get_physical_therapy_guide),
-        'กายภาพ': ('กายภาพบำบัด', get_physical_therapy_guide),
-        'ออกกำลังกาย': ('กายภาพบำบัด', get_physical_therapy_guide),
-        
-        'dvt': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
-        'dvt_prevention': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
-        'ลิ่มเลือด': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
-        'ป้องกันลิ่มเลือด': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
-        
-        'medication': ('การรับประทานยา', get_medication_guide),
-        'ยา': ('การรับประทานยา', get_medication_guide),
-        'ทานยา': ('การรับประทานยา', get_medication_guide),
-        'รับประทานยา': ('การรับประทานยา', get_medication_guide),
-        
-        'warning_signs': ('สัญญาณอันตราย', get_warning_signs_guide),
-        'สัญญาณอันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
-        'อาการอันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
-        'อันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
-    }
-    
-    # If no topic or "menu", return menu
-    if not topic or str(topic).lower() in ['menu', 'เมนู', 'ความรู้', 'knowledge']:
+# Map of topic keywords (Thai + English) → (display name, guide function).
+# Used by ``handle_get_knowledge`` for both Dialogflow-extracted ``topic``
+# parameters and as a substring fallback against ``query_text`` when the
+# Dialogflow agent didn't annotate the ``KnowledgeTopic`` entity.
+_KNOWLEDGE_TOPIC_MAP = {
+    'wound_care': ('การดูแลแผล', get_wound_care_guide),
+    'ดูแลแผล': ('การดูแลแผล', get_wound_care_guide),
+    'การดูแลแผล': ('การดูแลแผล', get_wound_care_guide),
+    'แผล': ('การดูแลแผล', get_wound_care_guide),
+
+    'physical_therapy': ('กายภาพบำบัด', get_physical_therapy_guide),
+    'กายภาพบำบัด': ('กายภาพบำบัด', get_physical_therapy_guide),
+    'กายภาพ': ('กายภาพบำบัด', get_physical_therapy_guide),
+    'ออกกำลังกาย': ('กายภาพบำบัด', get_physical_therapy_guide),
+
+    'dvt': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
+    'dvt_prevention': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
+    'ลิ่มเลือด': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
+    'ป้องกันลิ่มเลือด': ('ป้องกันลิ่มเลือด', get_dvt_prevention_guide),
+
+    'medication': ('การรับประทานยา', get_medication_guide),
+    'ยา': ('การรับประทานยา', get_medication_guide),
+    'ทานยา': ('การรับประทานยา', get_medication_guide),
+    'รับประทานยา': ('การรับประทานยา', get_medication_guide),
+    'วิธีทานยา': ('การรับประทานยา', get_medication_guide),
+
+    'warning_signs': ('สัญญาณอันตราย', get_warning_signs_guide),
+    'สัญญาณอันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
+    'อาการอันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
+    'อันตราย': ('สัญญาณอันตราย', get_warning_signs_guide),
+    'เมื่อไหร่ต้องพบหมอ': ('สัญญาณอันตราย', get_warning_signs_guide),
+}
+
+# Words that mean "show me the menu" — bypass topic resolution.
+_KNOWLEDGE_MENU_TRIGGERS = {'menu', 'เมนู', 'ความรู้', 'knowledge'}
+
+
+def _resolve_knowledge_topic(text):
+    """
+    Find the best-matching knowledge topic for raw user text.
+
+    Strategy:
+    1. Exact match (case-insensitive) — fast path for Dialogflow-extracted
+       single-word topics.
+    2. Substring match — handles natural language like "อยากรู้เรื่องดูแลแผล".
+       Returns the *longest* matching key so e.g. "ป้องกันลิ่มเลือด" wins
+       over "ลิ่มเลือด" when the user typed the longer phrase.
+
+    Returns:
+        (topic_name, guide_func) tuple, or ``None`` if no match.
+    """
+    if not text:
+        return None
+    norm = str(text).lower().strip()
+    if not norm:
+        return None
+    # 1. Exact match
+    if norm in _KNOWLEDGE_TOPIC_MAP:
+        return _KNOWLEDGE_TOPIC_MAP[norm]
+    # 2. Substring — prefer longest key so multi-word phrases beat short ones
+    matches = [
+        (key, val) for key, val in _KNOWLEDGE_TOPIC_MAP.items()
+        if key in norm
+    ]
+    if not matches:
+        return None
+    matches.sort(key=lambda kv: -len(kv[0]))
+    return matches[0][1]
+
+
+def handle_get_knowledge(params, query_text=""):
+    """
+    Handle GetKnowledge intent.
+
+    Dialogflow ideally annotates the user's topic word as a ``topic`` /
+    ``knowledge_topic`` parameter via the ``KnowledgeTopic`` entity. When
+    the entity is missing or the agent failed to extract it, we fall back
+    to scanning the raw ``query_text`` against the same keyword map. This
+    keeps the bot useful even when Dialogflow training is incomplete.
+    """
+    topic_param = params.get('topic') or params.get('knowledge_topic')
+    topic_str = str(topic_param).strip() if topic_param else ""
+
+    # If user asked for the menu directly (or didn't ask for any topic),
+    # show the menu — but only if query_text *also* doesn't carry a topic.
+    if (not topic_str or topic_str.lower() in _KNOWLEDGE_MENU_TRIGGERS) and \
+       (not query_text or query_text.lower().strip() in _KNOWLEDGE_MENU_TRIGGERS):
         result = get_knowledge_menu()
         return jsonify({"fulfillmentText": result}), 200
-    
-    # Normalize topic
-    topic_key = str(topic).lower().strip()
-    
-    # Find matching guide
-    if topic_key in knowledge_map:
-        topic_name, guide_func = knowledge_map[topic_key]
-        logger.info("Knowledge request: %s", topic_name)
-        result = guide_func()
-        return jsonify({"fulfillmentText": result}), 200
-    
-    # Topic not found
+
+    # 1. Try Dialogflow-extracted topic first
+    resolved = _resolve_knowledge_topic(topic_str) if topic_str else None
+    # 2. Fallback to raw user text
+    if resolved is None and query_text:
+        resolved = _resolve_knowledge_topic(query_text)
+
+    if resolved:
+        topic_name, guide_func = resolved
+        logger.info(
+            "Knowledge request: %s (param=%r query=%r)",
+            topic_name, topic_str, query_text,
+        )
+        return jsonify({"fulfillmentText": guide_func()}), 200
+
+    # Topic not found in either source
+    shown = topic_str or query_text or ""
     return jsonify({
         "fulfillmentText": (
-            f"ขอโทษค่ะ ไม่พบหัวข้อ '{topic}'\n\n"
+            f"ขอโทษค่ะ ไม่พบหัวข้อ '{shown}'\n\n"
             f"กรุณาพิมพ์ 'ความรู้' เพื่อดูหัวข้อที่มีค่ะ"
         )
     }), 200

@@ -119,9 +119,9 @@ SCHEDULER_JOBSTORE = 'default'
 
 # Teleconsult Configuration
 OFFICE_HOURS = {
-    'start': '08:00',
-    'end': '18:00',
-    'weekdays': [0, 1, 2, 3, 4]  # Monday=0 to Friday=4
+    'start': '06:00',
+    'end': '22:00',
+    'weekdays': [0, 1, 2, 3, 4, 5, 6]  # Mon=0 ... Sun=6 — open every day
 }
 
 ISSUE_CATEGORIES = {

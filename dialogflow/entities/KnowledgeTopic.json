@@ -1,0 +1,9 @@
+{
+  "id": "9b4c1f2e-6a72-4d5b-8e1f-2c8a91b7e000",
+  "name": "KnowledgeTopic",
+  "isOverridable": true,
+  "isEnum": true,
+  "isRegexp": false,
+  "automatedExpansion": false,
+  "allowFuzzyExtraction": true
+}
