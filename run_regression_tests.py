@@ -23,6 +23,7 @@ TEST_COMMANDS = [
     [sys.executable, "-m", "unittest", "test_dashboard_polish.py", "-v"],
     [sys.executable, "-m", "unittest", "test_preconsult_summary.py", "-v"],
     [sys.executable, "-m", "unittest", "test_wound_analysis.py", "-v"],
+    [sys.executable, "-m", "unittest", "test_personalized_education.py", "-v"],
 ]
 
 

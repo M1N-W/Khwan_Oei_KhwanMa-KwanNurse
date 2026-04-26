@@ -36,6 +36,7 @@ SHEET_REMINDER_SCHEDULES = "ReminderSchedules"
 SHEET_TELECONSULT_SESSIONS = "TeleconsultSessions"
 SHEET_TELECONSULT_QUEUE = "TeleconsultQueue"
 SHEET_WOUND_ANALYSIS_LOG = "WoundAnalysisLog"
+SHEET_PATIENT_PROFILE = "PatientProfile"
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
