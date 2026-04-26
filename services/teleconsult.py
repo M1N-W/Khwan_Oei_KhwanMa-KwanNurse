@@ -325,7 +325,7 @@ def handle_after_hours(user_id, issue_type, description):
         message = (
             f"สวัสดีค่ะ 😊\n\n"
             f"⏰ ขณะนี้นอกเวลาทำการ (เวลา {current_time} น.)\n"
-            f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น. (จันทร์-ศุกร์)\n\n"
+            f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น. (ทุกวัน)\n\n"
             f"📌 คำถามของคุณสำคัญมากไหมคะ?\n\n"
             f"1. 🚨 ฉุกเฉิน (ติดต่อเจ้าหน้าที่เวร)\n"
             f"2. 📝 ไม่เร่งด่วน (บันทึกไว้ติดต่อพรุ่งนี้)\n\n"
