@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime, timedelta
 import atexit
+import signal
 
 from config import (
     LOCAL_TZ,
@@ -76,24 +77,57 @@ def init_scheduler():
             # Load and schedule pending reminders from database
             load_pending_reminders()
             
-            # Register shutdown handler
+            # P4-3: register graceful shutdown for both atexit (clean Python
+            # exit) and SIGTERM (Render sends this on every deploy). Without
+            # SIGTERM handling, in-flight reminder jobs were killed mid-write
+            # which could leave duplicate-reminder-on-restart edge cases.
             atexit.register(shutdown_scheduler)
-            
+            try:
+                signal.signal(signal.SIGTERM, _sigterm_handler)
+                logger.info("✅ Registered SIGTERM handler for graceful shutdown")
+            except (ValueError, OSError):
+                # signal.signal raises in non-main threads (e.g. some test
+                # runners). Fall back to atexit-only — still better than nothing.
+                logger.debug("Skipped SIGTERM handler (not on main thread)")
+
         else:
             logger.warning("Scheduler already running")
-            
+
     except Exception as e:
         logger.exception(f"Error initializing scheduler: {e}")
 
 
-def shutdown_scheduler():
+def _sigterm_handler(signum, frame):
     """
-    Gracefully shutdown the scheduler
+    SIGTERM handler that lets currently-running jobs finish before exiting.
+
+    Render's deploy/restart workflow:
+    1. Sends SIGTERM
+    2. Waits up to 30 seconds (default ``shutdownTimeoutSeconds``)
+    3. Sends SIGKILL if process is still running
+
+    We pass ``wait=True`` so APScheduler blocks new jobs and waits for any
+    currently-executing job to complete (e.g. a reminder push that's
+    mid-API-call). With most jobs finishing in <2s this is well within the
+    grace window.
+    """
+    logger.info("Received SIGTERM, shutting down scheduler gracefully...")
+    shutdown_scheduler(wait=True)
+
+
+def shutdown_scheduler(wait: bool = True):
+    """
+    Gracefully shutdown the scheduler.
+
+    Args:
+        wait: if True, block until in-flight jobs finish (default; safer
+            for production deploy windows). Set False from atexit if you
+            need immediate exit.
     """
     try:
         if scheduler.running:
-            scheduler.shutdown(wait=False)
-            logger.info("Scheduler shutdown successfully")
+            scheduler.shutdown(wait=wait)
+            logger.info("Scheduler shutdown successfully (wait=%s)", wait)
     except Exception as e:
         logger.exception(f"Error shutting down scheduler: {e}")
 

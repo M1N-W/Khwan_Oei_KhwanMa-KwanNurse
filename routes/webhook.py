@@ -91,6 +91,46 @@ def register_routes(app):
         resp.headers["Vary"] = "Accept-Encoding"
         return resp
 
+    @app.route('/readyz', methods=['GET', 'HEAD'])
+    def readyz():
+        """
+        Readiness probe (P4-3): unlike ``/healthz`` which only proves the
+        process is alive, ``/readyz`` proves we can reach the dependencies
+        a real request would need (Google Sheets).
+
+        Use this for deploy gates / canary checks; do NOT point UptimeRobot
+        at it because a transient Sheets blip should not look like the bot
+        being down.
+
+        Status code:
+        - 200 when all probed deps are reachable
+        - 503 when any dep fails (with JSON body listing which one)
+        """
+        from database.sheets import get_spreadsheet
+        checks: dict = {}
+        all_ok = True
+
+        # Sheets probe — only if persistence is supposed to be available
+        runtime_cfg = app.config.get('RUNTIME_CONFIG') or {}
+        if runtime_cfg.get('can_persist'):
+            try:
+                ss = get_spreadsheet()
+                checks["sheets"] = "ok" if ss is not None else "unavailable"
+                if ss is None:
+                    all_ok = False
+            except Exception as exc:
+                checks["sheets"] = f"error: {type(exc).__name__}"
+                all_ok = False
+        else:
+            checks["sheets"] = "skipped (no credentials configured)"
+
+        status_code = 200 if all_ok else 503
+        return jsonify({
+            "status": "ready" if all_ok else "not_ready",
+            "checks": checks,
+            "timestamp": datetime.now(tz=LOCAL_TZ).isoformat(),
+        }), status_code
+
     @app.route('/metrics', methods=['GET'])
     def metrics_snapshot():
         """

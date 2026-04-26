@@ -89,7 +89,11 @@ def save_wound_analysis(
             message_id or "",
         ]
 
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="wound_logs.append",
+        )
         logger.info(
             "wound_logs: appended row user=%s severity=%s confidence=%.2f kb=%d",
             user_id, severity, float(confidence), int(image_size_kb),
