@@ -35,15 +35,23 @@ TEST_COMMANDS = [
 
 
 def main():
+    """
+    Run every ``tests/test_*.py`` via ``unittest discover``. New test files
+    dropped into ``tests/`` are picked up automatically — no edit to this
+    file needed.
+    """
     env = os.environ.copy()
     env.setdefault("RUN_SCHEDULER", "false")
     env.setdefault("PYTHONIOENCODING", "utf-8")
 
-    for command in TEST_COMMANDS:
-        print(f"\n>>> Running: {' '.join(command)}")
-        result = subprocess.run(command, env=env)
-        if result.returncode != 0:
-            return result.returncode
+    command = [
+        sys.executable, "-m", "unittest", "discover",
+        "-s", "tests", "-p", "test_*.py", "-t", ".", "-v",
+    ]
+    print(f">>> Running: {' '.join(command)}")
+    result = subprocess.run(command, env=env)
+    if result.returncode != 0:
+        return result.returncode
 
     print("\nAll regression suites passed.")
     return 0

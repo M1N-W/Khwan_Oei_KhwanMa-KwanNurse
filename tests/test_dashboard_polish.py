@@ -26,7 +26,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 os.environ["RUN_SCHEDULER"] = "false"
-_PROJECT_ROOT = Path(__file__).resolve().parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent  # tests/ → repo root
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 
