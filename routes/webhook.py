@@ -228,8 +228,13 @@ def register_routes(app):
                 if event.get("type") != "message":
                     continue
                 msg = event.get("message") or {}
-                if msg.get("type") == "image":
+                msg_type = msg.get("type")
+                if msg_type == "image":
                     handle_line_image_event(event)
+                elif msg_type == "audio":
+                    # Phase 5 P5-2: voice → STT → triage pipeline
+                    from services.voice import handle_voice_event
+                    handle_voice_event(event)
             except Exception:
                 logger.exception("Error processing LINE event: %s", event.get("type"))
         return jsonify({"status": "ok", "events_received": len(events)}), 200
