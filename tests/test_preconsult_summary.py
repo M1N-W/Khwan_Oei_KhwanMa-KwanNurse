@@ -280,6 +280,13 @@ class PreviewRouteTests(unittest.TestCase):
     def setUp(self):
         from services.cache import ttl_cache
         ttl_cache.clear()
+        # Re-assert the dashboard env in case a prior test (e.g.
+        # test_dashboard_auth.tearDown) popped it — is_dashboard_enabled()
+        # reads os.environ live on every request.
+        os.environ["NURSE_DASHBOARD_AUTH"] = (
+            "test_nurse:$2b$04$DJTgqVFLGqYfBcCS9pInwOxR3oCPjPpLfXjWY55/lCNmL6emsIbzm"
+        )
+        os.environ.setdefault("FLASK_SECRET_KEY", "test-secret-key-for-preconsult-tests")
         from app import create_app
         self.app = create_app()
         self.app.config["TESTING"] = True
