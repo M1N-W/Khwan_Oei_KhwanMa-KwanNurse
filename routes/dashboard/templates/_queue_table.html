@@ -17,9 +17,10 @@
         {% for item in queue %}
             <tr class="border-b border-gray-100 hover:bg-gray-50">
                 <td class="py-2 pr-3 text-gray-500">{{ loop.index }}</td>
-                <td class="py-2 pr-3 font-mono text-xs">
+                <td class="py-2 pr-3">
                     <a href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}"
-                       class="text-blue-600 hover:underline">{{ item.user_id_short }}</a>
+                       class="text-blue-600 hover:underline font-medium">{{ item.patient_label or item.user_id_short }}</a>
+                    <div class="font-mono text-[11px] text-gray-400">{{ item.user_id_short }}</div>
                 </td>
                 <td class="py-2 pr-3">{{ item.issue_type }}</td>
                 <td class="py-2 pr-3">

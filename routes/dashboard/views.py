@@ -30,6 +30,7 @@ from services.dashboard_actions import (
     assign_nurse_to_session,
     dismiss_alert,
     mark_session_completed,
+    update_patient_identity,
 )
 from services.dashboard_readers import (
     get_home_stats,
@@ -233,6 +234,19 @@ def alerts_dismiss():
         result = dismiss_alert(user_id, timestamp_iso, nurse)
         flash(result.message, "success" if result.ok else "error")
     return redirect(_safe_next_url(request.form.get("next"), default=url_for("dashboard.alerts_view")))
+
+
+@dashboard_bp.route("/patient/<user_id>/identity", methods=["POST"])
+@require_nurse_auth
+def patient_identity_update(user_id: str):
+    """Update patient first name, last name, and HN from the patient detail page."""
+    _check_csrf()
+    if not user_id or len(user_id) > 64:
+        abort(404)
+    nurse = current_nurse() or "unknown"
+    result = update_patient_identity(user_id, nurse, dict(request.form))
+    flash(result.message, "success" if result.ok else "error")
+    return redirect(url_for("dashboard.patient_view", user_id=user_id))
 
 
 # -----------------------------------------------------------------------------

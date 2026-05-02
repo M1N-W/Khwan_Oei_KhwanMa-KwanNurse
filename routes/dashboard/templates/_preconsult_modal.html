@@ -32,7 +32,8 @@
                 <div>
                     <div class="text-xs text-gray-500">ผู้ป่วย</div>
                     <a href="{{ url_for('dashboard.patient_view', user_id=packet.user_id) }}"
-                       class="font-mono text-blue-600 hover:underline">{{ packet.user_id_short }}</a>
+                       class="font-medium text-blue-600 hover:underline">{{ packet.patient_label or packet.user_id_short }}</a>
+                    <div class="font-mono text-[11px] text-gray-400">{{ packet.user_id_short }}</div>
                 </div>
                 <div>
                     <div class="text-xs text-gray-500">ประเภทเคส</div>

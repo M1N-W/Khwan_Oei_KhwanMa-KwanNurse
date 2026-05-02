@@ -1,6 +1,6 @@
 {% extends "_layout.html" %}
 
-{% block title %}ผู้ป่วย {{ patient.user_id_short }} · KwanNurse Dashboard{% endblock %}
+{% block title %}ผู้ป่วย {{ patient.patient_label or patient.user_id_short }} · KwanNurse Dashboard{% endblock %}
 
 {% block main %}
 <section class="mb-4">
@@ -11,8 +11,15 @@
 <section class="bg-white rounded-xl shadow-sm p-5 mb-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-            <h1 class="text-xl font-bold text-gray-800">ผู้ป่วย</h1>
-            <p class="font-mono text-xs text-gray-500 mt-1 break-all">{{ patient.user_id }}</p>
+            <h1 class="text-xl font-bold text-gray-800">
+                {{ patient.patient_display_name or 'ผู้ป่วยไม่ทราบชื่อ' }}
+            </h1>
+            <p class="text-sm text-gray-600 mt-1">
+                HN: <span class="font-semibold">{{ patient.patient_hn or '-' }}</span>
+            </p>
+            <p class="font-mono text-xs text-gray-400 mt-1 break-all">
+                System ID: {{ patient.user_id_short }}
+            </p>
         </div>
         <div class="flex items-center gap-3 text-sm">
             {% if patient.latest_risk_level == 'high' %}
@@ -60,6 +67,39 @@
             </form>
         </div>
     </div>
+</section>
+
+<section class="bg-white rounded-xl shadow-sm p-5 mb-4">
+    <h2 class="font-semibold text-gray-800 mb-3">ข้อมูลระบุตัวผู้ป่วย</h2>
+    <form method="POST"
+          action="{{ url_for('dashboard.patient_identity_update', user_id=patient.user_id) }}"
+          class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div>
+            <label class="block text-xs text-gray-500 mb-1" for="first_name">ชื่อ</label>
+            <input id="first_name" name="first_name" value="{{ patient.patient_first_name or '' }}"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                   maxlength="80">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1" for="last_name">นามสกุล</label>
+            <input id="last_name" name="last_name" value="{{ patient.patient_last_name or '' }}"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2"
+                   maxlength="80">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1" for="hn">HN</label>
+            <input id="hn" name="hn" value="{{ patient.patient_hn or '' }}"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 uppercase"
+                   maxlength="40">
+        </div>
+        <div class="flex items-end">
+            <button type="submit"
+                    class="w-full px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                บันทึก
+            </button>
+        </div>
+    </form>
 </section>
 
 {# Phase 5 P5-1: trend chart — แสดงเฉพาะตอนมีข้อมูล (data_points > 0)

@@ -214,6 +214,45 @@ def dismiss_alert(user_id: str, timestamp_iso: str, nurse_username: str) -> Acti
     return ActionResult(ok=True, message="ซ่อน alert แล้ว")
 
 
+def update_patient_identity(
+    user_id: str,
+    nurse_username: str,
+    form_data: dict,
+) -> ActionResult:
+    """Update patient first name, last name, and HN from the nurse dashboard."""
+    if not user_id or not nurse_username:
+        return ActionResult(ok=False, message="missing user_id or nurse")
+    try:
+        from database.patient_profile import read_patient_profile, upsert_patient_profile
+        from services.patient_profile import invalidate_profile_cache
+
+        identity = {
+            "first_name": " ".join(str(form_data.get("first_name") or "").strip().split())[:80],
+            "last_name": " ".join(str(form_data.get("last_name") or "").strip().split())[:80],
+            "hn": " ".join(str(form_data.get("hn") or "").strip().split())[:40].upper(),
+        }
+        existing = read_patient_profile(user_id) or {}
+        merged = dict(existing)
+        merged.update(identity)
+        ok = upsert_patient_profile(user_id, merged)
+        if not ok:
+            incr("dashboard.action.identity.failed")
+            return ActionResult(ok=False, message="บันทึกข้อมูลผู้ป่วยไม่สำเร็จ")
+
+        invalidate_profile_cache(user_id)
+        invalidate_dashboard_cache()
+        incr("dashboard.action.identity.ok")
+        logger.info(
+            "audit: nurse=%s action=update_patient_identity user_id=%s fields=%s",
+            nurse_username, user_id, sorted(identity.keys()),
+        )
+        return ActionResult(ok=True, message="บันทึกข้อมูลผู้ป่วยแล้ว")
+    except Exception:
+        logger.exception("Error updating patient identity user_id=%s", user_id)
+        incr("dashboard.action.identity.error")
+        return ActionResult(ok=False, message="เกิดข้อผิดพลาด")
+
+
 def is_alert_dismissed(user_id: str, timestamp) -> bool:
     """
     เช็คว่า alert นี้ถูก dismiss หรือยัง (ใช้จาก ``dashboard_readers``).

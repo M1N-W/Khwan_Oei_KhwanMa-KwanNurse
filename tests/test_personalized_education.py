@@ -71,6 +71,27 @@ class PatientProfileSheetTests(unittest.TestCase):
         self.assertEqual(rec["surgery_type"], "knee_replacement")
         self.assertEqual(rec["surgery_date"], "2025-04-01")
         self.assertEqual(rec["diseases"], ["เบาหวาน", "ความดัน"])
+        self.assertIsNone(rec["first_name"])
+        self.assertIsNone(rec["last_name"])
+        self.assertIsNone(rec["hn"])
+
+    def test_read_returns_identity_fields_from_new_schema(self):
+        from database import patient_profile as pp_db
+
+        class _Sheet:
+            def get_all_values(self):
+                return [
+                    pp_db.HEADERS,
+                    ["U-x", "60", "F", "Knee_Replacement", "2025-04-01",
+                     "เบาหวาน", "2025-04-15 09:00:00", "สมชาย", "ใจดี", "HN001"],
+                ]
+
+        with patch.object(pp_db, "get_worksheet", return_value=_Sheet()):
+            rec = pp_db.read_patient_profile("U-x")
+        self.assertEqual(rec["first_name"], "สมชาย")
+        self.assertEqual(rec["last_name"], "ใจดี")
+        self.assertEqual(rec["hn"], "HN001")
+        self.assertEqual(rec["display_label"], "สมชาย ใจดี · HN HN001")
 
     def test_upsert_appends_when_user_missing(self):
         from database import patient_profile as pp_db
@@ -89,7 +110,8 @@ class PatientProfileSheetTests(unittest.TestCase):
         with patch.object(pp_db, "get_worksheet", return_value=_Sheet()):
             ok = pp_db.upsert_patient_profile("U-new", {
                 "age": 65, "sex": "M", "surgery_type": "hip",
-                "diseases": ["เบาหวาน"],
+                "diseases": ["เบาหวาน"], "first_name": "สมชาย",
+                "last_name": "ใจดี", "hn": "HN001",
             })
         self.assertTrue(ok)
         self.assertNotIn("updated", captured)
@@ -98,6 +120,9 @@ class PatientProfileSheetTests(unittest.TestCase):
         self.assertEqual(captured["row"][2], "m")
         self.assertEqual(captured["row"][3], "hip")
         self.assertIn("เบาหวาน", captured["row"][5])
+        self.assertEqual(captured["row"][7], "สมชาย")
+        self.assertEqual(captured["row"][8], "ใจดี")
+        self.assertEqual(captured["row"][9], "HN001")
 
     def test_upsert_updates_existing_row(self):
         from database import patient_profile as pp_db
@@ -125,7 +150,7 @@ class PatientProfileSheetTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertNotIn("appended", captured)
         # Sheet row 3 = data row 2 (1-indexed; row 1 is headers)
-        self.assertEqual(captured["range"], "A3:G3")
+        self.assertEqual(captured["range"], "A3:J3")
         # Surgery_Type col (index 3) updated
         self.assertEqual(captured["values"][0][3], "knee_replacement")
 

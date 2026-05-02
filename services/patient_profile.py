@@ -60,6 +60,48 @@ def _coerce_diseases(value: Any) -> list[str]:
     return [d.strip() for d in text.split() if d.strip()]
 
 
+def _clean_text(value: Any, max_len: int) -> str:
+    if value in (None, ""):
+        return ""
+    return " ".join(str(value).strip().split())[:max_len]
+
+
+def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str]:
+    """Normalize patient identity fields from Dialogflow/form params."""
+    if not params:
+        return {}
+    first_name = (
+        params.get("first_name")
+        or params.get("patient_first_name")
+        or params.get("given_name")
+        or ""
+    )
+    last_name = (
+        params.get("last_name")
+        or params.get("patient_last_name")
+        or params.get("family_name")
+        or ""
+    )
+    hn = (
+        params.get("hn")
+        or params.get("HN")
+        or params.get("hospital_number")
+        or params.get("hospital_no")
+        or ""
+    )
+    out: dict[str, str] = {}
+    first = _clean_text(first_name, 80)
+    last = _clean_text(last_name, 80)
+    hn_norm = _clean_text(hn, 40).upper()
+    if first:
+        out["first_name"] = first
+    if last:
+        out["last_name"] = last
+    if hn_norm:
+        out["hn"] = hn_norm
+    return out
+
+
 def _normalize_override(params: Optional[dict[str, Any]]) -> dict[str, Any]:
     """Pull only the recognized profile fields out of Dialogflow params."""
     if not params:
@@ -87,6 +129,7 @@ def _normalize_override(params: Optional[dict[str, Any]]) -> dict[str, Any]:
     coerced_diseases = _coerce_diseases(diseases)
     if coerced_diseases:
         out["diseases"] = coerced_diseases
+    out.update(normalize_identity_fields(params))
     return out
 
 
@@ -144,7 +187,8 @@ def _merge(
         if risk.get(key):
             merged[key] = risk[key]
     # Stored sticky
-    for key in ("age", "sex", "surgery_type", "surgery_date", "diseases"):
+    for key in ("age", "sex", "surgery_type", "surgery_date", "diseases",
+                "first_name", "last_name", "hn", "display_name", "display_label"):
         if stored and stored.get(key):
             merged[key] = stored[key]
     # Override always wins
@@ -166,7 +210,7 @@ def _diff_for_persist(
     we still copy them into PatientProfile if they're new, but they don't
     *force* a write on their own.
     """
-    sticky = ("sex", "surgery_type", "surgery_date")
+    sticky = ("sex", "surgery_type", "surgery_date", "first_name", "last_name", "hn")
     stored = stored or {}
     new_sticky = any(
         merged.get(k) and stored.get(k) != merged.get(k)
@@ -181,6 +225,9 @@ def _diff_for_persist(
         "surgery_type": merged.get("surgery_type"),
         "surgery_date": merged.get("surgery_date"),
         "diseases": merged.get("diseases"),
+        "first_name": merged.get("first_name"),
+        "last_name": merged.get("last_name"),
+        "hn": merged.get("hn"),
     }
 
 

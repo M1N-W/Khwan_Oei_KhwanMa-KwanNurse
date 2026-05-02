@@ -27,14 +27,17 @@ from datetime import datetime
 from typing import Any, Optional
 
 from config import LOCAL_TZ, SHEET_PATIENT_PROFILE, get_logger
-from database.sheets import get_worksheet
+from database.sheets import column_number_to_letter, get_worksheet
 
 logger = get_logger(__name__)
 
 
 # Order must stay stable — readers use index-by-name but writers (append /
 # update_cells) rely on this canonical order.
-HEADERS = ["User_ID", "Age", "Sex", "Surgery_Type", "Surgery_Date", "Diseases", "Updated_At"]
+HEADERS = [
+    "User_ID", "Age", "Sex", "Surgery_Type", "Surgery_Date", "Diseases",
+    "Updated_At", "First_Name", "Last_Name", "HN",
+]
 
 
 def _now_str() -> str:
@@ -55,6 +58,14 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
     diseases_raw = (rec.get("Diseases") or "").strip()
     diseases = [d.strip() for d in diseases_raw.split(",") if d.strip()] if diseases_raw else []
 
+    first_name = (rec.get("First_Name") or "").strip()
+    last_name = (rec.get("Last_Name") or "").strip()
+    hn = (rec.get("HN") or "").strip()
+    display_name = " ".join(part for part in (first_name, last_name) if part).strip()
+    display_label = display_name or hn
+    if display_name and hn:
+        display_label = f"{display_name} · HN {hn}"
+
     return {
         "user_id": rec.get("User_ID", ""),
         "age": age,
@@ -63,6 +74,11 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
         "surgery_date": (rec.get("Surgery_Date") or "").strip() or None,
         "diseases": diseases,
         "updated_at": (rec.get("Updated_At") or "").strip() or None,
+        "first_name": first_name or None,
+        "last_name": last_name or None,
+        "hn": hn or None,
+        "display_name": display_name or None,
+        "display_label": display_label or None,
     }
 
 
@@ -85,6 +101,9 @@ def _profile_to_row(user_id: str, profile: dict[str, Any]) -> list[str]:
         (profile.get("surgery_date") or "").strip(),
         diseases_str,
         _now_str(),
+        (profile.get("first_name") or "").strip()[:80],
+        (profile.get("last_name") or "").strip()[:80],
+        (profile.get("hn") or "").strip()[:40],
     ]
 
 
@@ -162,7 +181,7 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
         for sheet_row_index, row in enumerate(values[1:], start=2):
             if len(row) > idx_uid and row[idx_uid] == user_id:
                 # Update existing row — write the whole row as a single range.
-                end_col_letter = chr(ord("A") + len(HEADERS) - 1)  # A..G for 7 cols
+                end_col_letter = column_number_to_letter(len(HEADERS))
                 target_range = f"A{sheet_row_index}:{end_col_letter}{sheet_row_index}"
                 sheet.update(target_range, [new_row], value_input_option="USER_ENTERED")
                 logger.info("upsert_patient_profile: updated row %d user=%s",

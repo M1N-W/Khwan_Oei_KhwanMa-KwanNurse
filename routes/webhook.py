@@ -270,6 +270,8 @@ def _dispatch_intent(intent, user_id, params, query_text):
         return handle_free_text_symptom(user_id, params, query_text)
     elif intent == 'RecommendKnowledge':
         return handle_recommend_knowledge(user_id, params)
+    elif intent in ('UpdatePatientIdentity', 'PatientIdentity'):
+        return handle_patient_identity(user_id, params, query_text)
     else:
         return handle_unknown_intent(intent)
 
@@ -501,6 +503,50 @@ def handle_request_appointment(user_id, params):
     )
     
     return jsonify({"fulfillmentText": message}), 200
+
+
+def handle_patient_identity(user_id, params, query_text=""):
+    """Collect/update patient first name, last name, and HN."""
+    try:
+        from database.patient_profile import read_patient_profile, upsert_patient_profile
+        from services.i18n import detect_language, t
+        from services.patient_profile import normalize_identity_fields, invalidate_profile_cache
+        from services.dashboard_readers import invalidate_dashboard_cache
+
+        lang = detect_language(query_text or " ".join(str(v) for v in (params or {}).values()))
+        identity = normalize_identity_fields(params)
+        first_name = identity.get("first_name", "")
+        last_name = identity.get("last_name", "")
+        hn = identity.get("hn", "")
+
+        if not first_name:
+            return jsonify({"fulfillmentText": t("identity.ask_first_name", lang)}), 200
+        if not last_name:
+            return jsonify({"fulfillmentText": t("identity.ask_last_name", lang)}), 200
+        if not hn:
+            return jsonify({"fulfillmentText": t("identity.ask_hn", lang)}), 200
+
+        existing = read_patient_profile(user_id) or {}
+        merged = dict(existing)
+        merged.update(identity)
+        ok = upsert_patient_profile(user_id, merged)
+        if not ok:
+            return jsonify({"fulfillmentText": t("identity.save_error", lang)}), 200
+
+        invalidate_profile_cache(user_id)
+        invalidate_dashboard_cache()
+        return jsonify({
+            "fulfillmentText": t(
+                "identity.confirm",
+                lang,
+                first_name=first_name,
+                last_name=last_name,
+                hn=hn,
+            )
+        }), 200
+    except Exception:
+        logger.exception("Error in PatientIdentity handler")
+        return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"}), 200
 
 
 # Reverse map: display_name -> canonical key (used for EducationLog audit).

@@ -43,6 +43,7 @@ CACHE_KEY_QUEUE = "dash:queue:v1"
 CACHE_KEY_STATS = "dash:stats:v1"
 CACHE_KEY_ALERTS_PREFIX = "dash:alerts:v1"
 CACHE_KEY_PRECONSULT_PREFIX = "dash:preconsult:v1"
+CACHE_KEY_IDENTITY_PREFIX = "dash:identity:v1"
 
 TTL_QUEUE_SECONDS = 10
 TTL_ALERTS_SECONDS = 30
@@ -68,7 +69,7 @@ class QueueItem:
     queued_at: Optional[datetime]
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        item = {
             "queue_id": self.queue_id,
             "session_id": self.session_id,
             "user_id": self.user_id,
@@ -82,6 +83,8 @@ class QueueItem:
             "queued_at": self.queued_at.strftime("%H:%M") if self.queued_at else "",
             "queued_at_full": self.queued_at.strftime("%Y-%m-%d %H:%M") if self.queued_at else "",
         }
+        item.update(_identity_for_user(self.user_id))
+        return item
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,7 @@ class AlertItem:
     mobility: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        item = {
             "timestamp": self.timestamp.strftime("%d/%m %H:%M") if self.timestamp else "",
             "timestamp_full": self.timestamp.strftime("%Y-%m-%d %H:%M") if self.timestamp else "",
             "age_minutes": _age_minutes(self.timestamp),
@@ -111,6 +114,8 @@ class AlertItem:
             "fever": self.fever or "-",
             "mobility": self.mobility or "-",
         }
+        item.update(_identity_for_user(self.user_id))
+        return item
 
 
 @dataclass(frozen=True)
@@ -141,6 +146,53 @@ def _short_user_id(user_id: str) -> str:
     if not user_id or len(user_id) < 10:
         return user_id or "-"
     return f"{user_id[:4]}…{user_id[-4:]}"
+
+
+def _identity_for_user(user_id: str) -> dict[str, str]:
+    """Return nurse-friendly patient identity fields with safe fallbacks."""
+    user_id_short = _short_user_id(user_id)
+    fallback = {
+        "patient_first_name": "",
+        "patient_last_name": "",
+        "patient_hn": "",
+        "patient_display_name": "",
+        "patient_label": user_id_short,
+    }
+    if not user_id:
+        return fallback
+    cache_key = f"{CACHE_KEY_IDENTITY_PREFIX}:{user_id}"
+    cached = ttl_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        from database.patient_profile import read_patient_profile
+        profile = read_patient_profile(user_id) or {}
+    except Exception:
+        logger.exception("Error loading patient identity user_id=%s", user_id)
+        ttl_cache.set(cache_key, fallback, TTL_ALERTS_SECONDS)
+        return fallback
+
+    first_name = (profile.get("first_name") or "").strip()
+    last_name = (profile.get("last_name") or "").strip()
+    hn = (profile.get("hn") or "").strip()
+    display_name = " ".join(part for part in (first_name, last_name) if part).strip()
+    if display_name and hn:
+        label = f"{display_name} · HN {hn}"
+    elif display_name:
+        label = display_name
+    elif hn:
+        label = f"HN {hn}"
+    else:
+        label = user_id_short
+    result = {
+        "patient_first_name": first_name,
+        "patient_last_name": last_name,
+        "patient_hn": hn,
+        "patient_display_name": display_name,
+        "patient_label": label,
+    }
+    ttl_cache.set(cache_key, result, TTL_ALERTS_SECONDS)
+    return result
 
 
 def _priority_label(priority: int) -> str:
@@ -375,12 +427,13 @@ def get_patient_timeline(
         "latest_risk_level": latest_risk,
         "events": events,
     }
+    result.update(_identity_for_user(user_id))
     ttl_cache.set(key, result, 30)  # TTL 30s — patient view ไม่เปิดค้างนาน
     return result
 
 
 def _empty_timeline(user_id: str) -> dict[str, Any]:
-    return {
+    result = {
         "user_id": user_id,
         "user_id_short": _short_user_id(user_id),
         "symptom_count": 0,
@@ -390,6 +443,8 @@ def _empty_timeline(user_id: str) -> dict[str, Any]:
         "latest_risk_level": "",
         "events": [],
     }
+    result.update(_identity_for_user(user_id))
+    return result
 
 
 # -----------------------------------------------------------------------------
@@ -652,6 +707,7 @@ def invalidate_dashboard_cache() -> int:
         "dash:stats:",
         "dash:patient:",
         "dash:preconsult:",
+        "dash:identity:",
     ):
         total += ttl_cache.invalidate_prefix(prefix)
     logger.info("Invalidated %d dashboard cache entries", total)
@@ -983,6 +1039,7 @@ def get_preconsult_packet(
         "risk_profile": risk_profile,
         "briefing": briefing,
     }
+    packet.update(_identity_for_user(user_id))
 
     ttl_cache.set(cache_key, packet, TTL_PRECONSULT_SECONDS)
     return packet

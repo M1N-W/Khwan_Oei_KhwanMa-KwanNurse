@@ -100,6 +100,32 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Detected symptoms: {flags}",
     },
 
+    # ---- Patient identity -----------------------------------------------
+    "identity.ask_first_name": {
+        "th": "ขอทราบชื่อจริงของคนไข้ค่ะ",
+        "en": "Please tell me the patient's first name.",
+    },
+    "identity.ask_last_name": {
+        "th": "ขอทราบนามสกุลของคนไข้ค่ะ",
+        "en": "Please tell me the patient's last name.",
+    },
+    "identity.ask_hn": {
+        "th": "ขอทราบ HN (Hospital Number) ของคนไข้ค่ะ",
+        "en": "Please tell me the patient's HN (Hospital Number).",
+    },
+    "identity.confirm": {
+        "th": "✅ บันทึกข้อมูลคนไข้แล้วค่ะ\n\nชื่อ: {first_name} {last_name}\nHN: {hn}",
+        "en": "✅ Patient identity saved.\n\nName: {first_name} {last_name}\nHN: {hn}",
+    },
+    "identity.save_error": {
+        "th": "ขอโทษค่ะ ไม่สามารถบันทึกข้อมูลคนไข้ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+        "en": "Sorry, I couldn't save the patient identity right now. Please try again.",
+    },
+    "dashboard.no_data": {
+        "th": "ยังไม่มีข้อมูล",
+        "en": "No data yet",
+    },
+
     # ---- Voice STT (services.voice) -------------------------------------
     "voice.heard_prefix": {
         "th": "🎙️ ได้ยินว่า:\n\"{text}\"",
