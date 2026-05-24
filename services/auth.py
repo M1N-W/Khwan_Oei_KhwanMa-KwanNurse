@@ -397,12 +397,12 @@ def apply_security_headers(response: Response) -> Response:
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    # CSP: อนุญาต Tailwind CDN + HTMX CDN + inline style (Tailwind JIT) + self
+    # CSP: dashboard ใช้ local CSS/JS เป็นหลัก; CDN เหลือเฉพาะ HTMX และ Chart.js.
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
-        "script-src 'self' https://cdn.tailwindcss.com https://unpkg.com 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; "
+        "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; "
+        "style-src 'self' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
         "connect-src 'self'",

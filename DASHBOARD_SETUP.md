@@ -33,6 +33,12 @@ Flask app (app.py)
 ไม่มี DB ฝั่งเซิร์ฟเวอร์ — เหมาะกับ 1 worker. ถ้าขยายเป็น multi-worker ต้อง
 ย้ายไป Redis/server-side session.
 
+**Frontend assets**: dashboard ใช้ Jinja2 + HTMX กับ local assets ที่
+`routes/dashboard/static/dashboard.css` และ `routes/dashboard/static/dashboard.js`.
+ดีไซน์ปัจจุบันวางเป็น Clinical Command Center: เน้นคิวด่วน, alert, context
+ผู้ป่วย, และ table density สำหรับการทำงานจริง มากกว่า dashboard-card ทั่วไป.
+Chart.js จะโหลดเฉพาะหน้า patient trend ที่มีข้อมูลกราฟ.
+
 ---
 
 ## 2. ขั้นตอนติดตั้งแบบย่อ
@@ -274,7 +280,8 @@ python run_regression_tests.py
 | `services/cache.py` | In-memory TTL cache (`ttl_cache` singleton) |
 | `routes/dashboard/auth_views.py` | Login / logout routes |
 | `routes/dashboard/views.py` | Home / queue / alerts / patient / actions / partials |
-| `routes/dashboard/templates/` | Jinja2 templates (Tailwind + HTMX) |
+| `routes/dashboard/templates/` | Jinja2 templates + HTMX fragments |
+| `routes/dashboard/static/` | Local command-center CSS/JS assets |
 | `scripts/make_nurse_hash.py` | CLI สร้าง bcrypt hash |
 
 ---
