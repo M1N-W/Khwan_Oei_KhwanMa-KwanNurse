@@ -6,14 +6,30 @@ __pycache__/
 htmlcov/
 
 .env
+.env.*
+!.env.example
 *.env
 credentials.json
 *credentials*.json
+service-account*.json
+*service*account*.json
+firebase-adminsdk*.json
+*.pem
+*.key
+*.p12
+*.p8
+id_rsa
+id_dsa
 
 .git/
 .gitignore
 .vscode/
 .idea/
+.agents/
+.docs/
+.questions/
+.teams/
+scripts/install_superpowers_windsurf.ps1
 
 *.log
 logs/
