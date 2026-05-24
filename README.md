@@ -68,7 +68,8 @@ kwannurse-linebot/
 │   └── dashboard/            # Nurse dashboard blueprint
 │       ├── auth_views.py     # Login/logout
 │       ├── views.py          # Pages + actions + HTMX partials
-│       └── templates/        # Jinja2 + Tailwind + HTMX
+│       ├── templates/        # Jinja2 views + HTMX fragments
+│       └── static/           # Local dashboard CSS/JS
 │
 ├── services/                 # Business logic
 │   ├── auth.py               # bcrypt verify, CSRF, rate limit, password policy
@@ -250,7 +251,7 @@ python -m unittest test_dashboard_actions.py -v
 - **Storage**: Google Sheets (via `gspread`) — *long-term: migrate to relational store*
 - **Auth**: bcrypt 4.1+, Flask session (cookie-based)
 - **LLM (optional)**: Google Gemini via `google-generativeai`
-- **Frontend (dashboard)**: Jinja2 + Tailwind (CDN) + HTMX (CDN)
+- **Frontend (dashboard)**: Jinja2 + local CSS/JS + HTMX (CDN) + Chart.js on patient trend pages
 - **Hosting**: Render (single-worker Gunicorn)
 
 ---

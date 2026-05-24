@@ -1,78 +1,65 @@
-{# Fragment: ตารางคิว. ใช้ได้ทั้งจาก home.html และ HTMX partial. #}
 {% if queue %}
-<div class="overflow-x-auto">
-    <table class="w-full text-sm">
-        <thead class="text-xs text-gray-500 uppercase border-b">
+<div class="table-wrap">
+    <table class="data-table">
+        <thead>
             <tr>
-                <th class="text-left py-2 pr-3">ลำดับ</th>
-                <th class="text-left py-2 pr-3">ผู้ป่วย</th>
-                <th class="text-left py-2 pr-3">ประเภท</th>
-                <th class="text-left py-2 pr-3">ความเร่งด่วน</th>
-                <th class="text-left py-2 pr-3">รอมา</th>
-                <th class="text-left py-2 pr-3">คิวเวลา</th>
-                <th class="text-right py-2 pr-3">จัดการ</th>
+                <th>ลำดับ</th>
+                <th>ผู้ป่วย</th>
+                <th>ประเภท</th>
+                <th>ความเร่งด่วน</th>
+                <th>รอมา</th>
+                <th>คิวเวลา</th>
+                <th class="text-right">จัดการ</th>
             </tr>
         </thead>
         <tbody>
         {% for item in queue %}
-            <tr class="border-b border-gray-100 hover:bg-gray-50">
-                <td class="py-2 pr-3 text-gray-500">{{ loop.index }}</td>
-                <td class="py-2 pr-3">
-                    <a href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}"
-                       class="text-blue-600 hover:underline font-medium">{{ item.patient_label or item.user_id_short }}</a>
-                    <div class="font-mono text-[11px] text-gray-400">{{ item.user_id_short }}</div>
+            <tr>
+                <td class="muted">{{ loop.index }}</td>
+                <td>
+                    <a href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}" class="patient-link">
+                        {{ item.patient_label or item.user_id_short }}
+                    </a>
+                    <div class="mono muted">{{ item.user_id_short }}</div>
                 </td>
-                <td class="py-2 pr-3">{{ item.issue_type }}</td>
-                <td class="py-2 pr-3">
+                <td>{{ item.issue_type }}</td>
+                <td>
                     {% if item.priority == 1 %}
-                        <span class="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-semibold">
-                            {{ item.priority_label }}
-                        </span>
+                        <span class="badge badge-high"><span class="severity-marker severity-high"></span>{{ item.priority_label }}</span>
                     {% elif item.priority == 2 %}
-                        <span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
-                            {{ item.priority_label }}
-                        </span>
+                        <span class="badge badge-medium"><span class="severity-marker severity-medium"></span>{{ item.priority_label }}</span>
                     {% else %}
-                        <span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600">
-                            {{ item.priority_label }}
-                        </span>
+                        <span class="badge badge-neutral"><span class="severity-marker severity-low"></span>{{ item.priority_label }}</span>
                     {% endif %}
                 </td>
-                <td class="py-2 pr-3 {% if item.waited_minutes > 30 %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}">
-                    {{ item.waited_minutes }} นาที
+                <td class="{% if item.waited_minutes > 30 %}text-high{% else %}muted{% endif %}">
+                    <strong>{{ item.waited_minutes }}</strong> นาที
                 </td>
-                <td class="py-2 pr-3 text-gray-500">{{ item.queued_at }}</td>
-                <td class="py-2 pr-3 text-right whitespace-nowrap">
-                    {% if csrf_token %}
-                    <button type="button"
-                            class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                            hx-get="{{ url_for('dashboard.queue_preview', queue_id=item.queue_id) }}"
-                            hx-target="#preconsult-modal"
-                            hx-swap="innerHTML">
-                        ดูสรุป
-                    </button>
-                    <form method="POST"
-                          action="{{ url_for('dashboard.queue_assign', queue_id=item.queue_id) }}"
-                          class="inline">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="hidden" name="next" value="{{ request.path }}">
-                        <button type="submit"
-                                class="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">
-                            รับคิว
+                <td class="muted">{{ item.queued_at }}</td>
+                <td>
+                    <div class="cell-actions">
+                        {% if csrf_token %}
+                        <button type="button"
+                                class="btn btn-soft"
+                                hx-get="{{ url_for('dashboard.queue_preview', queue_id=item.queue_id) }}"
+                                hx-target="#preconsult-modal"
+                                hx-swap="innerHTML">
+                            ดูสรุป
                         </button>
-                    </form>
-                    <form method="POST"
-                          action="{{ url_for('dashboard.queue_complete', queue_id=item.queue_id) }}"
-                          class="inline"
-                          onsubmit="return confirm('ยืนยันปิดเคสนี้?')">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="hidden" name="next" value="{{ request.path }}">
-                        <button type="submit"
-                                class="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">
-                            ปิด
-                        </button>
-                    </form>
-                    {% endif %}
+                        <form method="POST" action="{{ url_for('dashboard.queue_assign', queue_id=item.queue_id) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="btn btn-blue">รับคิว</button>
+                        </form>
+                        <form method="POST"
+                              action="{{ url_for('dashboard.queue_complete', queue_id=item.queue_id) }}"
+                              data-confirm="ยืนยันปิดเคสนี้?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="btn btn-muted">ปิด</button>
+                        </form>
+                        {% endif %}
+                    </div>
                 </td>
             </tr>
         {% endfor %}
@@ -80,5 +67,5 @@
     </table>
 </div>
 {% else %}
-<p class="text-sm text-gray-400 text-center py-6">ยังไม่มีคิว</p>
+<p class="empty-state">ยังไม่มีคิว</p>
 {% endif %}

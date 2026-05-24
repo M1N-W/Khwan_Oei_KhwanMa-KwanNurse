@@ -66,6 +66,10 @@ nurse notice, and reply to the patient with a friendly fallback.
 
 ## 2. Deploy to Render
 
+Dashboard and LINE bot run in the same Flask service. Do not create a
+separate Static Site for `/dashboard/*`; enable it by setting the dashboard
+environment variables on the existing Render Web Service.
+
 1. Connect the GitHub repo.
 2. Build command: `pip install -r requirements.txt`
 3. Start command: `gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 30`
@@ -83,7 +87,36 @@ nurse notice, and reply to the patient with a friendly fallback.
    ✅ Scheduled hourly metrics summary at :00
    ```
 
-### 2.1 LINE Channel webhook URLs (Sprint 2 S2-2)
+### 2.1 Enable Nurse Dashboard on the existing Render service
+
+In Render Dashboard, open the existing Web Service, then go to
+**Environment** and add these variables:
+
+| Variable | Required | Notes |
+|---|---:|---|
+| `NURSE_DASHBOARD_AUTH` | yes | Comma-separated `username:bcrypt_hash` entries. If missing, `/dashboard/*` returns 404. |
+| `NURSE_DASHBOARD_SESSION_KEY` | yes | Long random secret for Flask session signing. Use Render secret storage. |
+| `NURSE_DASHBOARD_IDLE_MINUTES` | no | Defaults to `15`. |
+| `DEBUG` | yes | Must be `false` in production so cookies are HTTPS-only. |
+
+Generate nurse credentials locally, then paste only the resulting env value
+into Render:
+
+```powershell
+python scripts\make_nurse_hash.py nurse_kwan "ChangeThisStrongPassword123" --force
+```
+
+After saving environment variables, click **Manual Deploy** →
+**Deploy latest commit**. Then test:
+
+```bash
+curl -I https://<render-host>/dashboard/login
+```
+
+Expect HTTP 200. If it returns 404, `NURSE_DASHBOARD_AUTH` is not set on the
+running service.
+
+### 2.2 LINE Channel webhook URLs (Sprint 2 S2-2)
 
 The bot now exposes **two** webhook endpoints:
 
