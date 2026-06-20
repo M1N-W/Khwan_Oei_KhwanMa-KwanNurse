@@ -203,6 +203,49 @@ class WebhookSymptomFlowTests(unittest.TestCase):
         push_risk.assert_not_called()
         push_warn.assert_not_called()
 
+    def test_symptom_risk_persists_canonical_code_and_dashboard_reads_alert(self):
+        from config import LOCAL_TZ
+        from services import dashboard_readers
+
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 9,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        captured = {}
+
+        def capture_symptom(user_id, pain, wound, fever, mobility, risk_level, risk_score):
+            captured.update({
+                "timestamp": datetime.now(tz=LOCAL_TZ),
+                "user_id": user_id,
+                "pain": pain,
+                "wound": wound,
+                "fever": fever,
+                "mobility": mobility,
+                "risk_level": risk_level,
+                "risk_score": risk_score,
+            })
+            return True
+
+        with patch("services.risk_assessment.save_symptom_data", side_effect=capture_symptom), \
+             patch("services.risk_assessment.send_line_push"), \
+             patch("services.early_warning.get_recent_symptom_reports", return_value=[]):
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(captured["risk_score"], 3)
+        self.assertEqual(captured["risk_level"], "high")
+
+        with patch("database.sheets.get_recent_symptom_reports", return_value=[captured]):
+            alerts = dashboard_readers.get_recent_alerts(
+                min_risk_level="medium",
+                force_refresh=True,
+            )
+
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["risk_level"], "high")
+
     # -------------------------------------------------------------------
     # Early-warning failure must not bubble up and break the user response.
     # -------------------------------------------------------------------

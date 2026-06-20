@@ -12,12 +12,16 @@
         <p class="mono muted">System ID: {{ patient.user_id }}</p>
     </div>
     <div>
-        {% if patient.latest_risk_level == 'high' %}
+        {% if patient.latest_risk_level == 'critical' %}
+            <span class="badge badge-high"><span class="severity-marker severity-high"></span>ความเสี่ยงล่าสุด: วิกฤต</span>
+        {% elif patient.latest_risk_level == 'high' %}
             <span class="badge badge-high"><span class="severity-marker severity-high"></span>ความเสี่ยงล่าสุด: สูง</span>
         {% elif patient.latest_risk_level == 'medium' %}
             <span class="badge badge-medium"><span class="severity-marker severity-medium"></span>ความเสี่ยงล่าสุด: ปานกลาง</span>
         {% elif patient.latest_risk_level == 'low' %}
             <span class="badge badge-low"><span class="severity-marker severity-low"></span>ความเสี่ยงล่าสุด: ต่ำ</span>
+        {% elif patient.latest_risk_level == 'normal' %}
+            <span class="badge badge-neutral"><span class="severity-marker severity-low"></span>ความเสี่ยงล่าสุด: ปกติ</span>
         {% else %}
             <span class="badge badge-neutral">ยังไม่มีรายงาน</span>
         {% endif %}
@@ -145,7 +149,7 @@
             {%- for ev in patient.events %}
             <li class="timeline-item">
                 <span class="timeline-dot
-                            {% if ev.type == 'symptom' and ev.risk_level == 'high' %}severity-high
+                            {% if ev.type == 'symptom' and ev.risk_level in ['critical', 'high'] %}severity-high
                             {% elif ev.type == 'symptom' and ev.risk_level == 'medium' %}severity-medium
                             {% elif ev.type == 'wound' and ev.severity == 'high' %}severity-high
                             {% elif ev.type == 'wound' and ev.severity == 'medium' %}severity-medium
@@ -156,7 +160,20 @@
                 </div>
                 <div class="timeline-body">
                     {% if ev.type == 'symptom' %}
-                        ความเสี่ยง <strong>{{ ev.risk_level or '-' }}</strong>
+                        ความเสี่ยง
+                        {% if ev.risk_level == 'critical' %}
+                            <strong class="text-high">วิกฤต</strong>
+                        {% elif ev.risk_level == 'high' %}
+                            <strong class="text-high">สูง</strong>
+                        {% elif ev.risk_level == 'medium' %}
+                            <strong class="text-medium">ปานกลาง</strong>
+                        {% elif ev.risk_level == 'low' %}
+                            <strong>ต่ำ</strong>
+                        {% elif ev.risk_level == 'normal' %}
+                            <strong>ปกติ</strong>
+                        {% else %}
+                            <strong>-</strong>
+                        {% endif %}
                         (คะแนน {{ ev.risk_score }}) ·
                         ปวด: {{ ev.pain }} · แผล: {{ ev.wound }} · ไข้: {{ ev.fever }} · เคลื่อนไหว: {{ ev.mobility }}
                     {% elif ev.type == 'wound' %}

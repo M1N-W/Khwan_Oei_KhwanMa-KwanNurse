@@ -38,12 +38,18 @@
                 </div>
                 <div class="context-box">
                     <div class="label">Risk ล่าสุด</div>
-                    {% if packet.latest_risk_level == 'high' %}
-                        <strong class="text-high">high</strong>
+                    {% if packet.latest_risk_level == 'critical' %}
+                        <strong class="text-high">วิกฤต</strong>
+                    {% elif packet.latest_risk_level == 'high' %}
+                        <strong class="text-high">สูง</strong>
                     {% elif packet.latest_risk_level == 'medium' %}
-                        <strong class="text-medium">medium</strong>
+                        <strong class="text-medium">ปานกลาง</strong>
+                    {% elif packet.latest_risk_level == 'low' %}
+                        <strong>ต่ำ</strong>
+                    {% elif packet.latest_risk_level == 'normal' %}
+                        <strong>ปกติ</strong>
                     {% else %}
-                        <strong class="muted">{{ packet.latest_risk_level or '—' }}</strong>
+                        <strong class="muted">—</strong>
                     {% endif %}
                 </div>
             </div>

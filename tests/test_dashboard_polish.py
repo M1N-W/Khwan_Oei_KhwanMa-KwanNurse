@@ -209,5 +209,81 @@ class BellEndpointTests(unittest.TestCase):
         self.assertIn("/dashboard/login", resp.location)
 
 
+# -----------------------------------------------------------------------------
+# Patient risk header rendering
+# -----------------------------------------------------------------------------
+class PatientRiskHeaderTests(unittest.TestCase):
+
+    def setUp(self):
+        import bcrypt
+        os.environ["FLASK_SECRET_KEY"] = "test-secret-key-patient-risk"
+        hashed = bcrypt.hashpw(b"CorrectPass1", bcrypt.gensalt(rounds=4)).decode("utf-8")
+        os.environ["NURSE_DASHBOARD_AUTH"] = f"nurse_kwan:{hashed}"
+        os.environ["NURSE_LOGIN_MAX_ATTEMPTS"] = "100"
+
+        from app import create_app
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.client = self.app.test_client()
+        import time
+        with self.client.session_transaction() as sess:
+            sess["nurse_user"] = "nurse_kwan"
+            sess["nurse_last_active"] = time.time()
+            sess["nurse_csrf"] = "test-csrf"
+
+    def _patient(self, latest_risk_level):
+        return {
+            "user_id": "U-patient-risk",
+            "user_id_short": "U-pa…risk",
+            "patient_label": "U-pa…risk",
+            "patient_display_name": "",
+            "patient_hn": "",
+            "patient_first_name": "",
+            "patient_last_name": "",
+            "symptom_count": 1 if latest_risk_level else 0,
+            "session_count": 0,
+            "wound_count": 0,
+            "education_count": 0,
+            "latest_risk_level": latest_risk_level,
+            "events": [],
+        }
+
+    def _trend(self):
+        return {
+            "summary": {"data_points": 0},
+            "risk_series": [],
+            "pain_series": [],
+            "wound_series": [],
+            "days": 30,
+        }
+
+    def test_patient_header_renders_normal_as_normal_not_no_report(self):
+        from routes.dashboard import views as dashboard_views
+
+        with patch.object(dashboard_views, "get_patient_timeline",
+                          return_value=self._patient("normal")), \
+             patch.object(dashboard_views, "get_patient_trend",
+                          return_value=self._trend()):
+            resp = self.client.get("/dashboard/patient/U-patient-risk")
+
+        body = resp.get_data(as_text=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("ความเสี่ยงล่าสุด: ปกติ", body)
+        self.assertNotIn("ยังไม่มีรายงาน", body)
+
+    def test_patient_header_renders_empty_risk_as_no_report(self):
+        from routes.dashboard import views as dashboard_views
+
+        with patch.object(dashboard_views, "get_patient_timeline",
+                          return_value=self._patient("")), \
+             patch.object(dashboard_views, "get_patient_trend",
+                          return_value=self._trend()):
+            resp = self.client.get("/dashboard/patient/U-patient-risk")
+
+        body = resp.get_data(as_text=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("ยังไม่มีรายงาน", body)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -193,6 +193,26 @@ class RecentAlertsTests(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual({r["risk_level"] for r in result}, {"medium", "high"})
 
+    def test_filter_min_risk_level_medium_includes_critical_and_legacy_values(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        sample = [
+            {"timestamp": now, "user_id": "U1", "pain": "0", "wound": "ok",
+             "fever": "no", "mobility": "ok", "risk_level": "✅ ปกติดี", "risk_score": 0},
+            {"timestamp": now, "user_id": "U2", "pain": "3", "wound": "ok",
+             "fever": "no", "mobility": "ok", "risk_level": "🟡 เสี่ยงปานกลาง", "risk_score": 2},
+            {"timestamp": now, "user_id": "U3", "pain": "8", "wound": "red",
+             "fever": "yes", "mobility": "ok", "risk_level": "⚠️ เสี่ยงสูง", "risk_score": 4},
+            {"timestamp": now, "user_id": "U4", "pain": "9", "wound": "pus",
+             "fever": "yes", "mobility": "bad", "risk_level": "🚨 อันตราย - ต้องพบแพทย์ทันที!", "risk_score": 6},
+        ]
+        with patch("database.sheets.get_recent_symptom_reports", return_value=sample):
+            result = dashboard_readers.get_recent_alerts(min_risk_level="medium", force_refresh=True)
+
+        self.assertEqual([r["risk_level"] for r in result], ["medium", "high", "critical"])
+
     def test_filter_min_risk_level_high_only(self):
         from services import dashboard_readers
         from config import LOCAL_TZ
@@ -208,6 +228,55 @@ class RecentAlertsTests(unittest.TestCase):
             result = dashboard_readers.get_recent_alerts(min_risk_level="high", force_refresh=True)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["risk_level"], "high")
+
+    def test_filter_min_risk_level_high_includes_critical(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        sample = [
+            {"timestamp": now, "user_id": "U1", "pain": "7", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "medium", "risk_score": 2},
+            {"timestamp": now, "user_id": "U2", "pain": "8", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "high", "risk_score": 4},
+            {"timestamp": now, "user_id": "U3", "pain": "9", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "critical", "risk_score": 5},
+        ]
+        with patch("database.sheets.get_recent_symptom_reports", return_value=sample):
+            result = dashboard_readers.get_recent_alerts(min_risk_level="high", force_refresh=True)
+
+        self.assertEqual([r["risk_level"] for r in result], ["high", "critical"])
+
+    def test_filter_min_risk_level_low_excludes_normal(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        sample = [
+            {"timestamp": now, "user_id": "U0", "pain": "0", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "normal", "risk_score": 0},
+            {"timestamp": now, "user_id": "U1", "pain": "1", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "low", "risk_score": 1},
+        ]
+        with patch("database.sheets.get_recent_symptom_reports", return_value=sample):
+            result = dashboard_readers.get_recent_alerts(min_risk_level="low", force_refresh=True)
+
+        self.assertEqual([r["risk_level"] for r in result], ["low"])
+
+    def test_unknown_alert_value_falls_back_to_score(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        sample = [
+            {"timestamp": now, "user_id": "U1", "pain": "7", "wound": "",
+             "fever": "", "mobility": "", "risk_level": "unknown", "risk_score": 2},
+        ]
+        with patch("database.sheets.get_recent_symptom_reports", return_value=sample):
+            result = dashboard_readers.get_recent_alerts(min_risk_level="medium", force_refresh=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["risk_level"], "medium")
 
     def test_cache_hits_on_same_params(self):
         from services import dashboard_readers
@@ -225,6 +294,53 @@ class RecentAlertsTests(unittest.TestCase):
             dashboard_readers.get_recent_alerts(days=30, min_risk_level="medium")
             dashboard_readers.get_recent_alerts(days=7, min_risk_level="high")
         self.assertEqual(m.call_count, 3)
+
+
+# -----------------------------------------------------------------------------
+# Patient timeline/trend tests
+# -----------------------------------------------------------------------------
+class PatientRiskNormalizationTests(unittest.TestCase):
+
+    def setUp(self):
+        from services.cache import ttl_cache
+        ttl_cache.clear()
+
+    def tearDown(self):
+        from services.cache import ttl_cache
+        ttl_cache.clear()
+
+    def test_patient_timeline_normalizes_legacy_risk_and_latest(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        symptoms = [
+            {"timestamp": now, "user_id": "U1", "pain": "9", "wound": "หนอง",
+             "fever": "มีไข้", "mobility": "ไม่ได้", "risk_level": "🚨 อันตราย - ต้องพบแพทย์ทันที!", "risk_score": 6},
+        ]
+        with patch.object(dashboard_readers, "_load_patient_symptoms", return_value=symptoms), \
+             patch.object(dashboard_readers, "_load_patient_sessions", return_value=[]), \
+             patch.object(dashboard_readers, "_load_patient_wounds", return_value=[]), \
+             patch.object(dashboard_readers, "_load_patient_educations", return_value=[]):
+            result = dashboard_readers.get_patient_timeline("U1", force_refresh=True)
+
+        self.assertEqual(result["latest_risk_level"], "critical")
+        self.assertEqual(result["events"][0]["risk_level"], "critical")
+
+    def test_patient_trend_normalizes_legacy_risk_level(self):
+        from services import dashboard_readers
+        from config import LOCAL_TZ
+
+        now = datetime.now(tz=LOCAL_TZ)
+        symptoms = [
+            {"timestamp": now, "user_id": "U1", "pain": "4", "wound": "บวมแดง",
+             "fever": "ไม่มี", "mobility": "เดินได้", "risk_level": "🟡 เสี่ยงปานกลาง", "risk_score": 2},
+        ]
+        with patch.object(dashboard_readers, "_load_patient_symptoms", return_value=symptoms), \
+             patch.object(dashboard_readers, "_load_patient_wounds", return_value=[]):
+            result = dashboard_readers.get_patient_trend("U1", force_refresh=True)
+
+        self.assertEqual(result["risk_series"][0]["level"], "medium")
 
 
 # -----------------------------------------------------------------------------

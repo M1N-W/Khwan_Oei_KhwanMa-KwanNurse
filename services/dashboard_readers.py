@@ -33,6 +33,7 @@ from typing import Any, Optional
 from config import LOCAL_TZ, get_logger
 from services.cache import ttl_cache
 from services.metrics import incr
+from services.risk_levels import normalize_risk_level, risk_rank
 
 logger = get_logger(__name__)
 
@@ -93,7 +94,7 @@ class AlertItem:
 
     timestamp: Optional[datetime]
     user_id: str
-    risk_level: str  # "high" / "medium" / "low"
+    risk_level: str  # canonical: normal / low / medium / high / critical
     risk_score: int
     pain: str
     wound: str
@@ -260,8 +261,9 @@ def get_recent_alerts(
     Args:
         days: ช่วงย้อนหลัง (default 7).
         limit: แถวสูงสุด (newest first).
-        min_risk_level: เกณฑ์ต่ำสุดที่นับเป็น alert. ``"low"`` = ทุกแถว,
-            ``"medium"`` = medium+high, ``"high"`` = เฉพาะ high.
+        min_risk_level: เกณฑ์ต่ำสุดที่นับเป็น alert. ``"low"`` =
+            low/medium/high/critical, ``"medium"`` = medium/high/critical,
+            ``"high"`` = high/critical. ``normal`` ไม่ถือเป็น alert.
         force_refresh: ข้าม cache.
 
     Returns:
@@ -361,7 +363,7 @@ def get_patient_timeline(
             "type_label": "รายงานอาการ",
             "timestamp": ts,
             "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
-            "risk_level": (s.get("risk_level") or "").lower(),
+            "risk_level": normalize_risk_level(s.get("risk_level"), score=s.get("risk_score")),
             "risk_score": int(s.get("risk_score") or 0),
             "pain": s.get("pain") or "-",
             "wound": s.get("wound") or "-",
@@ -527,7 +529,7 @@ def get_patient_trend(
         risk_series.append({
             "ts_iso": ts_iso,
             "value": risk_score,
-            "level": (s.get("risk_level") or "").lower(),
+            "level": normalize_risk_level(s.get("risk_level"), score=risk_score),
         })
         pain_val = _extract_pain_score(s.get("pain"))
         if pain_val is not None:
@@ -800,9 +802,6 @@ def _load_queue_from_sheets() -> list[QueueItem]:
         return []
 
 
-_RISK_RANK = {"low": 1, "medium": 2, "high": 3}
-
-
 def _load_alerts_from_sheets(
     days: int = 7,
     min_risk_level: str = "medium",
@@ -823,12 +822,13 @@ def _load_alerts_from_sheets(
     from services.dashboard_actions import is_alert_dismissed
 
     try:
-        min_rank = _RISK_RANK.get(min_risk_level.lower(), 2)
+        min_rank = risk_rank(min_risk_level, score=2)
         rows = get_recent_symptom_reports(user_id=None, days=days, limit=500)
         items: list[AlertItem] = []
         for r in rows:
-            risk = (r.get("risk_level") or "").strip().lower()
-            if _RISK_RANK.get(risk, 0) < min_rank:
+            risk_score = int(r.get("risk_score") or 0)
+            risk = normalize_risk_level(r.get("risk_level"), score=risk_score)
+            if risk_rank(risk) < min_rank:
                 continue
             # กรอง alert ที่พยาบาล dismiss ไปแล้ว (เก็บ in-memory 24h)
             if is_alert_dismissed(r.get("user_id") or "", r.get("timestamp")):
@@ -837,8 +837,8 @@ def _load_alerts_from_sheets(
                 AlertItem(
                     timestamp=r.get("timestamp"),
                     user_id=r.get("user_id") or "",
-                    risk_level=risk or "low",
-                    risk_score=int(r.get("risk_score") or 0),
+                    risk_level=risk,
+                    risk_score=risk_score,
                     pain=r.get("pain") or "",
                     wound=r.get("wound") or "",
                     fever=r.get("fever") or "",

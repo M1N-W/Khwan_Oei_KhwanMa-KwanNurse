@@ -16,6 +16,7 @@ from services.notification import (
     build_symptom_notification,
     build_risk_notification
 )
+from services.risk_levels import risk_level_from_score
 
 logger = get_logger(__name__)
 
@@ -107,28 +108,29 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=None):
         risk_details.append("🟢 ไม่มีอาการทางระบบประสาท")
 
     # Risk Level Classification
+    risk_code = risk_level_from_score(risk_score)
     if risk_score >= 5:
-        risk_level = "🚨 อันตราย - ต้องพบแพทย์ทันที!"
+        risk_label = "🚨 อันตราย - ต้องพบแพทย์ทันที!"
         emoji = "🚨"
         action = "กรุณาติดต่อพยาบาลหรือมาโรงพยาบาลทันที!"
         color = "🔴"
     elif risk_score >= 3:
-        risk_level = "⚠️ เสี่ยงสูง"
+        risk_label = "⚠️ เสี่ยงสูง"
         emoji = "⚠️"
         action = "กรุณากดปุ่ม 'ปรึกษาพยาบาล' หรือโทรติดต่อทันที"
         color = "🟠"
     elif risk_score >= 2:
-        risk_level = "🟡 เสี่ยงปานกลาง"
+        risk_label = "🟡 เสี่ยงปานกลาง"
         emoji = "🟡"
         action = "เฝ้าระวังอาการใกล้ชิด 24 ชม. ถ้าอาการแย่กรุณาติดต่อ"
         color = "🟡"
     elif risk_score == 1:
-        risk_level = "🟢 เสี่ยงต่ำ (เฝ้าระวัง)"
+        risk_label = "🟢 เสี่ยงต่ำ (เฝ้าระวัง)"
         emoji = "🟢"
         action = "โดยรวมปกติดี แต่ต้องสังเกตอาการต่อไป"
         color = "🟢"
     else:
-        risk_level = "✅ ปกติดี"
+        risk_label = "✅ ปกติดี"
         emoji = "✅"
         action = "แผลหายดี ยอดเยี่ยมมาก! กรุณารายงานอาการต่อเนื่อง"
         color = "🟢"
@@ -139,17 +141,17 @@ def calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=None):
     message += "📋 รายละเอียด:\n"
     for detail in risk_details:
         message += f"  {detail}\n"
-    message += f"\n{color} ระดับความเสี่ยง: {risk_level}\n"
+    message += f"\n{color} ระดับความเสี่ยง: {risk_label}\n"
     message += f"(คะแนนรวม: {risk_score})\n\n"
     message += f"💡 คำแนะนำ:\n{action}"
     
     # Save to sheet
-    save_symptom_data(user_id, pain, wound, fever, mobility, risk_level, risk_score)
+    save_symptom_data(user_id, pain, wound, fever, mobility, risk_code, risk_score)
     
     # Send notification if high risk
     if risk_score >= 3:
         notify_msg = build_symptom_notification(
-            user_id, pain, wound, fever, mobility, risk_level, risk_score
+            user_id, pain, wound, fever, mobility, risk_label, risk_score
         )
         send_line_push(notify_msg)
 
