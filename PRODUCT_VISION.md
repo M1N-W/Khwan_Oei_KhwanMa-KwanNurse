@@ -5,6 +5,8 @@
 `END_TO_END_AUDIT.md` (Phase 2) เก็บเฉพาะส่วนที่ยังเป็น "ทิศทางผลิตภัณฑ์" —
 ส่วน technical audit เก่าที่ทำเสร็จแล้วถูกตัดออก.
 
+> Current implementation order, dependencies, execution status, and commit tracking live in [`docs/MASTER_ROADMAP.md`](./docs/MASTER_ROADMAP.md). This product vision should not be used as the active execution queue.
+
 > 📅 อัปเดตล่าสุด: หลัง Phase 3 Sprint 1 (nurse dashboard) เสร็จสมบูรณ์
 
 ---
