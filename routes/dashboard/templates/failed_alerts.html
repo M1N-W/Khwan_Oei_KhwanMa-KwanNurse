@@ -1,0 +1,46 @@
+{% extends "_layout.html" %}
+
+{% block title %}การส่งแจ้งเตือนล้มเหลว · KwanNurse Dashboard{% endblock %}
+
+{% block main %}
+<section class="workspace-panel">
+    <div class="workspace-header">
+        <div>
+            <p class="page-kicker">Delivery Backlog</p>
+            <h1 class="page-title">การส่งแจ้งเตือนล้มเหลว</h1>
+            <p class="muted tiny">รายการแจ้งพยาบาลที่ระบบยังไม่สามารถยืนยันได้ว่าส่งถึง LINE สำเร็จ</p>
+        </div>
+        <span class="badge badge-neutral">อ่านอย่างเดียว</span>
+    </div>
+
+    <section class="stats-rail" aria-label="ตัวชี้วัดการส่งแจ้งเตือน">
+        <div class="metric {% if failed_alerts.actionable_count > 0 %}metric-high{% endif %}">
+            <p class="metric-label">ต้องตรวจสอบ</p>
+            <p class="metric-value">{% if failed_alerts.degraded %}&mdash;{% else %}{{ failed_alerts.actionable_count }}{% endif %}</p>
+            <p class="metric-note">{% if failed_alerts.degraded %}ตรวจสอบไม่ได้{% else %}pending + failed{% endif %}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">รอตรวจสอบ</p>
+            <p class="metric-value">{% if failed_alerts.degraded %}&mdash;{% else %}{{ failed_alerts.pending_count }}{% endif %}</p>
+            <p class="metric-note">{% if failed_alerts.degraded %}ตรวจสอบไม่ได้{% else %}รอการจัดการ{% endif %}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ส่งล้มเหลว</p>
+            <p class="metric-value">{% if failed_alerts.degraded %}&mdash;{% else %}{{ failed_alerts.failed_count }}{% endif %}</p>
+            <p class="metric-note">{% if failed_alerts.degraded %}ตรวจสอบไม่ได้{% else %}ส่งล้มเหลวล่าสุด{% endif %}</p>
+        </div>
+        <div class="metric {% if failed_alerts.degraded %}metric-medium{% endif %}">
+            <p class="metric-label">อัปเดต</p>
+            <p class="metric-value">{{ failed_alerts.refreshed_at }}</p>
+            <p class="metric-note">{% if failed_alerts.degraded %}ข้อมูลลดระดับ{% else %}รีเฟรชทุก 30 วินาที{% endif %}</p>
+        </div>
+    </section>
+
+    <div id="failed-alerts-table"
+         hx-get="{{ url_for('dashboard.failed_alerts_partial') }}"
+         hx-trigger="every 30s"
+         hx-swap="innerHTML">
+        {% include "_failed_alerts_table.html" %}
+    </div>
+</section>
+{% endblock %}

@@ -32,6 +32,23 @@
         <p class="metric-value">{{ stats.alerts_7d }}</p>
         <p class="metric-note">ใช้ดูแนวโน้มเวร</p>
     </div>
+    <div class="metric {% if stats.failed_alerts_actionable > 0 %}metric-high{% endif %}">
+        <p class="metric-label">การส่งแจ้งเตือนค้าง</p>
+        <p class="metric-value">
+            {% if stats.failed_alerts_degraded %}
+                &mdash;
+            {% else %}
+                {{ stats.failed_alerts_actionable }}
+            {% endif %}
+        </p>
+        <p class="metric-note">
+            {% if stats.failed_alerts_degraded %}
+                ตรวจสอบไม่ได้ชั่วคราว
+            {% else %}
+                LINE ถึงพยาบาลยังไม่ยืนยัน
+            {% endif %}
+        </p>
+    </div>
 </section>
 
 <section class="command-grid">

@@ -34,6 +34,7 @@ from services.dashboard_actions import (
 )
 from services.dashboard_readers import (
     get_home_stats,
+    get_failed_nurse_alert_snapshot,
     get_patient_timeline,
     get_patient_trend,
     get_preconsult_packet,
@@ -96,6 +97,19 @@ def alerts_view():
     )
 
 
+@dashboard_bp.route("/failed-alerts", methods=["GET"])
+@require_nurse_auth
+def failed_alerts_view():
+    """Read-only backlog of nurse notification delivery failures."""
+    snapshot = get_failed_nurse_alert_snapshot(limit=200)
+    return render_template(
+        "failed_alerts.html",
+        nurse=current_nurse(),
+        csrf_token=get_csrf_token(),
+        failed_alerts=snapshot,
+    )
+
+
 # -----------------------------------------------------------------------------
 # HTMX partials — refresh เฉพาะ fragment โดยไม่ต้อง reload ทั้งหน้า
 # -----------------------------------------------------------------------------
@@ -119,6 +133,14 @@ def alerts_partial():
     return render_template("_alerts_table.html", alerts=items, csrf_token=get_csrf_token())
 
 
+@dashboard_bp.route("/partials/failed-alerts", methods=["GET"])
+@require_nurse_auth
+def failed_alerts_partial():
+    """Return read-only failed nurse alert backlog fragment."""
+    snapshot = get_failed_nurse_alert_snapshot(limit=200)
+    return render_template("_failed_alerts_table.html", failed_alerts=snapshot)
+
+
 # -----------------------------------------------------------------------------
 # Notification bell (S1-4)
 # -----------------------------------------------------------------------------
@@ -133,12 +155,17 @@ def bell_partial():
     ที่ cache อยู่แล้ว → ไม่โหลดเพิ่ม.
     """
     stats = get_home_stats()
+    failed_alerts_degraded = bool(stats.get("failed_alerts_degraded"))
     total = int(stats.get("queue_high_priority", 0)) + int(stats.get("alerts_today", 0))
+    if not failed_alerts_degraded:
+        total += int(stats.get("failed_alerts_actionable", 0))
     return render_template(
         "_bell.html",
         count=total,
         queue_high=stats.get("queue_high_priority", 0),
         alerts_today=stats.get("alerts_today", 0),
+        failed_alerts=stats.get("failed_alerts_actionable", 0),
+        failed_alerts_degraded=failed_alerts_degraded,
     )
 
 

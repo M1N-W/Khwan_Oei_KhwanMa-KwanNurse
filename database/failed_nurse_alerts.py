@@ -25,6 +25,13 @@ HEADER = [
     "Retry_Count",
     "Last_Error",
 ]
+READ_REQUIRED_HEADERS = {
+    "Created_At",
+    "User_ID",
+    "Risk_Level",
+    "Risk_Score",
+    "Status",
+}
 
 _EVENT_TYPE = "symptom_assessment"
 _STATUS_PENDING = "pending"
@@ -114,6 +121,55 @@ def build_symptom_alert_idempotency_key(
 def _safe_cell(value: Any, limit: int) -> str:
     text = "" if value is None else str(value)
     return text[:limit]
+
+
+def read_failed_nurse_alert_rows() -> list[dict[str, str]] | None:
+    """
+    Read raw FailedNurseAlerts rows without creating or mutating the sheet.
+
+    Returns:
+        None: spreadsheet access failed or an unexpected worksheet read error occurred.
+        []: spreadsheet is reachable but the worksheet is missing or has no data rows.
+        list[dict]: rows keyed by header names, padded for short rows.
+    """
+    try:
+        spreadsheet = get_spreadsheet()
+        if spreadsheet is None:
+            logger.warning("failed_nurse_alerts: spreadsheet unavailable for read")
+            return None
+
+        try:
+            sheet = spreadsheet.worksheet(SHEET_FAILED_NURSE_ALERTS)
+        except Exception as exc:
+            if exc.__class__.__name__ == "WorksheetNotFound":
+                logger.info("failed_nurse_alerts: worksheet missing during read")
+                return []
+            logger.exception("failed_nurse_alerts: worksheet open failed during read")
+            return None
+
+        values = sheet.get_all_values()
+        if not values:
+            return []
+
+        headers = [str(h).strip() for h in values[0]]
+        if not any(headers):
+            logger.warning("failed_nurse_alerts: invalid visibility schema during read")
+            return None
+        if not READ_REQUIRED_HEADERS.issubset(set(headers)):
+            logger.warning("failed_nurse_alerts: invalid visibility schema during read")
+            return None
+        if len(values) < 2:
+            return []
+
+        rows: list[dict[str, str]] = []
+        for row in values[1:]:
+            padded = list(row) + [""] * max(0, len(headers) - len(row))
+            record = dict(zip(headers, padded))
+            rows.append(record)
+        return rows
+    except Exception:
+        logger.exception("failed_nurse_alerts: read failed")
+        return None
 
 
 def _get_or_create_sheet():

@@ -1,7 +1,7 @@
 <a href="{{ url_for('dashboard.home') }}"
    class="bell-link"
-   title="ต้องสนใจ: คิวด่วน {{ queue_high }} · แจ้งเตือนวันนี้ {{ alerts_today }}"
-   aria-label="การแจ้งเตือน ({{ count }} รายการ)">
+   title="ต้องสนใจ: คิวด่วน {{ queue_high }} · แจ้งเตือนวันนี้ {{ alerts_today }} · {% if failed_alerts_degraded %}การส่งล้มเหลว: ตรวจสอบไม่ได้{% else %}ส่งล้มเหลว {{ failed_alerts }}{% endif %}"
+   aria-label="การแจ้งเตือน: คิวด่วน {{ queue_high }} รายการ, แจ้งเตือนอาการวันนี้ {{ alerts_today }} รายการ, {% if failed_alerts_degraded %}ไม่สามารถตรวจสอบรายการส่งล้มเหลวได้, รวมรายการที่ทราบ {{ count }} รายการ{% else %}การส่งล้มเหลว {{ failed_alerts }} รายการ, รวม {{ count }} รายการ{% endif %}">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
          class="bell-icon {% if count > 0 %}text-red-500{% else %}text-gray-500{% endif %}">
         <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/>

@@ -1,0 +1,74 @@
+{% if failed_alerts.degraded %}
+<div class="empty-state degraded-state" role="status">
+    ไม่สามารถตรวจสอบรายการส่งแจ้งเตือนล้มเหลวได้ชั่วคราว
+</div>
+{% elif failed_alerts["items"] %}
+<div class="table-wrap">
+    <table class="data-table failed-alerts-table">
+        <thead>
+            <tr>
+                <th>ความเร่งด่วน</th>
+                <th>ผู้ป่วย</th>
+                <th>เวลาที่รอ</th>
+                <th>สถานะส่ง</th>
+                <th>Retry</th>
+                <th>สาเหตุ</th>
+                <th class="text-right">การทำงาน</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in failed_alerts["items"] %}
+            <tr>
+                <td>
+                    {% if item.risk_level == 'critical' %}
+                        <span class="badge badge-high"><span class="severity-marker severity-high"></span>วิกฤต</span>
+                    {% elif item.risk_level == 'high' %}
+                        <span class="badge badge-high"><span class="severity-marker severity-high"></span>สูง</span>
+                    {% elif item.risk_level == 'medium' %}
+                        <span class="badge badge-medium"><span class="severity-marker severity-medium"></span>ปานกลาง</span>
+                    {% elif item.risk_level == 'low' %}
+                        <span class="badge badge-low"><span class="severity-marker severity-low"></span>ต่ำ</span>
+                    {% else %}
+                        <span class="badge badge-neutral">ปกติ</span>
+                    {% endif %}
+                    <div class="muted tiny">คะแนน {{ item.risk_score }}</div>
+                </td>
+                <td>
+                    <a href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}" class="patient-link">
+                        {{ item.patient_label or item.user_id_short }}
+                    </a>
+                    <div class="mono muted">{{ item.user_id_short }}</div>
+                </td>
+                <td class="muted" title="{{ item.created_at_full }}">
+                    {% if item.created_at_full and item.age_minutes > 0 %}
+                        {{ item.age_minutes }} นาที
+                    {% elif item.created_at_full %}
+                        น้อยกว่า 1 นาที
+                    {% else %}
+                        -
+                    {% endif %}
+                    <div class="tiny">{{ item.created_at }}</div>
+                </td>
+                <td>
+                    {% if item.status == 'failed' %}
+                        <span class="badge badge-high">{{ item.status_label }}</span>
+                    {% else %}
+                        <span class="badge badge-medium">{{ item.status_label }}</span>
+                    {% endif %}
+                    <div class="muted tiny">{{ item.event_type_label }}</div>
+                </td>
+                <td><strong>{{ item.retry_count }}</strong></td>
+                <td class="muted">{{ item.error_label }}</td>
+                <td>
+                    <div class="cell-actions">
+                        <a class="btn btn-soft" href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}">ดูผู้ป่วย</a>
+                    </div>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">ยังไม่มีรายการแจ้งพยาบาลที่ส่งไม่สำเร็จ</p>
+{% endif %}

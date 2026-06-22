@@ -228,5 +228,169 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
         self.assertFalse(result)
 
 
+class FailedNurseAlertReadTests(unittest.TestCase):
+
+    def test_read_existing_worksheet_returns_padded_records(self):
+        import database.failed_nurse_alerts as failed
+
+        sheet = Mock()
+        sheet.get_all_values.return_value = [
+            failed.HEADER,
+            ["2026-06-20 09:00:00", "KEY1", "symptom_assessment", "U1", "high"],
+        ]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["User_ID"], "U1")
+        self.assertEqual(rows[0]["Risk_Level"], "high")
+        self.assertEqual(rows[0]["Retry_Count"], "")
+        spreadsheet.add_worksheet.assert_not_called()
+        sheet.append_row.assert_not_called()
+        sheet.update.assert_not_called()
+
+    def test_read_future_extra_columns_preserved(self):
+        import database.failed_nurse_alerts as failed
+
+        sheet = Mock()
+        sheet.get_all_values.return_value = [
+            failed.HEADER + ["Future_Column"],
+            ["2026-06-20 09:00:00", "KEY1", "symptom_assessment", "U1",
+             "high", "3", "{}", "hidden", "pending", "0", "initial_line_push_failed", "future"],
+        ]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertEqual(rows[0]["Future_Column"], "future")
+
+    def test_missing_worksheet_returns_empty_without_create(self):
+        import database.failed_nurse_alerts as failed
+
+        class WorksheetNotFound(Exception):
+            pass
+
+        spreadsheet = Mock()
+        spreadsheet.worksheet.side_effect = WorksheetNotFound()
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertEqual(rows, [])
+        spreadsheet.add_worksheet.assert_not_called()
+
+    def test_blank_header_returns_none(self):
+        import database.failed_nurse_alerts as failed
+
+        sheet = Mock()
+        sheet.get_all_values.return_value = [["", "", ""], ["2026-06-20 09:00:00", "U1", "pending"]]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+        spreadsheet.add_worksheet.assert_not_called()
+        sheet.append_row.assert_not_called()
+
+    def test_missing_required_status_header_returns_none(self):
+        import database.failed_nurse_alerts as failed
+
+        headers = [h for h in failed.HEADER if h != "Status"]
+        sheet = Mock()
+        sheet.get_all_values.return_value = [headers, ["2026-06-20 09:00:00", "KEY1"]]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+
+    def test_missing_required_user_id_header_returns_none(self):
+        import database.failed_nurse_alerts as failed
+
+        headers = [h for h in failed.HEADER if h != "User_ID"]
+        sheet = Mock()
+        sheet.get_all_values.return_value = [headers, ["2026-06-20 09:00:00", "KEY1"]]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+
+    def test_valid_header_only_returns_empty(self):
+        import database.failed_nurse_alerts as failed
+
+        sheet = Mock()
+        sheet.get_all_values.return_value = [failed.HEADER]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertEqual(rows, [])
+
+    def test_unavailable_spreadsheet_returns_none(self):
+        import database.failed_nurse_alerts as failed
+
+        with patch.object(failed, "get_spreadsheet", return_value=None):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+
+    def test_read_exception_returns_none_without_raising(self):
+        import database.failed_nurse_alerts as failed
+
+        spreadsheet = Mock()
+        spreadsheet.worksheet.side_effect = RuntimeError("sheet unavailable")
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+        spreadsheet.add_worksheet.assert_not_called()
+
+    def test_read_never_uses_write_methods(self):
+        import database.failed_nurse_alerts as failed
+
+        sheet = Mock()
+        sheet.get_all_values.return_value = [failed.HEADER]
+        spreadsheet = Mock()
+        spreadsheet.worksheet.return_value = sheet
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet):
+            failed.read_failed_nurse_alert_rows()
+
+        spreadsheet.add_worksheet.assert_not_called()
+        sheet.append_row.assert_not_called()
+        sheet.update.assert_not_called()
+        sheet.batch_update.assert_not_called()
+
+    def test_read_error_log_does_not_include_payload_or_message_cells(self):
+        import database.failed_nurse_alerts as failed
+
+        spreadsheet = Mock()
+        spreadsheet.worksheet.side_effect = RuntimeError("worksheet unavailable")
+
+        with patch.object(failed, "get_spreadsheet", return_value=spreadsheet), \
+             self.assertLogs("database.failed_nurse_alerts", level="ERROR") as logs:
+            rows = failed.read_failed_nurse_alert_rows()
+
+        self.assertIsNone(rows)
+        joined = "\n".join(logs.output)
+        self.assertNotIn("Payload_JSON", joined)
+        self.assertNotIn("Notification_Message", joined)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
