@@ -31,6 +31,8 @@ from services.dashboard_actions import (
     dismiss_alert,
     mark_session_completed,
     update_patient_identity,
+    retry_failed_alert,
+    resolve_failed_alert,
 )
 from services.dashboard_readers import (
     get_home_stats,
@@ -138,7 +140,7 @@ def alerts_partial():
 def failed_alerts_partial():
     """Return read-only failed nurse alert backlog fragment."""
     snapshot = get_failed_nurse_alert_snapshot(limit=200)
-    return render_template("_failed_alerts_table.html", failed_alerts=snapshot)
+    return render_template("_failed_alerts_table.html", failed_alerts=snapshot, csrf_token=get_csrf_token())
 
 
 # -----------------------------------------------------------------------------
@@ -274,6 +276,28 @@ def patient_identity_update(user_id: str):
     result = update_patient_identity(user_id, nurse, dict(request.form))
     flash(result.message, "success" if result.ok else "error")
     return redirect(url_for("dashboard.patient_view", user_id=user_id))
+
+
+@dashboard_bp.route("/failed-alerts/<idempotency_key>/retry", methods=["POST"])
+@require_nurse_auth
+def failed_alerts_retry(idempotency_key: str):
+    """Manually retry a failed nurse alert notification."""
+    _check_csrf()
+    nurse = current_nurse() or "unknown"
+    result = retry_failed_alert(idempotency_key, nurse)
+    flash(result.message, "success" if result.ok else "error")
+    return redirect(_safe_next_url(request.form.get("next"), default=url_for("dashboard.failed_alerts_view")))
+
+
+@dashboard_bp.route("/failed-alerts/<idempotency_key>/resolve", methods=["POST"])
+@require_nurse_auth
+def failed_alerts_resolve(idempotency_key: str):
+    """Manually resolve a failed nurse alert notification."""
+    _check_csrf()
+    nurse = current_nurse() or "unknown"
+    result = resolve_failed_alert(idempotency_key, nurse)
+    flash(result.message, "success" if result.ok else "error")
+    return redirect(_safe_next_url(request.form.get("next"), default=url_for("dashboard.failed_alerts_view")))
 
 
 # -----------------------------------------------------------------------------

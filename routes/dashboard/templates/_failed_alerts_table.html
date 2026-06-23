@@ -62,6 +62,18 @@
                 <td>
                     <div class="cell-actions">
                         <a class="btn btn-soft" href="{{ url_for('dashboard.patient_view', user_id=item.user_id) }}">ดูผู้ป่วย</a>
+                        {% if csrf_token and item.status in ('pending', 'failed') %}
+                        <form method="POST" action="{{ url_for('dashboard.failed_alerts_retry', idempotency_key=item.idempotency_key) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="btn btn-blue">ส่งใหม่</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('dashboard.failed_alerts_resolve', idempotency_key=item.idempotency_key) }}" data-confirm="ยืนยันเคลียร์เคสนี้?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button type="submit" class="btn btn-muted">เคลียร์เคส</button>
+                        </form>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

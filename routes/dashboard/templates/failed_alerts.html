@@ -10,7 +10,9 @@
             <h1 class="page-title">การส่งแจ้งเตือนล้มเหลว</h1>
             <p class="muted tiny">รายการแจ้งพยาบาลที่ระบบยังไม่สามารถยืนยันได้ว่าส่งถึง LINE สำเร็จ</p>
         </div>
-        <span class="badge badge-neutral">อ่านอย่างเดียว</span>
+        {% if failed_alerts.degraded %}
+            <span class="badge badge-neutral">ระบบลดระดับ</span>
+        {% endif %}
     </div>
 
     <section class="stats-rail" aria-label="ตัวชี้วัดการส่งแจ้งเตือน">

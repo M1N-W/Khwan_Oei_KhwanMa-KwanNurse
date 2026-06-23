@@ -256,10 +256,14 @@ class FailedNurseAlertReadTests(unittest.TestCase):
         import database.failed_nurse_alerts as failed
 
         sheet = Mock()
+        row_vals = ["2026-06-20 09:00:00", "KEY1", "symptom_assessment", "U1",
+                    "high", "3", "{}", "hidden", "pending", "0", "initial_line_push_failed"]
+        # Pad values to match the newly added HEADER columns (Last_Attempt_At, Resolved_At, Resolved_By)
+        row_vals += ["", "", ""]
+        row_vals.append("future")
         sheet.get_all_values.return_value = [
             failed.HEADER + ["Future_Column"],
-            ["2026-06-20 09:00:00", "KEY1", "symptom_assessment", "U1",
-             "high", "3", "{}", "hidden", "pending", "0", "initial_line_push_failed", "future"],
+            row_vals,
         ]
         spreadsheet = Mock()
         spreadsheet.worksheet.return_value = sheet

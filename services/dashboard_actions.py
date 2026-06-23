@@ -219,18 +219,30 @@ def update_patient_identity(
     nurse_username: str,
     form_data: dict,
 ) -> ActionResult:
-    """Update patient first name, last name, and HN from the nurse dashboard."""
+    """Update nurse-editable patient identity fields from the dashboard."""
     if not user_id or not nurse_username:
         return ActionResult(ok=False, message="missing user_id or nurse")
     try:
         from database.patient_profile import read_patient_profile, upsert_patient_profile
-        from services.patient_profile import invalidate_profile_cache
+        from services.patient_profile import invalidate_profile_cache, normalize_registration_phone
+        from utils.pii import scrub_user_id
 
         identity = {
             "first_name": " ".join(str(form_data.get("first_name") or "").strip().split())[:80],
             "last_name": " ".join(str(form_data.get("last_name") or "").strip().split())[:80],
             "hn": " ".join(str(form_data.get("hn") or "").strip().split())[:40].upper(),
         }
+        if "phone" in form_data:
+            raw_phone = str(form_data.get("phone") or "").strip()
+            if raw_phone:
+                phone, bad_phone = normalize_registration_phone(raw_phone)
+                if bad_phone:
+                    incr("dashboard.action.identity.invalid_phone")
+                    return ActionResult(ok=False, message="เบอร์โทรศัพท์ไม่ถูกต้อง")
+                identity["phone"] = phone
+            else:
+                identity["phone"] = ""
+
         existing = read_patient_profile(user_id) or {}
         merged = dict(existing)
         merged.update(identity)
@@ -243,12 +255,13 @@ def update_patient_identity(
         invalidate_dashboard_cache()
         incr("dashboard.action.identity.ok")
         logger.info(
-            "audit: nurse=%s action=update_patient_identity user_id=%s fields=%s",
-            nurse_username, user_id, sorted(identity.keys()),
+            "audit: nurse=%s action=update_patient_identity target=%s fields=%s",
+            nurse_username, scrub_user_id(user_id), sorted(identity.keys()),
         )
         return ActionResult(ok=True, message="บันทึกข้อมูลผู้ป่วยแล้ว")
     except Exception:
-        logger.exception("Error updating patient identity user_id=%s", user_id)
+        from utils.pii import scrub_user_id
+        logger.exception("Error updating patient identity user_id=%s", scrub_user_id(user_id))
         incr("dashboard.action.identity.error")
         return ActionResult(ok=False, message="เกิดข้อผิดพลาด")
 
@@ -277,3 +290,120 @@ def _alert_timestamp_key(timestamp) -> str:
     if hasattr(timestamp, "strftime"):
         return timestamp.strftime("%Y-%m-%dT%H:%M:%S")
     return str(timestamp).strip()
+
+
+def retry_failed_alert(idempotency_key: str, nurse_username: str) -> ActionResult:
+    """Manually retry sending a failed nurse alert message."""
+    if not idempotency_key or not nurse_username:
+        return ActionResult(ok=False, message="missing parameters")
+
+    # Concurrency Lock
+    lock_key = f"lock:retry:{idempotency_key}"
+    if ttl_cache.get(lock_key) is not None:
+        incr("dashboard.action.retry.locked")
+        return ActionResult(ok=False, message="กำลังดำเนินการส่งรายการนี้อยู่ กรุณารอสักครู่")
+    ttl_cache.set(lock_key, True, 10)  # 10s lease
+
+    try:
+        from database.failed_nurse_alerts import read_failed_nurse_alert_by_key, update_failed_alert_by_key
+        from services.notification import send_line_push
+        from datetime import datetime
+        from config import LOCAL_TZ
+
+        row = read_failed_nurse_alert_by_key(idempotency_key)
+        if not row:
+            incr("dashboard.action.retry.not_found")
+            return ActionResult(ok=False, message="ไม่พบรายการแจ้งเตือนที่ระบุ")
+
+        status = str(row.get("Status") or "").strip().lower()
+        if status not in {"pending", "failed"}:
+            incr("dashboard.action.retry.non_actionable")
+            return ActionResult(ok=False, message="รายการนี้ได้รับการจัดการแล้ว")
+
+        message = str(row.get("Notification_Message") or "").strip()
+        try:
+            retry_count = int(row.get("Retry_Count") or 0)
+        except (ValueError, TypeError):
+            retry_count = 0
+
+        now_str = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        updates = {
+            "Retry_Count": retry_count + 1,
+            "Last_Attempt_At": now_str,
+        }
+
+        # Attempt push
+        success = send_line_push(message)
+        if success:
+            updates["Status"] = "sent"
+            updates["Last_Error"] = ""
+            msg = "ส่งแจ้งเตือนสำเร็จ"
+        else:
+            updates["Status"] = "failed"
+            updates["Last_Error"] = "retry_push_failed"
+            msg = "ส่งแจ้งเตือนไม่สำเร็จชั่วคราว"
+
+        ok = update_failed_alert_by_key(idempotency_key, updates)
+        if not ok:
+            incr("dashboard.action.retry.save_failed")
+            return ActionResult(ok=False, message="อัปเดตสถานะในชีตไม่สำเร็จ")
+
+        invalidate_dashboard_cache()
+        incr("dashboard.action.retry.ok")
+        logger.info(
+            "audit: nurse=%s action=retry_alert target=%s status=%s",
+            nurse_username, idempotency_key, updates["Status"],
+        )
+        return ActionResult(ok=success, message=msg)
+    except Exception:
+        logger.exception("Error retrying alert key=%s", idempotency_key)
+        incr("dashboard.action.retry.error")
+        return ActionResult(ok=False, message="เกิดข้อผิดพลาดในการดำเนินการ")
+    finally:
+        # Clean up lock key so subsequent actions can be run
+        ttl_cache.invalidate(lock_key)
+
+
+def resolve_failed_alert(idempotency_key: str, nurse_username: str) -> ActionResult:
+    """Manually resolve/close a failed nurse alert without sending."""
+    if not idempotency_key or not nurse_username:
+        return ActionResult(ok=False, message="missing parameters")
+
+    try:
+        from database.failed_nurse_alerts import read_failed_nurse_alert_by_key, update_failed_alert_by_key
+        from datetime import datetime
+        from config import LOCAL_TZ
+
+        row = read_failed_nurse_alert_by_key(idempotency_key)
+        if not row:
+            incr("dashboard.action.resolve.not_found")
+            return ActionResult(ok=False, message="ไม่พบรายการแจ้งเตือนที่ระบุ")
+
+        status = str(row.get("Status") or "").strip().lower()
+        if status not in {"pending", "failed"}:
+            incr("dashboard.action.resolve.non_actionable")
+            return ActionResult(ok=False, message="รายการนี้ได้รับการจัดการแล้ว")
+
+        now_str = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        updates = {
+            "Status": "resolved",
+            "Resolved_At": now_str,
+            "Resolved_By": nurse_username,
+        }
+
+        ok = update_failed_alert_by_key(idempotency_key, updates)
+        if not ok:
+            incr("dashboard.action.resolve.save_failed")
+            return ActionResult(ok=False, message="อัปเดตสถานะในชีตไม่สำเร็จ")
+
+        invalidate_dashboard_cache()
+        incr("dashboard.action.resolve.ok")
+        logger.info(
+            "audit: nurse=%s action=resolve_alert target=%s",
+            nurse_username, idempotency_key,
+        )
+        return ActionResult(ok=True, message="เคลียร์เคสสำเร็จ")
+    except Exception:
+        logger.exception("Error resolving alert key=%s", idempotency_key)
+        incr("dashboard.action.resolve.error")
+        return ActionResult(ok=False, message="เกิดข้อผิดพลาดในการดำเนินการ")

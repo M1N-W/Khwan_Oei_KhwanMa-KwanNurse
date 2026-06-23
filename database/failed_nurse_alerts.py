@@ -24,6 +24,9 @@ HEADER = [
     "Status",
     "Retry_Count",
     "Last_Error",
+    "Last_Attempt_At",
+    "Resolved_At",
+    "Resolved_By",
 ]
 READ_REQUIRED_HEADERS = {
     "Created_At",
@@ -196,6 +199,29 @@ def _get_or_create_sheet():
         return None
 
 
+def _verify_headers_and_get_sheet():
+    sheet = _get_or_create_sheet()
+    if sheet is None:
+        return None
+    try:
+        values = sheet.get_all_values()
+        if values:
+            raw_headers = [str(h).strip() for h in values[0]]
+            headers = list(raw_headers)
+            changed = False
+            for h in HEADER:
+                if h not in headers:
+                    headers.append(h)
+                    changed = True
+            if changed:
+                from database.sheets import column_number_to_letter
+                end_col = column_number_to_letter(len(headers))
+                sheet.update(f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED")
+    except Exception:
+        logger.exception("failed_nurse_alerts: header verification failed")
+    return sheet
+
+
 def save_failed_symptom_alert(
     *,
     user_id: Any,
@@ -215,7 +241,7 @@ def save_failed_symptom_alert(
     for a future worker contract, while the webhook path remains bounded.
     """
     try:
-        sheet = _get_or_create_sheet()
+        sheet = _verify_headers_and_get_sheet()
         if sheet is None:
             return False
 
@@ -241,6 +267,8 @@ def save_failed_symptom_alert(
             0,
             _LAST_ERROR,
         ]
+        # Pad row to match HEADER length
+        row = row + [""] * max(0, len(HEADER) - len(row))
         sheet.append_row(row, value_input_option="USER_ENTERED")
         logger.info(
             "failed_nurse_alerts: appended event=%s risk=%s score=%s key=%s",
@@ -249,4 +277,64 @@ def save_failed_symptom_alert(
         return True
     except Exception:
         logger.exception("failed_nurse_alerts: append failed")
+        return False
+
+
+def read_failed_nurse_alert_by_key(idempotency_key: str) -> Optional[dict[str, Any]]:
+    """Read a specific failed alert row by Idempotency_Key."""
+    if not idempotency_key:
+        return None
+    try:
+        sheet = _verify_headers_and_get_sheet()
+        if not sheet:
+            return None
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return None
+        headers = [str(h).strip() for h in values[0]]
+        if "Idempotency_Key" not in headers:
+            return None
+        idx_key = headers.index("Idempotency_Key")
+        for row in reversed(values[1:]):
+            if len(row) > idx_key and row[idx_key] == idempotency_key:
+                padded = list(row) + [""] * max(0, len(headers) - len(row))
+                return dict(zip(headers, padded))
+        return None
+    except Exception:
+        logger.exception("failed_nurse_alerts: read_failed_nurse_alert_by_key failed key=%s", idempotency_key)
+        return None
+
+
+def update_failed_alert_by_key(idempotency_key: str, updates: dict[str, Any]) -> bool:
+    """Update columns in a failed alert row by Idempotency_Key."""
+    if not idempotency_key:
+        return False
+    try:
+        sheet = _verify_headers_and_get_sheet()
+        if not sheet:
+            return False
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return False
+        headers = [str(h).strip() for h in values[0]]
+        if "Idempotency_Key" not in headers:
+            return False
+        idx_key = headers.index("Idempotency_Key")
+        for sheet_row_index, row in enumerate(values[1:], start=2):
+            if len(row) > idx_key and row[idx_key] == idempotency_key:
+                padded = list(row) + [""] * max(0, len(headers) - len(row))
+                record = dict(zip(headers, padded))
+                # Apply updates
+                for key, val in updates.items():
+                    if key in headers:
+                        record[key] = val
+                new_row = [record.get(h, "") for h in headers]
+                from database.sheets import column_number_to_letter
+                end_col = column_number_to_letter(len(headers))
+                target_range = f"A{sheet_row_index}:{end_col}{sheet_row_index}"
+                sheet.update(target_range, [new_row], value_input_option="USER_ENTERED")
+                return True
+        return False
+    except Exception:
+        logger.exception("failed_nurse_alerts: update_failed_alert_by_key failed key=%s", idempotency_key)
         return False
