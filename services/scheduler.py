@@ -74,6 +74,17 @@ def init_scheduler():
             )
             logger.info("✅ Scheduled hourly metrics summary at :00")
 
+            # KWN-04: Register the persistent due dispatcher loop (every 1 minute).
+            from services.reminder import process_due_reminders  # deferred to avoid circular import
+            scheduler.add_job(
+                func=process_due_reminders,
+                trigger=CronTrigger(minute='*/1', timezone=LOCAL_TZ),
+                id='process_due_reminders',
+                name='Persistent Due Dispatcher (KWN-04)',
+                replace_existing=True
+            )
+            logger.info("✅ Scheduled persistent due dispatcher every 1 minute")
+
             # Load and schedule pending reminders from database
             load_pending_reminders()
             
@@ -314,22 +325,23 @@ def reschedule_all_reminders():
     try:
         logger.info("Rescheduling all reminders")
         
-        # Clear existing reminder jobs (keep system jobs like check_no_response)
+        # Clear existing reminder jobs but keep all system/loop jobs.
+        _SYSTEM_JOB_IDS = {'check_no_response', 'process_due_reminders', 'early_warning_scan', 'metrics_summary'}
         jobs = scheduler.get_jobs()
         for job in jobs:
-            if job.id != 'check_no_response':
+            if job.id not in _SYSTEM_JOB_IDS:
                 scheduler.remove_job(job.id)
-        
+
         # Reload from database
         load_pending_reminders()
-        
+
         # Count current jobs
         jobs_after = scheduler.get_jobs()
-        reminder_jobs = [j for j in jobs_after if j.id != 'check_no_response']
+        reminder_jobs = [j for j in jobs_after if j.id not in _SYSTEM_JOB_IDS]
         
         logger.info(f"Rescheduled {len(reminder_jobs)} reminders")
         return len(reminder_jobs)
-        
+
     except Exception as e:
         logger.exception(f"Error rescheduling all reminders: {e}")
         return 0

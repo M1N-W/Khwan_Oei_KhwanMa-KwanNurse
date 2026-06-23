@@ -16,7 +16,8 @@ from database.reminders import (
     save_reminder_sent,
     save_reminder_response,
     get_pending_reminders,
-    check_no_response_reminders
+    check_no_response_reminders,
+    update_schedule_status,
 )
 from services.notification import send_line_push
 
@@ -290,7 +291,8 @@ def check_and_alert_no_response():
     try:
         logger.info("Checking for reminders with no response")
         
-        no_response_list = check_no_response_reminders()
+        from database.reminders import check_no_response_reminders as _check_no_resp
+        no_response_list = _check_no_resp()
         
         if not no_response_list:
             logger.info("No reminders found with missing responses")
@@ -319,7 +321,8 @@ def check_and_alert_no_response():
                 f"กรุณาติดตามผู้ป่วยค่ะ"
             )
             
-            success = send_line_push(alert_message, NURSE_GROUP_ID)
+            from services.notification import send_line_push as _send
+            success = _send(alert_message, NURSE_GROUP_ID)
             if success:
                 alerts_sent += 1
                 logger.info(f"Sent no-response alert for {user_id}")
@@ -394,3 +397,144 @@ def get_reminder_summary(user_id):
             'no_response': 0,
             'latest': None
         }
+
+
+_DISPATCH_MAX_RETRIES = 3
+_DISPATCH_OWNER_ID = "dispatcher"
+
+
+def process_due_reminders() -> None:
+    """
+    Persistent Due Dispatcher (KWN-04).
+
+    Runs every minute via APScheduler. Fetches all due rows from the
+    ReminderSchedules sheet, acquires a claim/lease lock on each, sends the
+    LINE push message, then finalises the row as *sent* or *failed* (with
+    retry / permanent-failure logic).
+
+    Contract:
+    - Never raises an exception — all errors are swallowed and logged so the
+      scheduler thread is not killed.
+    - Skips reminders with a missing ``User_ID`` or ``Row_Num``.
+    - Processes reminders in chronological order (oldest overdue first).
+    - On failure: increments ``Retry_Count``.  When the count reaches
+      ``_DISPATCH_MAX_RETRIES`` the final status is ``permanent_failure``.
+    """
+    from database.reminders import get_due_reminders, claim_reminder, update_reminder_result
+    from services.notification import send_line_push
+
+    try:
+        now_dt = datetime.now(tz=LOCAL_TZ)
+        due_list = get_due_reminders(now_dt)
+    except Exception as exc:
+        logger.exception(f"[dispatcher] Error fetching due reminders: {exc}")
+        return
+
+    if not due_list:
+        return
+
+    # Sort chronologically (oldest overdue first) to honour catch-up ordering.
+    def _sort_key(r):
+        try:
+            raw = r.get("Scheduled_Date") or r.get("scheduled_date") or ""
+            if isinstance(raw, datetime):
+                return raw
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(raw, fmt)
+                except ValueError:
+                    continue
+        except Exception:
+            pass
+        return datetime.min
+
+    try:
+        due_list = sorted(due_list, key=_sort_key)
+    except Exception:
+        pass  # If sort fails, process in original order
+
+    for reminder in due_list:
+        try:
+            _dispatch_single(reminder, claim_reminder, send_line_push, update_reminder_result)
+        except Exception as exc:
+            logger.exception(f"[dispatcher] Unexpected error processing reminder {reminder}: {exc}")
+
+
+def _dispatch_single(reminder, claim_reminder, send_line_push, update_reminder_result) -> None:
+    """
+    Handle one reminder row: validate → claim → send → finalise.
+    """
+    user_id = reminder.get("User_ID") or reminder.get("user_id") or ""
+    reminder_type = reminder.get("Reminder_Type") or reminder.get("reminder_type") or ""
+    _row_val = reminder.get("Row_Num") if "Row_Num" in reminder else reminder.get("row_num")
+    raw_retry = reminder.get("Retry_Count") if reminder.get("Retry_Count") is not None else reminder.get("retry_count", 0)
+
+    # Validate required fields
+    if not user_id:
+        logger.warning(f"[dispatcher] Skipping reminder with empty User_ID: {reminder}")
+        return
+    if not reminder_type:
+        logger.warning(f"[dispatcher] Skipping reminder with empty Reminder_Type: {reminder}")
+        return
+    try:
+        row_num = int(_row_val)
+    except (TypeError, ValueError):
+        logger.warning(f"[dispatcher] Skipping reminder with invalid Row_Num '{_row_val}': {reminder}")
+        return
+
+    # Normalise retry count — clamp negatives to 0
+    try:
+        current_retry = max(0, int(raw_retry))
+    except (TypeError, ValueError):
+        current_retry = 0
+
+    # Attempt to acquire claim/lease lock
+    try:
+        claimed = claim_reminder(user_id, reminder_type, row_num, _DISPATCH_OWNER_ID)
+    except Exception as exc:
+        logger.warning(f"[dispatcher] claim_reminder raised for row {row_num}: {exc}")
+        return
+
+    if not claimed:
+        logger.debug(f"[dispatcher] Could not claim row {row_num} ({user_id}/{reminder_type}) — skipping.")
+        return
+
+    # Send the LINE push message
+    message = get_reminder_message(reminder_type)
+    send_error = None
+    try:
+        success = send_line_push(message, user_id)
+    except Exception as exc:
+        success = False
+        send_error = str(exc)
+        logger.exception(f"[dispatcher] send_line_push raised for {user_id}: {exc}")
+
+    if success:
+        try:
+            update_reminder_result(user_id, reminder_type, row_num, ReminderStatus.SENT)
+        except Exception as exc:
+            logger.exception(f"[dispatcher] update_reminder_result (SENT) failed for row {row_num}: {exc}")
+        logger.info(f"[dispatcher] Sent {reminder_type} to {user_id} (row {row_num}).")
+    else:
+        new_retry_count = current_retry + 1
+        if new_retry_count >= _DISPATCH_MAX_RETRIES:
+            new_status = "permanent_failure"
+        else:
+            new_status = "failed"
+        error_msg = send_error or "send_line_push returned False"
+        try:
+            update_reminder_result(
+                user_id,
+                reminder_type,
+                row_num,
+                new_status,
+                error_msg=error_msg,
+                retry_count=new_retry_count,
+            )
+        except Exception as exc:
+            logger.exception(f"[dispatcher] update_reminder_result (failure) failed for row {row_num}: {exc}")
+        logger.warning(
+            f"[dispatcher] Failed to send {reminder_type} to {user_id} (row {row_num}). "
+            f"Status: {new_status}, retry: {new_retry_count}."
+        )
+
