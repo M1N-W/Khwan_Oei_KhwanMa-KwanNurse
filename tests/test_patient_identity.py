@@ -45,8 +45,11 @@ class PatientIdentityWebhookTests(unittest.TestCase):
 
     def test_handler_asks_for_missing_first_name(self):
         from routes.webhook import handle_patient_identity
+        from database.patient_profile import PatientProfileReadResult
 
-        with patch("database.patient_profile.upsert_patient_profile"):
+        with patch("database.patient_profile.read_patient_profile_result",
+                   return_value=PatientProfileReadResult(True, None)), \
+             patch("database.patient_profile.upsert_patient_profile"):
             response, status = handle_patient_identity("U1", {}, "")
 
         self.assertEqual(status, 200)
@@ -54,6 +57,7 @@ class PatientIdentityWebhookTests(unittest.TestCase):
 
     def test_handler_merges_existing_profile_and_confirms(self):
         from routes.webhook import handle_patient_identity
+        from database.patient_profile import PatientProfileReadResult
 
         existing = {"age": 61, "sex": "f", "diseases": ["เบาหวาน"]}
         captured = {}
@@ -63,7 +67,8 @@ class PatientIdentityWebhookTests(unittest.TestCase):
             captured["profile"] = profile
             return True
 
-        with patch("database.patient_profile.read_patient_profile", return_value=existing), \
+        with patch("database.patient_profile.read_patient_profile_result",
+                   return_value=PatientProfileReadResult(True, existing)), \
              patch("database.patient_profile.upsert_patient_profile", side_effect=_upsert), \
              patch("services.dashboard_readers.invalidate_dashboard_cache", return_value=0):
             response, status = handle_patient_identity(
@@ -73,7 +78,7 @@ class PatientIdentityWebhookTests(unittest.TestCase):
             )
 
         self.assertEqual(status, 200)
-        self.assertIn("บันทึกข้อมูลคนไข้แล้ว", response.get_json()["fulfillmentText"])
+        self.assertIn("เบอร์โทรศัพท์", response.get_json()["fulfillmentText"])
         self.assertEqual(captured["user_id"], "U1")
         self.assertEqual(captured["profile"]["age"], 61)
         self.assertEqual(captured["profile"]["first_name"], "สมชาย")

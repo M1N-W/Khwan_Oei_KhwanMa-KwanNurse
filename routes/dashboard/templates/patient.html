@@ -9,9 +9,15 @@
         <p class="page-kicker">Patient Context</p>
         <h1 class="page-title">{{ patient.patient_display_name or 'ผู้ป่วยไม่ทราบชื่อ' }}</h1>
         <p class="muted">HN: <strong>{{ patient.patient_hn or '-' }}</strong></p>
+        <p class="muted">โทร: <strong>{{ patient.patient_phone_masked or '-' }}</strong></p>
         <p class="mono muted">System ID: {{ patient.user_id }}</p>
     </div>
     <div>
+        {% if patient.patient_registration_status == 'registered' %}
+            <span class="badge badge-low">ข้อมูลลงทะเบียนครบแล้ว</span>
+        {% else %}
+            <span class="badge badge-neutral">ข้อมูลลงทะเบียนยังไม่ครบ</span>
+        {% endif %}
         {% if patient.latest_risk_level == 'critical' %}
             <span class="badge badge-high"><span class="severity-marker severity-high"></span>ความเสี่ยงล่าสุด: วิกฤต</span>
         {% elif patient.latest_risk_level == 'high' %}
@@ -86,10 +92,37 @@
             <input class="input" id="hn" name="hn" value="{{ patient.patient_hn or '' }}" maxlength="40">
         </div>
         <div class="field">
+            <label for="phone">เบอร์โทรศัพท์</label>
+            <input class="input" id="phone" name="phone" value="{{ patient.patient_phone or '' }}" type="tel" maxlength="16" autocomplete="tel">
+        </div>
+        <div class="field">
             <label class="sr-only" for="identity-save">บันทึก</label>
             <button id="identity-save" type="submit" class="btn btn-primary full-width">บันทึก</button>
         </div>
     </form>
+    <div class="stats-rail">
+        <div class="metric">
+            <p class="metric-label">สถานะลงทะเบียน</p>
+            <p class="metric-value">{{ 'ครบแล้ว' if patient.patient_registration_status == 'registered' else 'ยังไม่ครบ' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ลงทะเบียนครบเมื่อ</p>
+            <p class="metric-value">{{ patient.patient_registered_at or '-' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ความยินยอม</p>
+            <p class="metric-value">{{ patient.patient_consent_version or '-' }}</p>
+            <p class="muted tiny">{{ patient.patient_consent_at or 'ต้องได้รับจากผู้ป่วยผ่าน LINE' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ใช้งานล่าสุด</p>
+            <p class="metric-value">{{ patient.patient_last_active_at or '-' }}</p>
+        </div>
+    </div>
+    {% if patient.patient_missing_fields %}
+        <p class="muted tiny">ข้อมูลที่ยังขาด: {{ patient.patient_missing_fields | join(', ') }}</p>
+    {% endif %}
+    <p class="muted tiny">ความยินยอมต้องได้รับจากผู้ป่วยผ่าน LINE</p>
 </section>
 
 {% if trend and trend.summary.data_points > 0 %}

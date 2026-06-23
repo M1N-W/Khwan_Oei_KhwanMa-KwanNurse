@@ -69,8 +69,8 @@ This made symptom-assessment persistence and nurse notification failures explici
 | Work Unit                                                     | Status    |
 | ------------------------------------------------------------- | --------- |
 | KWN-01 - Failed Nurse Alert Read-only Visibility              | `done`    |
-| KWN-02 - Patient Registry Contract                            | `planned` |
-| KWN-03 - Failed Alert Manual Recovery                         | `planned` |
+| KWN-02 - Patient Registry Contract                            | `done`    |
+| KWN-03 - Failed Alert Manual Recovery                         | `done`    |
 | KWN-04 - Persistent Due Dispatcher                            | `planned` |
 | KWN-05 - LINE Message Delivery Layer                          | `planned` |
 | KWN-06 - Registration Quick Reply and Flex UX                 | `planned` |
@@ -114,6 +114,8 @@ Exit criteria: authenticated nurses can see pending/failed records, malformed ro
 
 ### KWN-02 - Patient Registry Contract
 
+Status: `done`
+
 Purpose: turn the existing partial patient identity fields into a registration contract suitable for clinical follow-up.
 
 Major scope: add phone, registration status, consent fields, registered and last-active timestamps, dashboard display/edit support, soft gate rules.
@@ -129,6 +131,8 @@ Main risks: treating self-entered data as verified, blocking urgent flows, expos
 Exit criteria: additive schema works with old rows, registered/incomplete status is deterministic, phone display is privacy-safe, urgent workflows remain available.
 
 ### KWN-03 - Failed Alert Manual Recovery
+
+Status: `done`
 
 Purpose: let authorized nurses manually retry or resolve failed delivery rows after KWN-01 proves visibility.
 

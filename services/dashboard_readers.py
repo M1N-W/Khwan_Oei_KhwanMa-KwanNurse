@@ -168,6 +168,8 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         "patient_hn": "",
         "patient_display_name": "",
         "patient_label": user_id_short,
+        "patient_registration_status": "incomplete",
+        "patient_phone_masked": "",
     }
     if not user_id:
         return fallback
@@ -179,13 +181,16 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         from database.patient_profile import read_patient_profile
         profile = read_patient_profile(user_id) or {}
     except Exception:
-        logger.exception("Error loading patient identity user_id=%s", user_id)
+        from utils.pii import scrub_user_id
+        logger.exception("Error loading patient identity user_id=%s", scrub_user_id(user_id))
         ttl_cache.set(cache_key, fallback, TTL_ALERTS_SECONDS)
         return fallback
 
     first_name = (profile.get("first_name") or "").strip()
     last_name = (profile.get("last_name") or "").strip()
     hn = (profile.get("hn") or "").strip()
+    status = (profile.get("registration_status") or "incomplete").strip() or "incomplete"
+    masked_phone = (profile.get("masked_phone") or "").strip()
     display_name = " ".join(part for part in (first_name, last_name) if part).strip()
     if display_name and hn:
         label = f"{display_name} · HN {hn}"
@@ -201,9 +206,57 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         "patient_hn": hn,
         "patient_display_name": display_name,
         "patient_label": label,
+        "patient_registration_status": status,
+        "patient_phone_masked": masked_phone,
     }
     ttl_cache.set(cache_key, result, TTL_ALERTS_SECONDS)
     return result
+
+
+def _registration_detail_for_user(user_id: str) -> dict[str, Any]:
+    fallback = {
+        "patient_phone": "",
+        "patient_phone_masked": "",
+        "patient_registration_status": "incomplete",
+        "patient_registered_at": "",
+        "patient_consent_version": "",
+        "patient_consent_at": "",
+        "patient_last_active_at": "",
+        "patient_missing_fields": ["first_name", "last_name", "hn", "phone", "consent"],
+    }
+    if not user_id:
+        return fallback
+    try:
+        from database.patient_profile import read_patient_profile
+        from services.patient_profile import registration_missing_fields
+
+        profile = read_patient_profile(user_id) or {}
+    except Exception:
+        from utils.pii import scrub_user_id
+        logger.exception("Error loading patient registry detail user_id=%s", scrub_user_id(user_id))
+        return fallback
+
+    missing_labels = {
+        "first_name": "ชื่อ",
+        "last_name": "นามสกุล",
+        "hn": "HN",
+        "phone": "เบอร์โทรศัพท์",
+        "consent": "ความยินยอมจากผู้ป่วย",
+    }
+    missing = [
+        missing_labels.get(field, field)
+        for field in registration_missing_fields(profile)
+    ]
+    return {
+        "patient_phone": profile.get("phone") or "",
+        "patient_phone_masked": profile.get("masked_phone") or "",
+        "patient_registration_status": profile.get("registration_status") or "incomplete",
+        "patient_registered_at": profile.get("registered_at") or "",
+        "patient_consent_version": profile.get("consent_version") or "",
+        "patient_consent_at": profile.get("consent_at") or "",
+        "patient_last_active_at": profile.get("last_active_at") or "",
+        "patient_missing_fields": missing,
+    }
 
 
 def _priority_label(priority: int) -> str:
@@ -555,6 +608,7 @@ def get_patient_timeline(
         "events": events,
     }
     result.update(_identity_for_user(user_id))
+    result.update(_registration_detail_for_user(user_id))
     ttl_cache.set(key, result, 30)  # TTL 30s — patient view ไม่เปิดค้างนาน
     return result
 
@@ -571,6 +625,7 @@ def _empty_timeline(user_id: str) -> dict[str, Any]:
         "events": [],
     }
     result.update(_identity_for_user(user_id))
+    result.update(_registration_detail_for_user(user_id))
     return result
 
 
@@ -1001,6 +1056,7 @@ def _serialize_failed_alert_row(row: dict[str, Any]) -> Optional[dict[str, Any]]
     created_at = _parse_queue_timestamp(str(row.get("Created_At") or ""))
     age_minutes = _age_minutes(created_at) if created_at else 0
     item = {
+        "idempotency_key": str(row.get("Idempotency_Key") or "").strip(),
         "created_at": created_at.strftime("%d/%m %H:%M") if created_at else "-",
         "created_at_full": created_at.strftime("%Y-%m-%d %H:%M") if created_at else "",
         "age_minutes": age_minutes,

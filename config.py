@@ -41,6 +41,13 @@ SHEET_EDUCATION_LOG = "EducationLog"
 SHEET_VOICE_LOG = "VoiceMessageLog"  # Phase 5 P5-2 audit trail
 SHEET_FAILED_NURSE_ALERTS = "FailedNurseAlerts"
 
+# Patient registry contract (KWN-02)
+PATIENT_CONSENT_VERSION = os.environ.get("PATIENT_CONSENT_VERSION", "v1").strip() or "v1"
+PATIENT_REGISTRATION_GATE_ENABLED = (
+    os.environ.get("PATIENT_REGISTRATION_GATE_ENABLED", "false").lower()
+    in ("1", "true", "yes", "on")
+)
+
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
 NURSE_GROUP_ID = os.environ.get("NURSE_GROUP_ID")

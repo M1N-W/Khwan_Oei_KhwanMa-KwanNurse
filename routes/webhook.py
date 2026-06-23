@@ -3,7 +3,6 @@
 Webhook Routes Module
 Handles Dialogflow webhook endpoints
 """
-import json
 import os
 from datetime import datetime
 from flask import request, jsonify, Response
@@ -14,6 +13,7 @@ from utils import (
     normalize_phone_number,
     is_valid_thai_mobile
 )
+from utils.pii import scrub_user_id
 from services import (
     calculate_symptom_risk,
     calculate_personal_risk,
@@ -44,6 +44,10 @@ from database.education_logs import save_education_view
 from config import NURSE_GROUP_ID
 
 logger = get_logger(__name__)
+
+
+def _mask_user_id_for_log(user_id):
+    return scrub_user_id(user_id)
 
 
 def register_routes(app):
@@ -168,16 +172,11 @@ def register_routes(app):
                 "fulfillmentText": "เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้ง"
             }), 200
         
-        # Log intent + masked user id. Avoid dumping full params (may contain
-        # phone numbers, descriptions, or other PII). Full payload only in
-        # DEBUG mode.
+        # Log intent + masked user id only. Param values may contain names,
+        # HN, phone, consent, symptoms, or other PII even in DEBUG mode.
         masked_user = (user_id[:4] + "***" + user_id[-4:]) if len(user_id) > 10 else "***"
-        if DEBUG:
-            logger.info("Intent: %s | User: %s | Params: %s",
-                       intent, masked_user, json.dumps(params, ensure_ascii=False))
-        else:
-            logger.info("Intent: %s | User: %s | ParamKeys: %s",
-                       intent, masked_user, list(params.keys()))
+        logger.info("Intent: %s | User: %s | ParamKeys: %s",
+                    intent, masked_user, sorted(params.keys()))
 
         # P4-2: count every intent dispatch so /metrics surfaces traffic shape
         # and error rate. Errors caught here = handler raised; individual
@@ -240,40 +239,102 @@ def register_routes(app):
         return jsonify({"status": "ok", "events_received": len(events)}), 200
 
 
+_REGISTRATION_GATED_INTENTS = {
+    "AssessRisk",
+    "AssessPersonalRisk",
+    "RequestAppointment",
+    "GetFollowUpSummary",
+    "RecommendKnowledge",
+}
+
+_LAST_ACTIVE_TRACKED_INTENTS = {
+    "ReportSymptoms",
+    "AssessRisk",
+    "AssessPersonalRisk",
+    "RequestAppointment",
+    "GetKnowledge",
+    "GetFollowUpSummary",
+    "ContactNurse",
+    "AfterHoursChoice",
+    "CancelConsultation",
+    "FreeTextSymptom",
+    "RecommendKnowledge",
+}
+
+_REGISTRATION_INTENTS = {"PatientIdentity", "UpdatePatientIdentity", "RegisterPatient"}
+
+
+def _registration_gate_response(intent, user_id, query_text):
+    if intent not in _REGISTRATION_GATED_INTENTS:
+        return None
+    try:
+        import config as app_config
+        if not app_config.PATIENT_REGISTRATION_GATE_ENABLED:
+            return None
+        from services.i18n import detect_language, t
+        from services.patient_profile import should_prompt_registration
+
+        decision = should_prompt_registration(user_id)
+        if decision.prompt:
+            lang = detect_language(query_text or "")
+            return jsonify({"fulfillmentText": t("identity.incomplete_prompt", lang)}), 200
+        if decision.reason == "storage_unavailable":
+            logger.warning("registration gate fail-open user=%s", _mask_user_id_for_log(user_id))
+    except Exception:
+        logger.exception("registration gate failed user=%s", _mask_user_id_for_log(user_id))
+    return None
+
+
+def _touch_activity(intent, user_id):
+    if intent not in _LAST_ACTIVE_TRACKED_INTENTS or not user_id:
+        return
+    try:
+        from services.patient_profile import touch_last_active
+        touch_last_active(user_id)
+    except Exception:
+        logger.exception("activity touch failed user=%s", _mask_user_id_for_log(user_id))
+
+
 def _dispatch_intent(intent, user_id, params, query_text):
     """
     Map a Dialogflow intent name to its handler. Extracted from the
     ``/webhook`` route so we can wrap dispatch in a single try/except
     + metric counter (P4-2).
     """
+    gated = _registration_gate_response(intent, user_id, query_text)
+    if gated is not None:
+        return gated
+
     if intent == 'ReportSymptoms':
-        return handle_report_symptoms(user_id, params)
+        response = handle_report_symptoms(user_id, params)
     elif intent == 'AssessPersonalRisk' or intent == 'AssessRisk':
-        return handle_assess_risk(user_id, params)
+        response = handle_assess_risk(user_id, params)
     elif intent == 'RequestAppointment':
-        return handle_request_appointment(user_id, params)
+        response = handle_request_appointment(user_id, params)
     elif intent == 'GetKnowledge':
-        return handle_get_knowledge(user_id, params, query_text)
+        response = handle_get_knowledge(user_id, params, query_text)
     elif intent == 'GetFollowUpSummary':
-        return handle_get_followup_summary(user_id)
+        response = handle_get_followup_summary(user_id)
     elif intent == 'ContactNurse':
-        return handle_contact_nurse(user_id, params, query_text)
+        response = handle_contact_nurse(user_id, params, query_text)
     elif intent == 'AfterHoursChoice':
         # Bug #2 fix: รับคำตอบ 1/2 จากผู้ใช้หลังแสดงเมนูนอกเวลาทำการ
         result = handle_after_hours_choice(user_id, query_text)
-        return jsonify({"fulfillmentText": result['message']}), 200
+        response = jsonify({"fulfillmentText": result['message']}), 200
     elif intent == 'CancelConsultation':
-        return handle_cancel_consultation(user_id)
+        response = handle_cancel_consultation(user_id)
     elif intent == 'GetGroupID':
-        return handle_get_group_id()
+        response = handle_get_group_id()
     elif intent == 'FreeTextSymptom':
-        return handle_free_text_symptom(user_id, params, query_text)
+        response = handle_free_text_symptom(user_id, params, query_text)
     elif intent == 'RecommendKnowledge':
-        return handle_recommend_knowledge(user_id, params)
-    elif intent in ('UpdatePatientIdentity', 'PatientIdentity'):
-        return handle_patient_identity(user_id, params, query_text)
+        response = handle_recommend_knowledge(user_id, params)
+    elif intent in ('UpdatePatientIdentity', 'PatientIdentity', 'RegisterPatient'):
+        response = handle_patient_identity(user_id, params, query_text)
     else:
-        return handle_unknown_intent(intent)
+        response = handle_unknown_intent(intent)
+    _touch_activity(intent, user_id)
+    return response
 
 
 def handle_line_image_event(event):
@@ -506,18 +567,48 @@ def handle_request_appointment(user_id, params):
 
 
 def handle_patient_identity(user_id, params, query_text=""):
-    """Collect/update patient first name, last name, and HN."""
+    """Collect/update patient registration fields incrementally."""
     try:
-        from database.patient_profile import read_patient_profile, upsert_patient_profile
+        from database.patient_profile import read_patient_profile_result, upsert_patient_profile
         from services.i18n import detect_language, t
-        from services.patient_profile import normalize_identity_fields, invalidate_profile_cache
+        from services.patient_profile import (
+            extract_explicit_consent,
+            invalidate_profile_cache,
+            mark_last_active_throttled,
+            mask_phone_number,
+            normalize_identity_fields,
+            prepare_registration_update,
+        )
         from services.dashboard_readers import invalidate_dashboard_cache
 
         lang = detect_language(query_text or " ".join(str(v) for v in (params or {}).values()))
+        read_result = read_patient_profile_result(user_id)
+        if not read_result.available:
+            return jsonify({"fulfillmentText": t("identity.storage_unavailable", lang)}), 200
+
+        existing = read_result.profile or {}
+        update = prepare_registration_update(existing, params)
+        merged = update.profile
         identity = normalize_identity_fields(params)
-        first_name = identity.get("first_name", "")
-        last_name = identity.get("last_name", "")
-        hn = identity.get("hn", "")
+        phone_param_present = bool(params and any(
+            key in params for key in ("phone", "phone_number", "phone-number", "tel")
+        ))
+        consent_seen = extract_explicit_consent(params) is not None
+        should_save = bool(identity or phone_param_present or consent_seen)
+
+        if should_save:
+            merged["last_active_at"] = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            ok = upsert_patient_profile(user_id, merged)
+            if not ok:
+                return jsonify({"fulfillmentText": t("identity.save_error", lang)}), 200
+            mark_last_active_throttled(user_id)
+            invalidate_profile_cache(user_id)
+            invalidate_dashboard_cache()
+
+        first_name = merged.get("first_name") or ""
+        last_name = merged.get("last_name") or ""
+        hn = merged.get("hn") or ""
+        phone = merged.get("phone") or ""
 
         if not first_name:
             return jsonify({"fulfillmentText": t("identity.ask_first_name", lang)}), 200
@@ -525,16 +616,15 @@ def handle_patient_identity(user_id, params, query_text=""):
             return jsonify({"fulfillmentText": t("identity.ask_last_name", lang)}), 200
         if not hn:
             return jsonify({"fulfillmentText": t("identity.ask_hn", lang)}), 200
+        if "phone" in update.invalid_fields:
+            return jsonify({"fulfillmentText": t("identity.invalid_phone", lang)}), 200
+        if not phone:
+            return jsonify({"fulfillmentText": t("identity.ask_phone", lang)}), 200
+        if update.consent_declined:
+            return jsonify({"fulfillmentText": t("identity.consent_declined", lang)}), 200
+        if "consent" in update.missing_fields:
+            return jsonify({"fulfillmentText": t("identity.ask_consent", lang)}), 200
 
-        existing = read_patient_profile(user_id) or {}
-        merged = dict(existing)
-        merged.update(identity)
-        ok = upsert_patient_profile(user_id, merged)
-        if not ok:
-            return jsonify({"fulfillmentText": t("identity.save_error", lang)}), 200
-
-        invalidate_profile_cache(user_id)
-        invalidate_dashboard_cache()
         return jsonify({
             "fulfillmentText": t(
                 "identity.confirm",
@@ -542,10 +632,11 @@ def handle_patient_identity(user_id, params, query_text=""):
                 first_name=first_name,
                 last_name=last_name,
                 hn=hn,
+                phone=mask_phone_number(phone),
             )
         }), 200
     except Exception:
-        logger.exception("Error in PatientIdentity handler")
+        logger.exception("Error in PatientIdentity handler user=%s", _mask_user_id_for_log(user_id))
         return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"}), 200
 
 
@@ -974,7 +1065,7 @@ def handle_recommend_knowledge(user_id, params):
             )
         logger.info(
             "RecommendKnowledge for %s: source=%s keys=%s",
-            user_id,
+            _mask_user_id_for_log(user_id),
             profile.get("source"),
             [r.get('key') for r in recommendations],
         )
