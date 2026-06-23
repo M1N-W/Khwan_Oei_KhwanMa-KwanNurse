@@ -519,3 +519,109 @@ def invalidate_profile_cache(user_id: str = "") -> int:
         ttl_cache.invalidate(f"{CACHE_KEY_PREFIX}:{user_id}")
         return 1
     return ttl_cache.invalidate_prefix(f"{CACHE_KEY_PREFIX}:")
+
+
+# ---------------------------------------------------------------------------
+# KWN-06: Registration Quick Reply and Flex UX helpers
+# ---------------------------------------------------------------------------
+
+#: Ordered list of fields shown in registration prompts and their Thai labels.
+_REGISTRATION_FIELD_LABELS: dict[str, str] = {
+    "first_name": "ชื่อ",
+    "last_name":  "นามสกุล",
+    "hn":         "HN (เลขบัตรผู้ป่วย)",
+    "phone":      "เบอร์โทรศัพท์",
+    "consent":    "ยินยอมให้ใช้ข้อมูล",
+}
+
+#: Quick-reply labels for the consent field specifically.
+_CONSENT_ITEMS_LABELS = [("ยินยอม ✅", "ยินยอม"), ("ไม่ยินยอม ❌", "ไม่ยินยอม")]
+
+
+def build_registration_quick_replies(missing_fields: list[str]) -> list[dict]:
+    """
+    Build Quick Reply button items for the next missing registration field.
+
+    Shows helpful shortcut answers for the *first* missing field only, so the
+    conversation remains one-step-at-a-time.  Falls back to an empty list when
+    no missing field matches a supported quick-reply pattern.
+
+    The consent field gets a bespoke Yes/No button pair.
+
+    Args:
+        missing_fields: Ordered list of field names that are still required.
+
+    Returns:
+        list[dict]: LINE Quick Reply item dicts (empty list = no quick reply).
+    """
+    from services.line_message import quick_reply_item  # deferred to avoid circular import at module load
+
+    if not missing_fields:
+        return []
+
+    next_field = missing_fields[0]
+
+    if next_field == "consent":
+        return [quick_reply_item(label, text) for label, text in _CONSENT_ITEMS_LABELS]
+
+    # Surgery type helper options
+    if next_field == "surgery_type":
+        options = [
+            ("ผ่าตัดข้อเข่า", "เปลี่ยนข้อเข่า"),
+            ("ผ่าตัดข้อสะโพก", "เปลี่ยนข้อสะโพก"),
+            ("ผ่าตัดอื่นๆ", "อื่นๆ"),
+        ]
+        return [quick_reply_item(label, text) for label, text in options]
+
+    # Generic: no pre-built options for name/HN/phone
+    return []
+
+
+def build_profile_flex_summary(profile: dict) -> dict:
+    """
+    Build a Flex bubble that summarises a patient's registration status.
+
+    Privacy rules (ADR-002, ADR-003):
+    - HN is shown (clinical identity field — nurses need it).
+    - Phone is masked (``0X-XXX-XXXX`` format via ``mask_phone_number``).
+    - LINE User ID is **never** shown.
+    - Name is shown as-is (self-entered, not verified — no special handling).
+
+    Args:
+        profile: Patient profile dict (from ``read_patient_profile`` or merged).
+
+    Returns:
+        dict: LINE Flex message object (``{"type": "flex", ...}``).
+    """
+    from services.line_message import (  # deferred to avoid circular import
+        flex_text, flex_separator, flex_bubble, build_flex_message,
+    )
+
+    # Safe field extraction
+    first_name = profile.get("first_name") or ""
+    last_name = profile.get("last_name") or ""
+    full_name = f"{first_name} {last_name}".strip() or "—"
+    hn = profile.get("hn") or "—"
+    phone_raw = profile.get("phone") or ""
+    phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
+    status = profile.get("registration_status") or "incomplete"
+    consent = profile.get("consent_given")
+
+    status_emoji = "✅" if status == "registered" else "⏳"
+    consent_text = "ยินยอมแล้ว ✅" if consent is True else ("ไม่ยินยอม ❌" if consent is False else "ยังไม่ระบุ")
+
+    body_items = [
+        flex_text(f"{status_emoji} สถานะ: {status}", weight="bold", size="lg"),
+        flex_separator(),
+        flex_text(f"👤 ชื่อ: {full_name}"),
+        flex_text(f"🏥 HN: {hn}"),
+        flex_text(f"📞 เบอร์: {phone_display}"),
+        flex_text(f"📋 ความยินยอม: {consent_text}", size="sm", color="#888888"),
+    ]
+
+    bubble = flex_bubble(
+        body_components=body_items,
+        header_text="📋 ข้อมูลการลงทะเบียน",
+        header_background_color="#0066CC",
+    )
+    return build_flex_message("สรุปข้อมูลการลงทะเบียนของคุณ", bubble)

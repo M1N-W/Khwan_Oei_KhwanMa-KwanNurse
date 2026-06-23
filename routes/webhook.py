@@ -566,6 +566,53 @@ def handle_request_appointment(user_id, params):
     return jsonify({"fulfillmentText": message}), 200
 
 
+def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None) -> dict:
+    """Build a Dialogflow response, optionally including LINE custom payloads (KWN-06)."""
+    from config import ENABLE_RICH_MESSAGES
+    if not ENABLE_RICH_MESSAGES:
+        return {"fulfillmentText": text}
+
+    if flex_message:
+        return {
+            "fulfillmentText": text,
+            "fulfillmentMessages": [
+                {
+                    "platform": "LINE",
+                    "payload": {
+                        "line": flex_message
+                    }
+                },
+                {
+                    "text": {
+                        "text": [text]
+                    }
+                }
+            ]
+        }
+
+    if quick_replies:
+        from services.line_message import build_quick_reply_message
+        line_msg = build_quick_reply_message(text, quick_replies)
+        return {
+            "fulfillmentText": text,
+            "fulfillmentMessages": [
+                {
+                    "platform": "LINE",
+                    "payload": {
+                        "line": line_msg
+                    }
+                },
+                {
+                    "text": {
+                        "text": [text]
+                    }
+                }
+            ]
+        }
+
+    return {"fulfillmentText": text}
+
+
 def handle_patient_identity(user_id, params, query_text=""):
     """Collect/update patient registration fields incrementally."""
     try:
@@ -578,6 +625,8 @@ def handle_patient_identity(user_id, params, query_text=""):
             mask_phone_number,
             normalize_identity_fields,
             prepare_registration_update,
+            build_registration_quick_replies,
+            build_profile_flex_summary,
         )
         from services.dashboard_readers import invalidate_dashboard_cache
 
@@ -610,31 +659,35 @@ def handle_patient_identity(user_id, params, query_text=""):
         hn = merged.get("hn") or ""
         phone = merged.get("phone") or ""
 
-        if not first_name:
-            return jsonify({"fulfillmentText": t("identity.ask_first_name", lang)}), 200
-        if not last_name:
-            return jsonify({"fulfillmentText": t("identity.ask_last_name", lang)}), 200
-        if not hn:
-            return jsonify({"fulfillmentText": t("identity.ask_hn", lang)}), 200
-        if "phone" in update.invalid_fields:
-            return jsonify({"fulfillmentText": t("identity.invalid_phone", lang)}), 200
-        if not phone:
-            return jsonify({"fulfillmentText": t("identity.ask_phone", lang)}), 200
-        if update.consent_declined:
-            return jsonify({"fulfillmentText": t("identity.consent_declined", lang)}), 200
-        if "consent" in update.missing_fields:
-            return jsonify({"fulfillmentText": t("identity.ask_consent", lang)}), 200
+        # Gather remaining missing fields for quick replies
+        missing_fields = update.missing_fields
 
-        return jsonify({
-            "fulfillmentText": t(
-                "identity.confirm",
-                lang,
-                first_name=first_name,
-                last_name=last_name,
-                hn=hn,
-                phone=mask_phone_number(phone),
-            )
-        }), 200
+        if not first_name:
+            return jsonify(_make_dialogflow_response(t("identity.ask_first_name", lang), build_registration_quick_replies(missing_fields))), 200
+        if not last_name:
+            return jsonify(_make_dialogflow_response(t("identity.ask_last_name", lang), build_registration_quick_replies(missing_fields))), 200
+        if not hn:
+            return jsonify(_make_dialogflow_response(t("identity.ask_hn", lang), build_registration_quick_replies(missing_fields))), 200
+        if "phone" in update.invalid_fields:
+            return jsonify(_make_dialogflow_response(t("identity.invalid_phone", lang), build_registration_quick_replies(missing_fields))), 200
+        if not phone:
+            return jsonify(_make_dialogflow_response(t("identity.ask_phone", lang), build_registration_quick_replies(missing_fields))), 200
+        if update.consent_declined:
+            return jsonify(_make_dialogflow_response(t("identity.consent_declined", lang), build_registration_quick_replies(missing_fields))), 200
+        if "consent" in missing_fields:
+            return jsonify(_make_dialogflow_response(t("identity.ask_consent", lang), build_registration_quick_replies(missing_fields))), 200
+
+        # All registered successfully
+        confirm_text = t(
+            "identity.confirm",
+            lang,
+            first_name=first_name,
+            last_name=last_name,
+            hn=hn,
+            phone=mask_phone_number(phone),
+        )
+        flex_summary = build_profile_flex_summary(merged)
+        return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary)), 200
     except Exception:
         logger.exception("Error in PatientIdentity handler user=%s", _mask_user_id_for_log(user_id))
         return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"}), 200
