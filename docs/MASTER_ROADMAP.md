@@ -71,12 +71,12 @@ This made symptom-assessment persistence and nurse notification failures explici
 | KWN-01 - Failed Nurse Alert Read-only Visibility              | `done`    |
 | KWN-02 - Patient Registry Contract                            | `done`    |
 | KWN-03 - Failed Alert Manual Recovery                         | `done`    |
-| KWN-04 - Persistent Due Dispatcher                            | `planned` |
-| KWN-05 - LINE Message Delivery Layer                          | `planned` |
-| KWN-06 - Registration Quick Reply and Flex UX                 | `planned` |
-| KWN-07 - Engagement Tracking and Survey Scheduling            | `planned` |
-| KWN-08 - Survey Completion and Dashboard Analytics            | `planned` |
-| KWN-09 - Unified Clinical Alert and Incremental Webhook Split | `planned` |
+| KWN-04 - Persistent Due Dispatcher                            | `done`    |
+| KWN-05 - LINE Message Delivery Layer                          | `done`    |
+| KWN-06 - Registration Quick Reply and Flex UX                 | `done`    |
+| KWN-07 - Engagement Tracking and Survey Scheduling            | `done`    |
+| KWN-08 - Survey Completion and Dashboard Analytics            | `done`    |
+| KWN-09 - Unified Clinical Alert and Incremental Webhook Split | `done`    |
 
 ## 6. Dependency Graph
 
@@ -150,6 +150,10 @@ Exit criteria: retry is authenticated and CSRF-protected, only actionable rows c
 
 ### KWN-04 - Persistent Due Dispatcher
 
+Status: `done`
+
+Commit: `52de418`, `cd77ca7`
+
 Purpose: replace long-lived in-memory jobs as the source of truth for due reminders and future surveys.
 
 Major scope: recurring dispatcher loop, persistent due rows, claim/send/update lifecycle, bounded retries, catch-up after restart.
@@ -165,6 +169,10 @@ Main risks: duplicate sends, unbounded retries, contention if worker count chang
 Exit criteria: due rows are claimed once, overdue rows are caught up, send results persist, metrics separate success/failure.
 
 ### KWN-05 - LINE Message Delivery Layer
+
+Status: `done`
+
+Commit: `94ed28a`
 
 Purpose: create a safe abstraction for sending text, quick replies, and Flex messages.
 
@@ -182,6 +190,10 @@ Exit criteria: existing text behavior remains stable, rich payloads are unit-tes
 
 ### KWN-06 - Registration Quick Reply and Flex UX
 
+Status: `done`
+
+Commit: `191896c`
+
 Purpose: make patient registration easier while keeping text fallback.
 
 Major scope: registration flow, quick reply accelerators, profile summary Flex, edit/confirm actions, resume behavior.
@@ -197,6 +209,10 @@ Main risks: confusing registered with verified, making Flex too dense for mobile
 Exit criteria: flow can be completed or resumed, Flex uses privacy-safe fields, fallback text works without rich message support.
 
 ### KWN-07 - Engagement Tracking and Survey Scheduling
+
+Status: `done`
+
+Commit: `73705a7`
 
 Purpose: schedule satisfaction surveys after real bot use milestones.
 
@@ -214,6 +230,10 @@ Exit criteria: due surveys are sent through persistent records, tokens are opaqu
 
 ### KWN-08 - Survey Completion and Dashboard Analytics
 
+Status: `done`
+
+Commit: `fc0876e`
+
 Purpose: connect submitted survey responses to the schedule lifecycle and make results visible.
 
 Major scope: completion matching by survey code or callback, response and completion rates, patient survey timeline, overdue filters.
@@ -229,6 +249,10 @@ Main risks: mismatched responses, exposing raw feedback too broadly, conflating 
 Exit criteria: completion state is accurate, dashboard separates engagement from clinical urgency, analytics avoid unnecessary PHI.
 
 ### KWN-09 - Unified Clinical Alert and Incremental Webhook Split
+
+Status: `done`
+
+Commit: `84ee985`, `bc15843`, `2c5c72e`, `92d81ee`, `b43743f`
 
 Purpose: consolidate proven alert and engagement concepts after visibility, manual recovery, and survey analytics are stable.
 
