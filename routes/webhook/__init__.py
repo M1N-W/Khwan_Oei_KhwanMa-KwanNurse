@@ -4,7 +4,7 @@ Webhook package (KWN-09).
 Exposes the register_routes function and sub-handler/helper interfaces for backward-compatibility with tests.
 """
 from routes.webhook.handler import register_routes, _dispatch_intent, handle_line_image_event
-from routes.webhook.helpers import _touch_activity, _make_dialogflow_response
+from routes.webhook.helpers import _touch_activity, _make_dialogflow_response, _registration_gate_response
 from routes.webhook.handlers.fallback import _resolve_knowledge_topic
 from routes.webhook.handlers import (
     handle_patient_identity,
@@ -34,6 +34,7 @@ __all__ = [
     '_touch_activity',
     '_make_dialogflow_response',
     '_resolve_knowledge_topic',
+    '_registration_gate_response',
     'handle_patient_identity',
     'handle_report_symptoms',
     'handle_assess_risk',
