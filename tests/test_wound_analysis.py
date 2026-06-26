@@ -338,17 +338,19 @@ class ImageEventOrchestratorTests(unittest.TestCase):
 
     def test_llm_disabled_falls_back_to_raw_nurse_notice(self):
         from routes import webhook as webhook_module
+        import routes.webhook.handler as handler_module
         with patch("services.notification.download_line_content", return_value=_FAKE_JPEG), \
              patch("services.wound_analysis.analyze_wound_image", return_value=None), \
              patch("services.notification.reply_line_message") as mock_reply, \
              patch("services.notification.send_line_push") as mock_push, \
-             patch.object(webhook_module, "NURSE_GROUP_ID", "GROUP-X"):
+             patch.object(handler_module, "NURSE_GROUP_ID", "GROUP-X"):
             webhook_module.handle_line_image_event(self._event())
         mock_reply.assert_called_once()
         mock_push.assert_called_once()  # raw nurse notice still goes out
 
     def test_high_severity_triggers_save_reply_and_alert(self):
         from routes import webhook as webhook_module
+        import routes.webhook.handler as handler_module
         analysis = {
             "severity": "high",
             "observations": ["บวมแดง"],
@@ -360,7 +362,7 @@ class ImageEventOrchestratorTests(unittest.TestCase):
              patch("database.wound_logs.save_wound_analysis", return_value=True) as mock_save, \
              patch("services.notification.reply_line_message") as mock_reply, \
              patch("services.notification.send_line_push") as mock_push, \
-             patch.object(webhook_module, "NURSE_GROUP_ID", "GROUP-X"):
+             patch.object(handler_module, "NURSE_GROUP_ID", "GROUP-X"):
             webhook_module.handle_line_image_event(self._event())
         mock_save.assert_called_once()
         mock_reply.assert_called_once()
