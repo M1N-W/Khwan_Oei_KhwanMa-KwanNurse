@@ -34,7 +34,7 @@ class WebhookHandlersTest(unittest.TestCase):
         self.assertIn("/webhook", routes)
         self.assertIn("/line/webhook", routes)
 
-    @patch("routes.webhook.handlers.symptoms.handle_report_symptoms")
+    @patch("routes.webhook.handle_report_symptoms")
     def test_dispatch_report_symptoms(self, mock_handler):
         from routes.webhook import _dispatch_intent
         mock_handler.return_value = ("symptom response", 200)
@@ -43,7 +43,7 @@ class WebhookHandlersTest(unittest.TestCase):
         self.assertEqual(res, ("symptom response", 200))
         mock_handler.assert_called_once_with("U123", {"param": "val"})
 
-    @patch("routes.webhook.handlers.fallback.handle_after_hours_choice")
+    @patch("routes.webhook.handle_after_hours_choice")
     def test_dispatch_after_hours_choice(self, mock_handler):
         from routes.webhook import _dispatch_intent
         mock_handler.return_value = ("after hours response", 200)
@@ -52,7 +52,7 @@ class WebhookHandlersTest(unittest.TestCase):
         self.assertEqual(res, ("after hours response", 200))
         mock_handler.assert_called_once_with("U123", "query")
 
-    @patch("routes.webhook.handlers.registration.handle_patient_identity")
+    @patch("routes.webhook.handle_patient_identity")
     def test_dispatch_patient_identity(self, mock_handler):
         from routes.webhook import _dispatch_intent
         mock_handler.return_value = ("identity response", 200)

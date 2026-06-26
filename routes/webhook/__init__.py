@@ -23,8 +23,8 @@ from routes.webhook.handlers import (
 )
 
 # Exposed imports for tests that patch/import directly from routes.webhook
-from config import DEBUG
-from services.education import recommend_guides
+from config import DEBUG, NURSE_GROUP_ID
+from services.education import recommend_guides, format_recommendations_message
 from services.nlp import analyze_free_text
 
 __all__ = [
@@ -49,6 +49,8 @@ __all__ = [
     'handle_after_hours_choice',
     'handle_unknown_intent',
     'DEBUG',
+    'NURSE_GROUP_ID',
     'recommend_guides',
+    'format_recommendations_message',
     'analyze_free_text'
 ]
