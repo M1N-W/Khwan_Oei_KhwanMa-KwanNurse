@@ -108,12 +108,36 @@ def handle_get_knowledge(user_id, params, query_text=""):
 
     if resolved:
         topic_name, guide_func = resolved
+        
+        # Resolve guide_func dynamically from routes.webhook to support test mocks/patches
+        try:
+            from routes.webhook import (
+                get_wound_care_guide,
+                get_physical_therapy_guide,
+                get_dvt_prevention_guide,
+                get_medication_guide,
+                get_warning_signs_guide
+            )
+            func_name = guide_func.__name__
+            webhook_guides = {
+                'get_wound_care_guide': get_wound_care_guide,
+                'get_physical_therapy_guide': get_physical_therapy_guide,
+                'get_dvt_prevention_guide': get_dvt_prevention_guide,
+                'get_medication_guide': get_medication_guide,
+                'get_warning_signs_guide': get_warning_signs_guide
+            }
+            if func_name in webhook_guides:
+                guide_func = webhook_guides[func_name]
+        except Exception:
+            pass
+
         logger.info(
             "Knowledge request: %s (param=%r query=%r)",
             topic_name, topic_str, query_text,
         )
         try:
             canonical = _TOPIC_DISPLAY_TO_KEY.get(topic_name, topic_name)
+            from routes.webhook import save_education_view
             save_education_view(
                 user_id=user_id,
                 topic=canonical,

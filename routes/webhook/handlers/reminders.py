@@ -121,6 +121,7 @@ def handle_recommend_knowledge(user_id, params):
             [r.get('key') for r in recommendations],
         )
         try:
+            from routes.webhook import save_education_view
             for rec in recommendations:
                 key = rec.get('key')
                 if not key:

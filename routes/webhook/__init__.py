@@ -27,6 +27,13 @@ from config import DEBUG, NURSE_GROUP_ID
 from services.education import recommend_guides, format_recommendations_message
 from services.nlp import analyze_free_text
 from database.education_logs import save_education_view
+from services import (
+    get_wound_care_guide,
+    get_physical_therapy_guide,
+    get_dvt_prevention_guide,
+    get_medication_guide,
+    get_warning_signs_guide
+)
 
 __all__ = [
     'register_routes',
@@ -54,5 +61,10 @@ __all__ = [
     'recommend_guides',
     'format_recommendations_message',
     'analyze_free_text',
-    'save_education_view'
+    'save_education_view',
+    'get_wound_care_guide',
+    'get_physical_therapy_guide',
+    'get_dvt_prevention_guide',
+    'get_medication_guide',
+    'get_warning_signs_guide'
 ]
