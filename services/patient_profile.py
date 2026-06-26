@@ -245,6 +245,14 @@ def touch_last_active(user_id: str, now: Optional[datetime] = None) -> bool:
             invalidate_profile_cache(user_id)
             ttl_cache.set(throttle_key, True, LAST_ACTIVE_THROTTLE_SECONDS)
             _metric("patient_registration.last_active_updated")
+            
+            # Schedule milestone surveys if registered
+            if profile.get("registration_status") == "registered":
+                try:
+                    from services.survey import schedule_milestone_surveys
+                    schedule_milestone_surveys(user_id, now)
+                except Exception:
+                    logger.exception("Failed to schedule milestone surveys for user=%s", scrub_user_id(user_id))
         else:
             _metric("patient_registration.last_active_failed")
         return ok

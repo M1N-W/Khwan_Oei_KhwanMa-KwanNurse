@@ -56,6 +56,7 @@ ENABLE_RICH_MESSAGES: bool = (
     os.environ.get("ENABLE_RICH_MESSAGES", "false").lower()
     in ("1", "true", "yes", "on")
 )
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")

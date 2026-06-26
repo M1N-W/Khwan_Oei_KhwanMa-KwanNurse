@@ -153,6 +153,20 @@ def register_routes(app):
             "counters": snapshot(),
         }), 200
 
+    @app.route('/track/<token>', methods=['GET'])
+    def track_survey_click(token):
+        """Track survey click (KWN-07) and redirect to Google Form."""
+        from database.surveys import mark_survey_clicked
+        from flask import redirect
+        from services.survey import SURVEY_FORM_URL
+        
+        survey_url = mark_survey_clicked(token)
+        if not survey_url:
+            logger.warning("Invalid survey tracking token: %s", token)
+            survey_url = SURVEY_FORM_URL
+            
+        return redirect(survey_url)
+
     @app.route('/webhook', methods=['POST'])
     @require_dialogflow_token
     def webhook():
@@ -687,6 +701,13 @@ def handle_patient_identity(user_id, params, query_text=""):
             phone=mask_phone_number(phone),
         )
         flex_summary = build_profile_flex_summary(merged)
+        
+        try:
+            from services.survey import schedule_milestone_surveys
+            schedule_milestone_surveys(user_id)
+        except Exception:
+            logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
+            
         return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary)), 200
     except Exception:
         logger.exception("Error in PatientIdentity handler user=%s", _mask_user_id_for_log(user_id))

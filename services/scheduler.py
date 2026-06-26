@@ -85,6 +85,17 @@ def init_scheduler():
             )
             logger.info("✅ Scheduled persistent due dispatcher every 1 minute")
 
+            # KWN-07: Register the persistent survey dispatcher loop (every 1 minute).
+            from services.survey import process_due_surveys  # deferred to avoid circular import
+            scheduler.add_job(
+                func=process_due_surveys,
+                trigger=CronTrigger(minute='*/1', timezone=LOCAL_TZ),
+                id='process_due_surveys',
+                name='Persistent Survey Dispatcher (KWN-07)',
+                replace_existing=True
+            )
+            logger.info("✅ Scheduled persistent survey dispatcher every 1 minute")
+
             # Load and schedule pending reminders from database
             load_pending_reminders()
             
