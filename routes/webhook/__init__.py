@@ -26,6 +26,7 @@ from routes.webhook.handlers import (
 from config import DEBUG, NURSE_GROUP_ID
 from services.education import recommend_guides, format_recommendations_message
 from services.nlp import analyze_free_text
+from database.education_logs import save_education_view
 
 __all__ = [
     'register_routes',
@@ -52,5 +53,6 @@ __all__ = [
     'NURSE_GROUP_ID',
     'recommend_guides',
     'format_recommendations_message',
-    'analyze_free_text'
+    'analyze_free_text',
+    'save_education_view'
 ]
