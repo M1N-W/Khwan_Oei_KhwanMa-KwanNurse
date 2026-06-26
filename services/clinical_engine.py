@@ -113,8 +113,15 @@ def evaluate_symptom_risk(inputs: SymptomClinicalInput) -> SymptomClinicalOutput
         risk_details.append("🟢 ไม่มีไข้")
     
     # Mobility Status
+    # Hot-fix (KWN-10-HF): Sudden loss of mobility is a surgical emergency (DVT/Dislocation)
+    # and must be escalated immediately to Critical (+3), not just Moderate (+1).
     mobility_text = str(inputs.mobility or "").lower()
-    if any(x in mobility_text for x in ["ไม่ได้", "ติดเตียง", "ไม่เดิน", "cannot", "bedridden"]):
+    _sudden_keywords = ["กะทันหัน", "ทันที", "เพิ่งเดินไม่ได้", "suddenly", "suddenly unable", "abruptly"]
+    _mobility_lost_keywords = ["ไม่ได้", "ติดเตียง", "ไม่เดิน", "cannot", "bedridden"]
+    if any(k in mobility_text for k in _sudden_keywords) and any(k in mobility_text for k in _mobility_lost_keywords):
+        risk_score += 3
+        risk_details.append("🔴 สูญเสียการเคลื่อนไหวอย่างกะทันหัน - ต้องประเมิน DVT/ข้อหลุดทันที!")
+    elif any(x in mobility_text for x in _mobility_lost_keywords):
         risk_score += 1
         risk_details.append("🟡 เคลื่อนไหวลำบาก")
     elif any(x in mobility_text for x in ["เดินได้", "ปกติ", "normal", "can walk"]):
@@ -226,23 +233,26 @@ def normalize_diseases(disease_param) -> List[str]:
         s = raw.lower().strip()
         if s in DISEASE_NEGATIVES or any(neg in s for neg in ["no disease", "ไม่มี"]):
             continue
-        
-        found = False
+
+        # Hot-fix (KWN-10-HF): Scan the ENTIRE string for ALL matching disease keywords.
+        # Previous code had `break` after first match which caused Undertriage for patients
+        # with multiple comorbidities written in a single freetext string (e.g. "เบาหวาน ความดัน").
+        matched_any = False
         for key in _SORTED_DISEASE_KEYS:
             if key in s:
                 canon = DISEASE_MAPPING[key]
                 if canon not in seen:
                     normalized.append(canon)
                     seen.add(canon)
-                found = True
-                break
-        
-        if not found:
+                matched_any = True
+                # NOTE: No `break` — continue scanning for additional diseases in the same string.
+
+        if not matched_any:
             candidate = raw.strip()
             if candidate and candidate not in seen:
                 normalized.append(candidate)
                 seen.add(candidate)
-    
+
     return normalized
 
 
@@ -276,13 +286,15 @@ def evaluate_personal_risk(inputs: PersonalClinicalInput) -> PersonalClinicalOut
         bmi = weight_val / (height_m ** 2)
     
     # Age Risk Factor
+    # Hot-fix (KWN-10-HF): Lower high-risk threshold from ≥70 to ≥65 per Geriatric Medicine
+    # guidelines (PMID 40223829 — OR 1.577 for age ≥65 in orthopedic revision surgery).
     if age_val is not None:
-        if age_val >= 70:
+        if age_val >= 65:
             risk_score += 2
-            risk_factors.append(f"🔴 อายุ {age_val} ปี (สูงอายุมาก)")
-        elif age_val >= 60:
+            risk_factors.append(f"🔴 อายุ {age_val} ปี (สูงอายุ — เสี่ยงสูงต่อภาวะแทรกซ้อน)")
+        elif age_val >= 55:
             risk_score += 1
-            risk_factors.append(f"🟡 อายุ {age_val} ปี (สูงอายุ)")
+            risk_factors.append(f"🟡 อายุ {age_val} ปี (ช่วงก่อนสูงอายุ — ควรเฝ้าระวัง)")
         else:
             risk_factors.append(f"🟢 อายุ {age_val} ปี (ปกติ)")
     
