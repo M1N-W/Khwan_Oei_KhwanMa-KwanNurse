@@ -42,6 +42,8 @@ from services.dashboard_readers import (
     get_preconsult_packet,
     get_queue_snapshot,
     get_recent_alerts,
+    get_survey_analytics_reader,
+    get_patient_survey_timeline_reader,
 )
 
 logger = get_logger(__name__)
@@ -57,6 +59,7 @@ def home():
     stats = get_home_stats()
     queue_preview = get_queue_snapshot(limit=5)
     alerts_preview = get_recent_alerts(days=7, limit=5, min_risk_level="medium")
+    survey_stats = get_survey_analytics_reader()
     return render_template(
         "home.html",
         nurse=current_nurse(),
@@ -64,6 +67,7 @@ def home():
         stats=stats,
         queue=queue_preview,
         alerts=alerts_preview,
+        survey_stats=survey_stats,
     )
 
 
@@ -213,6 +217,7 @@ def patient_view(user_id: str):
         abort(404)
     timeline = get_patient_timeline(user_id, days=days)
     trend = get_patient_trend(user_id, days=days)
+    survey_timeline = get_patient_survey_timeline_reader(user_id)
     return render_template(
         "patient.html",
         nurse=current_nurse(),
@@ -220,6 +225,7 @@ def patient_view(user_id: str):
         patient=timeline,
         trend=trend,
         filter_days=days,
+        survey_timeline=survey_timeline,
     )
 
 

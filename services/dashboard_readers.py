@@ -1267,3 +1267,38 @@ def get_preconsult_packet(
 
     ttl_cache.set(cache_key, packet, TTL_PRECONSULT_SECONDS)
     return packet
+
+
+def get_survey_analytics_reader(*, force_refresh: bool = False) -> dict[str, Any]:
+    """Get survey analytics, caching the results (KWN-08)."""
+    from services.cache import ttl_cache
+    from database.surveys import get_survey_analytics
+    
+    cache_key = "dash:survey-analytics:v1"
+    if not force_refresh:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            return cached
+            
+    stats = get_survey_analytics()
+    ttl_cache.set(cache_key, stats, 30)
+    return stats
+
+
+def get_patient_survey_timeline_reader(user_id: str, *, force_refresh: bool = False) -> list[dict[str, Any]]:
+    """Get patient survey timeline, caching the results (KWN-08)."""
+    from services.cache import ttl_cache
+    from database.surveys import get_patient_survey_timeline
+    
+    if not user_id:
+        return []
+        
+    cache_key = f"dash:survey-timeline:v1:{user_id}"
+    if not force_refresh:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            return cached
+            
+    timeline = get_patient_survey_timeline(user_id)
+    ttl_cache.set(cache_key, timeline, 30)
+    return timeline

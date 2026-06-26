@@ -425,3 +425,160 @@ def handle_survey_failure(
     except Exception:
         logger.exception("Error handling survey failure row=%d", row_num)
         return False
+
+
+def get_survey_summary_for_user(user_id: str, now_dt: Optional[datetime] = None) -> dict[str, int]:
+    """Get survey counts (sent, clicked, overdue) for a user."""
+    try:
+        if now_dt is None:
+            now_dt = datetime.now(tz=LOCAL_TZ)
+        sheet = get_worksheet(SHEET_SURVEY_SCHEDULES)
+        if not sheet:
+            return {"sent": 0, "clicked": 0, "overdue": 0}
+
+        values = retry_sheet_op(lambda: sheet.get_all_values(), op_name="surveys.get_all_values")
+        if not values or len(values) < 2:
+            return {"sent": 0, "clicked": 0, "overdue": 0}
+
+        headers = values[0]
+        if "User_ID" not in headers:
+            return {"sent": 0, "clicked": 0, "overdue": 0}
+
+        idx_uid = headers.index("User_ID")
+        idx_status = headers.index("Status")
+        idx_sent = headers.index("Sent_At") if "Sent_At" in headers else -1
+
+        sent = 0
+        clicked = 0
+        overdue = 0
+
+        for row in values[1:]:
+            if len(row) <= idx_uid or row[idx_uid] != user_id:
+                continue
+
+            status = row[idx_status].strip().lower()
+            if status in ("sent", "clicked"):
+                sent += 1
+            if status == "clicked":
+                clicked += 1
+            
+            # Check overdue (sent but not clicked after 72 hours)
+            if status == "sent" and idx_sent != -1 and len(row) > idx_sent and row[idx_sent]:
+                try:
+                    sent_at = datetime.strptime(row[idx_sent].strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+                    if (now_dt - sent_at).total_seconds() > 72 * 60 * 60:
+                        overdue += 1
+                except ValueError:
+                    pass
+
+        return {"sent": sent, "clicked": clicked, "overdue": overdue}
+    except Exception:
+        logger.exception("Error in get_survey_summary_for_user")
+        return {"sent": 0, "clicked": 0, "overdue": 0}
+
+
+def get_patient_survey_timeline(user_id: str, now_dt: Optional[datetime] = None) -> list[dict[str, Any]]:
+    """Get list of survey milestones and their delivery details for a user."""
+    try:
+        if now_dt is None:
+            now_dt = datetime.now(tz=LOCAL_TZ)
+        sheet = get_worksheet(SHEET_SURVEY_SCHEDULES)
+        if not sheet:
+            return []
+
+        values = retry_sheet_op(lambda: sheet.get_all_values(), op_name="surveys.get_all_values")
+        if not values or len(values) < 2:
+            return []
+
+        headers = values[0]
+        if "User_ID" not in headers:
+            return []
+
+        idx_uid = headers.index("User_ID")
+        idx_milestone = headers.index("Milestone_Day")
+        idx_status = headers.index("Status")
+        idx_sched = headers.index("Scheduled_Date") if "Scheduled_Date" in headers else -1
+        idx_sent = headers.index("Sent_At") if "Sent_At" in headers else -1
+        idx_clicked = headers.index("Clicked_At") if "Clicked_At" in headers else -1
+
+        timeline = []
+        for row in values[1:]:
+            if len(row) <= idx_uid or row[idx_uid] != user_id:
+                continue
+
+            padded = list(row) + [""] * max(0, len(headers) - len(row))
+            record = dict(zip(headers, padded))
+
+            status = record.get("Status", "").strip().lower()
+            sent_at_str = record.get("Sent_At", "").strip()
+            
+            is_overdue = False
+            if status == "sent" and sent_at_str:
+                try:
+                    sent_at = datetime.strptime(sent_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+                    if (now_dt - sent_at).total_seconds() > 72 * 60 * 60:
+                        is_overdue = True
+                except ValueError:
+                    pass
+
+            timeline.append({
+                "milestone_day": int(record.get("Milestone_Day") or 0),
+                "scheduled_date": record.get("Scheduled_Date", "").strip(),
+                "status": status,
+                "sent_at": sent_at_str,
+                "clicked_at": record.get("Clicked_At", "").strip(),
+                "is_overdue": is_overdue,
+            })
+
+        timeline.sort(key=lambda item: item["milestone_day"])
+        return timeline
+    except Exception:
+        logger.exception("Error in get_patient_survey_timeline")
+        return []
+
+
+def get_survey_analytics(now_dt: Optional[datetime] = None) -> dict[str, Any]:
+    """Get aggregate funnel metrics across all users."""
+    try:
+        if now_dt is None:
+            now_dt = datetime.now(tz=LOCAL_TZ)
+        sheet = get_worksheet(SHEET_SURVEY_SCHEDULES)
+        if not sheet:
+            return {"sent": 0, "clicked": 0, "ctr": 0.0, "failed": 0, "scheduled": 0}
+
+        values = retry_sheet_op(lambda: sheet.get_all_values(), op_name="surveys.get_all_values")
+        if not values or len(values) < 2:
+            return {"sent": 0, "clicked": 0, "ctr": 0.0, "failed": 0, "scheduled": 0}
+
+        headers = values[0]
+        idx_status = headers.index("Status")
+
+        sent = 0
+        clicked = 0
+        failed = 0
+        scheduled = 0
+
+        for row in values[1:]:
+            if len(row) <= idx_status:
+                continue
+            status = row[idx_status].strip().lower()
+            if status in ("sent", "clicked"):
+                sent += 1
+            if status == "clicked":
+                clicked += 1
+            elif status == "failed" or status == "dead_letter":
+                failed += 1
+            elif status == "scheduled":
+                scheduled += 1
+
+        ctr = (clicked / sent * 100) if sent > 0 else 0.0
+        return {
+            "sent": sent,
+            "clicked": clicked,
+            "ctr": round(ctr, 1),
+            "failed": failed,
+            "scheduled": scheduled,
+        }
+    except Exception:
+        logger.exception("Error in get_survey_analytics")
+        return {"sent": 0, "clicked": 0, "ctr": 0.0, "failed": 0, "scheduled": 0}

@@ -82,4 +82,42 @@
         {% endif %}
     </aside>
 </section>
+
+<section class="command-grid" style="margin-top: 16px; grid-template-columns: 1fr;">
+    <div class="panel">
+        <div class="panel-header" style="border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 16px;">
+            <div>
+                <h2 class="panel-title">สถิติการตอบแบบสอบถาม (Survey Analytics)</h2>
+                <p class="muted tiny">ภาพรวมการส่งและตอบกลับแบบสอบถามตาม Milestone ของผู้ป่วย</p>
+            </div>
+        </div>
+        <div style="padding: 0 16px 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+            <div class="metric" style="min-height: 80px; align-content: space-between;">
+                <p class="metric-label">จำนวนที่ส่งไปแล้ว</p>
+                <p class="metric-value text-brand" style="font-size: 1.8rem; margin: 4px 0;">{{ survey_stats.sent }}</p>
+                <p class="metric-note">Milestone Surveys Sent</p>
+            </div>
+            <div class="metric" style="min-height: 80px; align-content: space-between;">
+                <p class="metric-label">จำนวนที่เปิดดู / ตอบ</p>
+                <p class="metric-value text-brand" style="font-size: 1.8rem; margin: 4px 0; color: var(--blue);">{{ survey_stats.clicked }}</p>
+                <p class="metric-note">Milestone Surveys Clicked</p>
+            </div>
+            <div class="metric" style="min-height: 80px; align-content: space-between;">
+                <p class="metric-label">อัตราการตอบกลับ (CTR)</p>
+                <p class="metric-value text-brand" style="font-size: 1.8rem; margin: 4px 0; color: var(--low);">{{ survey_stats.ctr }}%</p>
+                <p class="metric-note">Click-Through Rate</p>
+            </div>
+            <div class="metric" style="min-height: 80px; align-content: space-between;">
+                <p class="metric-label">คิวที่รอการส่ง</p>
+                <p class="metric-value" style="font-size: 1.8rem; margin: 4px 0; color: var(--ink-soft);">{{ survey_stats.scheduled }}</p>
+                <p class="metric-note">Milestones Scheduled</p>
+            </div>
+            <div class="metric {% if survey_stats.failed > 0 %}metric-high{% endif %}" style="min-height: 80px; align-content: space-between;">
+                <p class="metric-label">ส่งไม่สำเร็จ</p>
+                <p class="metric-value" style="font-size: 1.8rem; margin: 4px 0; {% if survey_stats.failed > 0 %}color: var(--high);{% else %}color: var(--ink-soft);{% endif %}">{{ survey_stats.failed }}</p>
+                <p class="metric-note">Failed Deliveries</p>
+            </div>
+        </div>
+    </div>
+</section>
 {% endblock %}
