@@ -471,3 +471,49 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     )
     
     return message
+
+
+def build_clinical_alert(alert_type: str, user_id: str, context: dict) -> str:
+    """
+    Unified router for building clinical alert notifications (KWN-09).
+    Bridges to individual notification builder functions.
+    """
+    if alert_type == "symptom":
+        return build_symptom_notification(
+            user_id=user_id,
+            pain=context.get("pain", "-"),
+            wound=context.get("wound", "-"),
+            fever=context.get("fever", "-"),
+            mobility=context.get("mobility", "-"),
+            risk_level=context.get("risk_level", "-"),
+            risk_score=context.get("risk_score", 0)
+        )
+    elif alert_type == "risk":
+        return build_risk_notification(
+            user_id=user_id,
+            age=context.get("age", 0),
+            bmi=context.get("bmi", 0.0),
+            diseases_str=context.get("diseases_str", "-"),
+            risk_level=context.get("risk_level", "-"),
+            risk_score=context.get("risk_score", 0)
+        )
+    elif alert_type == "appointment":
+        return build_appointment_notification(
+            user_id=user_id,
+            name=context.get("name", "-"),
+            phone=context.get("phone", "-"),
+            preferred_date=context.get("preferred_date", "-"),
+            preferred_time=context.get("preferred_time", "-"),
+            reason=context.get("reason", "-")
+        )
+    elif alert_type == "wound":
+        return build_wound_alert_message(
+            user_id=user_id,
+            severity=context.get("severity", "medium"),
+            observations=context.get("observations", []),
+            advice=context.get("advice", ""),
+            confidence=context.get("confidence", 0.0)
+        )
+    else:
+        raise ValueError(f"Unknown alert type: {alert_type}")
+
