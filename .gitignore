@@ -70,3 +70,7 @@ htmlcov/
 
 # Render
 .render/
+
+# AI Coding assistant junk
+.chatgpt/
+.superpowers/
