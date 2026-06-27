@@ -32,7 +32,13 @@ _LAST_ACTIVE_TRACKED_INTENTS = {
     "RecommendKnowledge",
 }
 
-_REGISTRATION_INTENTS = {"PatientIdentity", "UpdatePatientIdentity", "RegisterPatient"}
+_REGISTRATION_INTENTS = {
+    "PatientIdentity",
+    "UpdatePatientIdentity",
+    "RegisterPatient",
+    "PatientIdentity_Input",
+    "PatientIdentity_Fallback",
+}
 
 
 def _mask_user_id_for_log(user_id):

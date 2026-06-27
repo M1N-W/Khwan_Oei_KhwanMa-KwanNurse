@@ -338,7 +338,13 @@ def _dispatch_intent(intent, user_id, params, query_text):
         response = handle_free_text_symptom(user_id, params, query_text)
     elif intent == 'RecommendKnowledge':
         response = handle_recommend_knowledge(user_id, params)
-    elif intent in ('UpdatePatientIdentity', 'PatientIdentity', 'RegisterPatient'):
+    elif intent in (
+        'UpdatePatientIdentity',
+        'PatientIdentity',
+        'RegisterPatient',
+        'PatientIdentity_Input',
+        'PatientIdentity_Fallback',
+    ):
         from routes.webhook.helpers import _registration_intent_looks_like_knowledge
         if _registration_intent_looks_like_knowledge(intent, params, query_text):
             logger.info(
