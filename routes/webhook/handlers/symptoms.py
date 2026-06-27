@@ -52,6 +52,19 @@ def handle_report_symptoms(user_id, params):
 
     # Calculate risk
     result = calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=neuro)
+
+    # T3 (S2-3): Auto-trigger photography guide on wound keywords
+    _WOUND_KEYWORDS = ("หนอง", "บวม", "อักเสบ", "แดง", "ซึม", "ฉีก", "เปิด", "แผล",
+                       "wound", "pus", "infected", "swollen")
+    wound_lower = str(wound or "").lower()
+    if user_id and any(kw in wound_lower for kw in _WOUND_KEYWORDS):
+        try:
+            from services.line_message import build_wound_photography_guide, push_rich_message
+            guide_msg = build_wound_photography_guide()
+            push_rich_message([guide_msg], user_id)
+        except Exception:
+            logger.exception("Failed to push proactive photography guide user=%s", user_id)
+
     return jsonify({"fulfillmentText": result}), 200
 
 

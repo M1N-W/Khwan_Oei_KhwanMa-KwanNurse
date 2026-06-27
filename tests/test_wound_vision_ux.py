@@ -171,7 +171,7 @@ class TestPhotographyGuideTrigger(unittest.TestCase):
         """หนอง (pus) is a high-signal wound keyword."""
         with patch("services.line_message.push_rich_message") as mock_push:
             resp = self.client.post(
-                "/dialogflow/webhook",
+                "/webhook",
                 json=self._dialogflow_payload("แผลมีหนองและบวมแดง"),
             )
         self.assertEqual(resp.status_code, 200)
@@ -183,7 +183,7 @@ class TestPhotographyGuideTrigger(unittest.TestCase):
         """บวม (swollen) is a wound keyword."""
         with patch("services.line_message.push_rich_message") as mock_push:
             resp = self.client.post(
-                "/dialogflow/webhook",
+                "/webhook",
                 json=self._dialogflow_payload("บวมรอบแผล"),
             )
         self.assertEqual(resp.status_code, 200)
@@ -194,7 +194,7 @@ class TestPhotographyGuideTrigger(unittest.TestCase):
         """Pain-only report with normal wound should NOT trigger the guide."""
         with patch("services.line_message.push_rich_message") as mock_push:
             resp = self.client.post(
-                "/dialogflow/webhook",
+                "/webhook",
                 json=self._dialogflow_payload("ปกติ แห้ง"),  # normal wound
             )
         self.assertEqual(resp.status_code, 200)
@@ -205,7 +205,7 @@ class TestPhotographyGuideTrigger(unittest.TestCase):
         """Even with guide push, the Dialogflow reply must still be returned."""
         with patch("services.line_message.push_rich_message"):
             resp = self.client.post(
-                "/dialogflow/webhook",
+                "/webhook",
                 json=self._dialogflow_payload("หนอง"),
             )
         self.assertEqual(resp.status_code, 200)
