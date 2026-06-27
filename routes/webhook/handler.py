@@ -19,6 +19,24 @@ def _mask_user_id_for_log(user_id):
     return scrub_user_id(user_id)
 
 
+def _extract_line_user_id(req: dict) -> str | None:
+    original_req = req.get("originalDetectIntentRequest", {})
+    if not original_req or original_req.get("source") != "line":
+        return None
+    payload = original_req.get("payload", {})
+    if not payload:
+        return None
+    data = payload.get("data", {})
+    if isinstance(data, dict):
+        user_id = data.get("source", {}).get("userId")
+        if user_id:
+            return user_id
+    user_id = payload.get("source", {}).get("userId")
+    if user_id:
+        return user_id
+    return payload.get("userId")
+
+
 def register_routes(app):
     """Register all webhook routes with Flask app"""
     
@@ -125,7 +143,14 @@ def register_routes(app):
         try:
             intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
             params = req.get('queryResult', {}).get('parameters', {}) or {}
-            user_id = req.get('session', 'unknown').split('/')[-1]
+            
+            # Extract LINE User ID if available, otherwise fallback to Dialogflow session ID
+            line_user_id = _extract_line_user_id(req)
+            if line_user_id:
+                user_id = line_user_id
+            else:
+                user_id = req.get('session', 'unknown').split('/')[-1]
+                
             query_text = req.get('queryResult', {}).get('queryText', '')
         except Exception:
             logger.exception("Error parsing request")
