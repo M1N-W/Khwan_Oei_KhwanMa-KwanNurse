@@ -450,5 +450,24 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         self.assertEqual(fifth["action"]["text"], "1")
 
 
+class TestHealthCheckDiagnostics(unittest.TestCase):
+    def test_health_check_returns_v5_and_diagnostics(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+        with patch("config.LINE_CHANNEL_ACCESS_TOKEN", "mock_token"), \
+             patch("config.NURSE_GROUP_ID", "mock_group"), \
+             patch("config.GSPREAD_CREDENTIALS", "mock_creds"):
+            response = client.get("/")
+            data = json.loads(response.data)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(data["service"], "KwanNurse-Bot v5.0")
+            self.assertEqual(data["version"], "5.0 - Complete (UX/UI Polish)")
+            self.assertIn("diagnostics", data)
+            self.assertTrue(data["diagnostics"]["config_ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

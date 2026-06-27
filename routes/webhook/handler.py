@@ -24,11 +24,14 @@ def register_routes(app):
     
     @app.route('/', methods=['GET', 'HEAD'])
     def health_check():
-        """Health check endpoint for monitoring services"""
+        """Health check endpoint for monitoring services with full configuration status (v5.0)"""
+        from config import validate_runtime_config
+        config_status = validate_runtime_config()
+        
         return jsonify({
-            "status": "ok",
-            "service": "KwanNurse-Bot v4.0",
-            "version": "4.0 - Complete (6/6 Features)",
+            "status": "ok" if config_status["ok"] else "warning",
+            "service": "KwanNurse-Bot v5.0",
+            "version": "5.0 - Complete (UX/UI Polish)",
             "features": [
                 "ReportSymptoms", 
                 "AssessRisk", 
@@ -37,6 +40,12 @@ def register_routes(app):
                 "FollowUpReminders",
                 "Teleconsult"
             ],
+            "diagnostics": {
+                "config_ok": config_status["ok"],
+                "missing_items": config_status["missing"],
+                "can_notify_line": config_status["can_notify"],
+                "can_persist_sheets": config_status["can_persist"]
+            },
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat()
         }), 200
 
