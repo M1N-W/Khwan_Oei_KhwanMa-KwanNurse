@@ -20,21 +20,44 @@ from config import (
 
 logger = get_logger(__name__)
 
-# Module-level client cache with TTL (refresh before 1-hour token expiry)
-_sheet_client = None
-_client_created_at = None
-_spreadsheet = None
-_spreadsheet_created_at = None
-_worksheet_cache = {}
+# Thread-local storage for thread-safe Google Sheets clients
+import threading
+
+_thread_local = threading.local()
 _CLIENT_TTL_SECONDS = 3000  # 50 minutes
+
+
+def _get_local_cache():
+    if not hasattr(_thread_local, "sheet_client"):
+        _thread_local.sheet_client = None
+    if not hasattr(_thread_local, "client_created_at"):
+        _thread_local.client_created_at = None
+    if not hasattr(_thread_local, "spreadsheet"):
+        _thread_local.spreadsheet = None
+    if not hasattr(_thread_local, "spreadsheet_created_at"):
+        _thread_local.spreadsheet_created_at = None
+    if not hasattr(_thread_local, "worksheet_cache"):
+        _thread_local.worksheet_cache = {}
+    return _thread_local
 
 
 def _reset_sheet_cache():
     """Reset cached spreadsheet and worksheet handles when the client refreshes."""
-    global _spreadsheet, _spreadsheet_created_at, _worksheet_cache
-    _spreadsheet = None
-    _spreadsheet_created_at = None
-    _worksheet_cache = {}
+    cache = _get_local_cache()
+    cache.spreadsheet = None
+    cache.spreadsheet_created_at = None
+    cache.worksheet_cache = {}
+
+
+def invalidate_sheet_client():
+    """Force reset the thread-local client cache to recover from SSL/connection errors."""
+    cache = _get_local_cache()
+    cache.sheet_client = None
+    cache.client_created_at = None
+    cache.spreadsheet = None
+    cache.spreadsheet_created_at = None
+    cache.worksheet_cache.clear()
+    logger.info("Thread-local Google Sheets client cache invalidated.")
 
 
 def get_sheet_client():
@@ -43,17 +66,16 @@ def get_sheet_client():
     Refreshes the client before the 1-hour OAuth token expiry.
     Returns: gspread client or None
     """
-    global _sheet_client, _client_created_at
-
+    cache = _get_local_cache()
     now = time.monotonic()
-    if (_sheet_client is not None and
-            _client_created_at is not None and
-            (now - _client_created_at) < _CLIENT_TTL_SECONDS):
-        return _sheet_client
+    if (cache.sheet_client is not None and
+            cache.client_created_at is not None and
+            (now - cache.client_created_at) < _CLIENT_TTL_SECONDS):
+        return cache.sheet_client
 
     # Invalidate stale client
-    _sheet_client = None
-    _client_created_at = None
+    cache.sheet_client = None
+    cache.client_created_at = None
     _reset_sheet_cache()
 
     try:
@@ -61,16 +83,16 @@ def get_sheet_client():
         if creds_env:
             creds_json = json.loads(creds_env)
             if hasattr(gspread, "service_account_from_dict"):
-                _sheet_client = gspread.service_account_from_dict(creds_json)
-                _client_created_at = now
+                cache.sheet_client = gspread.service_account_from_dict(creds_json)
+                cache.client_created_at = now
                 logger.info("Google Sheets client initialized from environment")
-                return _sheet_client
+                return cache.sheet_client
 
         if os.path.exists("credentials.json"):
-            _sheet_client = gspread.service_account(filename="credentials.json")
-            _client_created_at = now
+            cache.sheet_client = gspread.service_account(filename="credentials.json")
+            cache.client_created_at = now
             logger.info("Google Sheets client initialized from file")
-            return _sheet_client
+            return cache.sheet_client
 
         logger.warning("No Google credentials found")
     except Exception:
@@ -83,23 +105,22 @@ def get_spreadsheet():
     """
     Get the target spreadsheet using the shared client/cache lifecycle.
     """
-    global _spreadsheet, _spreadsheet_created_at
-
+    cache = _get_local_cache()
     now = time.monotonic()
-    if (_spreadsheet is not None and
-            _spreadsheet_created_at is not None and
-            (now - _spreadsheet_created_at) < _CLIENT_TTL_SECONDS):
-        return _spreadsheet
+    if (cache.spreadsheet is not None and
+            cache.spreadsheet_created_at is not None and
+            (now - cache.spreadsheet_created_at) < _CLIENT_TTL_SECONDS):
+        return cache.spreadsheet
 
     client = get_sheet_client()
     if not client:
         return None
 
     try:
-        _spreadsheet = client.open(SPREADSHEET_NAME)
-        _spreadsheet_created_at = now
-        _worksheet_cache.clear()
-        return _spreadsheet
+        cache.spreadsheet = client.open(SPREADSHEET_NAME)
+        cache.spreadsheet_created_at = now
+        cache.worksheet_cache.clear()
+        return cache.spreadsheet
     except Exception:
         logger.exception("Error opening Google Spreadsheet: %s", SPREADSHEET_NAME)
         _reset_sheet_cache()
@@ -110,8 +131,9 @@ def get_worksheet(sheet_name):
     """
     Get a worksheet handle with the same TTL lifecycle as the sheet client.
     """
-    if sheet_name in _worksheet_cache:
-        return _worksheet_cache[sheet_name]
+    cache = _get_local_cache()
+    if sheet_name in cache.worksheet_cache:
+        return cache.worksheet_cache[sheet_name]
 
     spreadsheet = get_spreadsheet()
     if not spreadsheet:
@@ -119,7 +141,7 @@ def get_worksheet(sheet_name):
 
     try:
         worksheet = spreadsheet.worksheet(sheet_name)
-        _worksheet_cache[sheet_name] = worksheet
+        cache.worksheet_cache[sheet_name] = worksheet
         return worksheet
     except Exception:
         logger.exception("Error opening worksheet: %s", sheet_name)

@@ -66,6 +66,9 @@ _TRANSIENT_NAMES = frozenset({
     "TransportError",          # google.auth.exceptions
     "ServiceUnavailable",      # googleapiclient.errors.HttpError 503
     "TooManyRequests",         # 429
+    "SSLError",                # SSL decryption failures
+    "SSLZeroReturnError",
+    "MaxRetryError",           # urllib3 max retries
 })
 
 
@@ -76,7 +79,7 @@ def _is_transient(exc: BaseException) -> bool:
         return True
     # Some gspread errors carry HTTP status in their args/message
     msg = str(exc).lower()
-    if any(token in msg for token in ("503", "502", "429", "timeout", "temporarily")):
+    if any(token in msg for token in ("503", "502", "429", "timeout", "temporarily", "ssl", "decryption", "bad record mac")):
         return True
     return False
 
@@ -123,6 +126,16 @@ def retry_sheet_op(
             return result
         except Exception as exc:
             last_exc = exc
+            
+            # Reset client cache on SSL/socket exceptions so we rebuild fresh connections
+            exc_name = type(exc).__name__
+            if any(term in exc_name.lower() or term in str(exc).lower() for term in ("ssl", "connection", "disconnect", "protocol", "maxretry", "timeout")):
+                try:
+                    from database.sheets import invalidate_sheet_client
+                    invalidate_sheet_client()
+                except Exception:
+                    pass
+
             if not _is_transient(exc):
                 # Non-transient: bubble up immediately so bugs surface.
                 incr(f"sheets.retry.{op_name}.non_transient")

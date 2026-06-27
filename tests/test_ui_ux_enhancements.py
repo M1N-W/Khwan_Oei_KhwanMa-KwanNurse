@@ -531,5 +531,56 @@ class TestLINEUserIDExtraction(unittest.TestCase):
         self.assertIsNone(_extract_line_user_id("string"))
 
 
+class TestThreadLocalSheetsAndRetry(unittest.TestCase):
+    def test_is_transient_includes_ssl_and_maxretry(self):
+        from database.retry import is_transient_error
+        import urllib3
+        import requests
+
+        ssl_exc = requests.exceptions.SSLError("decryption failed or bad record mac")
+        max_retry_exc = urllib3.exceptions.MaxRetryError(None, "url", "max retries exceeded")
+        self.assertTrue(is_transient_error(ssl_exc))
+        self.assertTrue(is_transient_error(max_retry_exc))
+
+    def test_thread_local_isolation(self):
+        from database.sheets import _get_local_cache, get_sheet_client
+        import threading
+
+        cache = _get_local_cache()
+        cache.sheet_client = "main_thread_client"
+
+        other_client = []
+        def worker():
+            cache_other = _get_local_cache()
+            other_client.append(cache_other.sheet_client)
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+
+        self.assertIsNone(other_client[0])
+        self.assertEqual(cache.sheet_client, "main_thread_client")
+        # Clean up
+        cache.sheet_client = None
+
+    @patch("database.sheets.invalidate_sheet_client")
+    def test_retry_invalidates_client_on_ssl_error(self, mock_invalidate):
+        from database.retry import retry_sheet_op
+        import requests
+
+        call_count = 0
+        def failing_fn():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise requests.exceptions.SSLError("decryption failed")
+            return "success"
+
+        res = retry_sheet_op(failing_fn, max_attempts=2, base_delay=0.01)
+        self.assertEqual(res, "success")
+        self.assertEqual(call_count, 2)
+        mock_invalidate.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
