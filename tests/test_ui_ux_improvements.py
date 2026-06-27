@@ -190,3 +190,126 @@ class TestUIUXImprovements(unittest.TestCase):
             # Third read should fetch again from original
             v3 = mock_sheet.get_all_values()
             self.assertEqual(v3, [["Header"], ["Row1"]])
+
+    @patch("database.patient_profile.read_patient_profile")
+    def test_get_patient_prefix_label_trims_duplicate_name(self, mock_read):
+        # Test trimming duplicate surname in first_name (e.g. "มาวิน อยู่เย็น อยู่เย็น" -> "มาวิน อยู่เย็น")
+        mock_read.return_value = {
+            "first_name": "มาวิน อยู่เย็น",
+            "last_name": "อยู่เย็น",
+            "hn": "123456"
+        }
+        label = _get_patient_prefix_label("U_REG")
+        self.assertEqual(label, "มาวิน อยู่เย็น (HN: 123456)")
+
+        mock_read.return_value = {
+            "first_name": "มาวิน อยู่เย็น อยู่เย็น",
+            "last_name": "อยู่เย็น",
+            "hn": "123456"
+        }
+        label2 = _get_patient_prefix_label("U_REG2")
+        self.assertEqual(label2, "มาวิน อยู่เย็น (HN: 123456)")
+
+    @patch("database.patient_profile.read_patient_profile")
+    @patch("services.presession.build_pre_consult_briefing_data")
+    @patch("config.ENABLE_RICH_MESSAGES", True)
+    def test_build_emergency_flex_and_text_alerts(self, mock_briefing, mock_read):
+        mock_read.return_value = {
+            "first_name": "มาวิน",
+            "last_name": "อยู่เย็น",
+            "hn": "123456",
+            "phone": "0946477416"
+        }
+        mock_briefing.return_value = {
+            "risk": "high",
+            "summary": "คนไข้มีอาการเหนื่อยหอบ",
+            "questions": ["คำถามข้อที่ 1"]
+        }
+
+        # 1. Flex message
+        from services.notification import build_emergency_flex_alert
+        flex = build_emergency_flex_alert("U_REG", "หายใจไม่สะดวก")
+        self.assertEqual(flex["type"], "flex")
+        self.assertIn("ฉุกเฉิน", flex["altText"])
+        bubble = flex["contents"]
+        self.assertEqual(bubble["header"]["backgroundColor"], "#DC3545")
+        
+        # Verify no User ID and no Session ID in body contents
+        import json
+        body_text = json.dumps(bubble["body"])
+        self.assertNotIn("User ID", body_text)
+        self.assertNotIn("TC", body_text)
+        
+        # Verify phone number dialing action exists in footer
+        footer_buttons = bubble["footer"]["contents"]
+        self.assertEqual(footer_buttons[0]["action"]["uri"], "tel:0946477416")
+
+        # 2. Text message fallback
+        from services.notification import build_emergency_text_alert
+        text = build_emergency_text_alert("U_REG", "หายใจไม่สะดวก")
+        self.assertIn("ผู้ป่วย: มาวิน อยู่เย็น", text)
+        self.assertIn("อาการ: หายใจไม่สะดวก", text)
+
+    @patch("database.patient_profile.read_patient_profile_result")
+    @patch("database.patient_profile.upsert_patient_profile")
+    @patch("services.llm.complete")
+    def test_ai_mode_activation_deactivation_and_consultation(self, mock_complete, mock_upsert, mock_read_result):
+        from config import PATIENT_CONSENT_VERSION
+        from database.patient_profile import PatientProfileReadResult
+        # Setup mock profile
+        profile = {
+            "user_id": "U_TEST_AI",
+            "first_name": "มาวิน",
+            "last_name": "อยู่เย็น",
+            "hn": "123456",
+            "phone": "0946477416",
+            "registration_status": "registered",
+            "consent_version": PATIENT_CONSENT_VERSION,
+            "consent_at": "2026-06-27 12:00:00",
+            "ai_mode": False
+        }
+        mock_read_result.return_value = PatientProfileReadResult(available=True, profile=profile)
+        mock_complete.return_value = "แนะนำตัวยาชนิดนี้ค่ะ"
+
+        # 1. Try to activate AI mode
+        with app.app_context():
+            response = app.test_client().post("/webhook", json={
+                "queryResult": {
+                    "queryText": "คุยกับเอไอ",
+                    "intent": {"displayName": "Default Fallback Intent"}
+                },
+                "session": "projects/dummy/agent/sessions/U_TEST_AI"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIn("ยินดีต้อนรับเข้าสู่โหมดคุยกับ AI", data["fulfillmentText"])
+            mock_upsert.assert_called_with("U_TEST_AI", {"ai_mode": True})
+
+        # 2. Consultation when AI mode is active
+        profile["ai_mode"] = True
+        with app.app_context():
+            response = app.test_client().post("/webhook", json={
+                "queryResult": {
+                    "queryText": "ปวดแผลทำอย่างไรดีครับ",
+                    "intent": {"displayName": "Default Fallback Intent"}
+                },
+                "session": "projects/dummy/agent/sessions/U_TEST_AI"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data["fulfillmentText"], "แนะนำตัวยาชนิดนี้ค่ะ")
+            mock_complete.assert_called()
+
+        # 3. Deactivate AI mode
+        with app.app_context():
+            response = app.test_client().post("/webhook", json={
+                "queryResult": {
+                    "queryText": "คุยกับพยาบาล",
+                    "intent": {"displayName": "Default Fallback Intent"}
+                },
+                "session": "projects/dummy/agent/sessions/U_TEST_AI"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIn("ออกจากโหมดคุยกับ AI เรียบร้อยแล้วค่ะ", data["fulfillmentText"])
+            mock_upsert.assert_called_with("U_TEST_AI", {"ai_mode": False})

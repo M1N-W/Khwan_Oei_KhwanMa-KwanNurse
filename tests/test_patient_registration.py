@@ -34,7 +34,7 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
 
         self.assertTrue(ok)
         self.assertEqual(captured[0], pp_db.HEADERS)
-        self.assertEqual(len(captured[0]), 16)
+        self.assertEqual(len(captured[0]), len(pp_db.HEADERS))
         self.assertEqual(len(captured), 2)
         self.assertEqual(captured[1][0], "U1")
 
@@ -76,13 +76,13 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
         self.assertTrue(ok)
         header_update = captured["updates"][0]
         row_update = captured["updates"][1]
-        self.assertEqual(header_update[0], "A1:Q1")
+        self.assertEqual(header_update[0], "A1:R1")
         headers = header_update[1][0]
         self.assertEqual(headers[:10], pp_db.HEADERS[:10])
         self.assertEqual(headers[10], "Future_Field")
         for header in pp_db.HEADERS[10:]:
             self.assertIn(header, headers)
-        self.assertEqual(row_update[0], "A2:Q2")
+        self.assertEqual(row_update[0], "A2:R2")
         row = row_update[1][0]
         self.assertEqual(row[headers.index("Phone")], "0812345678")
         self.assertEqual(row[headers.index("Registration_Status")], "registered")

@@ -55,9 +55,16 @@ def send_line_push(message, target_id=None):
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {access_token}'
     }
+    if isinstance(message, dict):
+        line_messages = [message]
+    elif isinstance(message, list):
+        line_messages = message
+    else:
+        line_messages = [{"type": "text", "text": str(message)}]
+
     payload = {
         "to": target_id,
-        "messages": [{"type": "text", "text": message}]
+        "messages": line_messages
     }
 
     last_status = None
@@ -188,6 +195,10 @@ def _get_patient_prefix_label(user_id: str) -> str:
             last = (profile.get("last_name") or "").strip()
             hn = (profile.get("hn") or "").strip()
             name = f"{first} {last}".strip()
+            if last:
+                double_suffix = f"{last} {last}"
+                while name.endswith(double_suffix):
+                    name = name[:-len(last)].strip()
             if name:
                 label = name
                 if hn:
@@ -503,7 +514,239 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     return message
 
 
-def build_clinical_alert(alert_type: str, user_id: str, context: dict) -> str:
+def build_emergency_text_alert(user_id: str, description: str) -> str:
+    """Build a clean text alert message for emergencies (when Flex is disabled)."""
+    try:
+        from database.patient_profile import read_patient_profile
+        profile = read_patient_profile(user_id) or {}
+    except Exception:
+        profile = {}
+
+    first = (profile.get("first_name") or "").strip()
+    last = (profile.get("last_name") or "").strip()
+    hn = (profile.get("hn") or "").strip()
+
+    name = f"{first} {last}".strip()
+    if last:
+        double_suffix = f"{last} {last}"
+        while name.endswith(double_suffix):
+            name = name[:-len(last)].strip()
+    if not name:
+        name = "ไม่ระบุชื่อ"
+    hn_str = f" (HN: {hn})" if hn else ""
+
+    desc = description.strip() if description and description.strip() else "แจ้งเหตุฉุกเฉิน (นอกเวลาทำการ)"
+    from datetime import datetime
+    from config import LOCAL_TZ
+    time_str = datetime.now(tz=LOCAL_TZ).strftime("%H:%M น.")
+
+    return (
+        f"🚨🚨 เรื่องฉุกเฉิน 🚨🚨\n\n"
+        f"👤 ผู้ป่วย: {name}{hn_str}\n"
+        f"💬 อาการ: {desc}\n"
+        f"🕐 เวลา: {time_str}\n\n"
+        f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที"
+    )
+
+
+def build_emergency_flex_alert(user_id: str, description: str) -> dict:
+    """Build a beautiful Flex message alert for emergencies."""
+    try:
+        from database.patient_profile import read_patient_profile
+        profile = read_patient_profile(user_id) or {}
+    except Exception:
+        profile = {}
+
+    first = (profile.get("first_name") or "").strip()
+    last = (profile.get("last_name") or "").strip()
+    hn = (profile.get("hn") or "").strip()
+    phone = (profile.get("phone") or "").strip()
+
+    name = f"{first} {last}".strip()
+    if last:
+        double_suffix = f"{last} {last}"
+        while name.endswith(double_suffix):
+            name = name[:-len(last)].strip()
+    if not name:
+        name = "ไม่ระบุชื่อ"
+    hn_str = hn or "ไม่ระบุ"
+
+    desc = description.strip() if description and description.strip() else "แจ้งเหตุฉุกเฉิน (นอกเวลาทำการ)"
+    
+    from datetime import datetime
+    from config import LOCAL_TZ
+    time_str = datetime.now(tz=LOCAL_TZ).strftime("%H:%M")
+
+    # Retrieve briefing data
+    try:
+        from services.presession import build_pre_consult_briefing_data
+        briefing = build_pre_consult_briefing_data(user_id, 'emergency', description)
+    except Exception:
+        briefing = {"risk": "low", "summary": "", "questions": []}
+
+    risk = briefing.get("risk", "low")
+    summary = briefing.get("summary") or ""
+    questions = briefing.get("questions") or []
+
+    risk_color = {"high": "#DC3545", "medium": "#FF8C00", "low": "#28A745"}.get(risk, "#28A745")
+    risk_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(risk, "🟢")
+
+    header_contents = [
+        {
+            "type": "text",
+            "text": "🚨 แจ้งเรื่องฉุกเฉิน 🚨",
+            "weight": "bold",
+            "size": "lg",
+            "color": "#FFFFFF",
+            "align": "center"
+        }
+    ]
+
+    body_contents = [
+        {
+            "type": "text",
+            "text": f"👤 ผู้ป่วย: {name}",
+            "weight": "bold",
+            "size": "md",
+            "wrap": True
+        },
+        {
+            "type": "text",
+            "text": f"🏥 HN: {hn_str}",
+            "size": "sm",
+            "color": "#555555"
+        },
+        {
+            "type": "text",
+            "text": f"💬 อาการ: {desc}",
+            "size": "md",
+            "wrap": True,
+            "margin": "md"
+        },
+        {
+            "type": "text",
+            "text": f"⏰ เวลา: {time_str} น.",
+            "size": "xs",
+            "color": "#888888",
+            "margin": "sm"
+        },
+        {
+            "type": "separator",
+            "margin": "lg"
+        },
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "lg",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "ระดับความเสี่ยง (AI):",
+                    "size": "sm",
+                    "color": "#555555"
+                },
+                {
+                    "type": "text",
+                    "text": f"{risk_emoji} {risk.upper()}",
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": risk_color,
+                    "align": "end"
+                }
+            ]
+        }
+    ]
+
+    if summary:
+        body_contents.append({
+            "type": "text",
+            "text": "📝 สรุปอาการ (AI):",
+            "weight": "bold",
+            "size": "sm",
+            "color": "#007BFF",
+            "margin": "lg"
+        })
+        body_contents.append({
+            "type": "text",
+            "text": summary,
+            "size": "sm",
+            "wrap": True,
+            "color": "#333333"
+        })
+
+    if questions:
+        body_contents.append({
+            "type": "text",
+            "text": "❓ คำถามแนะนำที่ควรโทรสัมภาษณ์:",
+            "weight": "bold",
+            "size": "sm",
+            "color": "#007BFF",
+            "margin": "lg"
+        })
+        for i, q in enumerate(questions, 1):
+            body_contents.append({
+                "type": "text",
+                "text": f"{i}. {q}",
+                "size": "sm",
+                "wrap": True,
+                "color": "#333333",
+                "margin": "xs"
+            })
+
+    footer_contents = []
+    if phone:
+        footer_contents.append({
+            "type": "button",
+            "action": {
+                "type": "uri",
+                "label": "📞 โทรติดต่อคนไข้",
+                "uri": f"tel:{phone}"
+            },
+            "style": "primary",
+            "color": "#DC3545"
+        })
+    if WORKSHEET_LINK:
+        footer_contents.append({
+            "type": "button",
+            "action": {
+                "type": "uri",
+                "label": "📊 เปิดฐานข้อมูลคนไข้",
+                "uri": WORKSHEET_LINK
+            },
+            "style": "secondary"
+        })
+
+    bubble = {
+        "type": "bubble",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#DC3545",
+            "contents": header_contents
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": body_contents
+        }
+    }
+    if footer_contents:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": footer_contents
+        }
+
+    return {
+        "type": "flex",
+        "altText": f"🚨 ฉุกเฉิน: {name}",
+        "contents": bubble
+    }
+
+
+def build_clinical_alert(alert_type: str, user_id: str, context: dict) -> str | dict:
     """
     Unified router for building clinical alert notifications (KWN-09).
     Bridges to individual notification builder functions.
@@ -544,6 +787,12 @@ def build_clinical_alert(alert_type: str, user_id: str, context: dict) -> str:
             advice=context.get("advice", ""),
             confidence=context.get("confidence", 0.0)
         )
+    elif alert_type == "emergency":
+        from config import ENABLE_RICH_MESSAGES
+        if ENABLE_RICH_MESSAGES:
+            return build_emergency_flex_alert(user_id, context.get("description", ""))
+        else:
+            return build_emergency_text_alert(user_id, context.get("description", ""))
     else:
         raise ValueError(f"Unknown alert type: {alert_type}")
 

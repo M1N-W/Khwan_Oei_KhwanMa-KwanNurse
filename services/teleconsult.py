@@ -248,29 +248,23 @@ def handle_emergency(user_id, description):
         # Update status to in_progress (skip queue)
         update_session_status(session['session_id'], SessionStatus.IN_PROGRESS)
         
-        # Send URGENT alert to nurse
-        from services.notification import _get_patient_prefix_label
-        patient_label = _get_patient_prefix_label(user_id)
-        alert_message = (
-            f"🚨🚨 เรื่องฉุกเฉิน 🚨🚨\n\n"
-            f"👤 ผู้ป่วย: {patient_label}\n"
-            f"🆔 User ID: {user_id}\n"
-            f"💬 อาการ: {description or '(ไม่ระบุ)'}\n"
-            f"🕐 เวลา: {datetime.now(tz=LOCAL_TZ).strftime('%H:%M น.')}\n\n"
-            f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที\n"
-            f"Session ID: {session['session_id']}"
-        )
-
-        # Phase 2-B: append pre-consult briefing for emergencies too
+        # Send URGENT alert to nurse (using beautiful Flex message if enabled)
+        from services.notification import build_clinical_alert
         try:
-            from services.presession import build_pre_consult_briefing
-            briefing = build_pre_consult_briefing(user_id, 'emergency', description)
-            if briefing:
-                alert_message += briefing
+            alert_payload = build_clinical_alert("emergency", user_id, {"description": description})
+            send_line_push(alert_payload, NURSE_GROUP_ID)
         except Exception:
-            logger.exception("Emergency briefing failed; sending alert without it")
-
-        send_line_push(alert_message, NURSE_GROUP_ID)
+            logger.exception("Failed to build/send emergency Flex alert, falling back to text")
+            from services.notification import _get_patient_prefix_label
+            patient_label = _get_patient_prefix_label(user_id)
+            fallback_text = (
+                f"🚨🚨 เรื่องฉุกเฉิน 🚨🚨\n\n"
+                f"👤 ผู้ป่วย: {patient_label}\n"
+                f"💬 อาการ: {description or 'แจ้งเหตุฉุกเฉิน (นอกเวลาทำการ)'}\n"
+                f"🕐 เวลา: {datetime.now(tz=LOCAL_TZ).strftime('%H:%M น.')}\n\n"
+                f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที"
+            )
+            send_line_push(fallback_text, NURSE_GROUP_ID)
         
         from config import NURSE_CONTACT_LINK
         message = (
@@ -413,7 +407,6 @@ def handle_after_hours_choice(user_id, choice_text):
                 nurse_alert = (
                     f"📋 มีคำขอนอกเวลาทำการ (ไม่เร่งด่วน)\n\n"
                     f"👤 ผู้ป่วย: {patient_label}\n"
-                    f"🆔 User ID: {user_id}\n"
                     f"📂 ประเภท: {session.get('Issue_Type', '-')}\n"
                     f"💬 รายละเอียด: {session.get('Description', '(ไม่มี)')}\n\n"
                     f"⏰ กรุณาติดต่อกลับในวันทำการถัดไปค่ะ"

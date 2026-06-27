@@ -204,6 +204,16 @@ def register_routes(app):
                             except Exception:
                                 pass
 
+                # AI Mode intercept (only for registered patients)
+                if read_result and read_result.available and read_result.profile:
+                    profile = read_result.profile
+                    from services.patient_profile import registration_missing_fields
+                    missing = registration_missing_fields(profile)
+                    if not missing:
+                        ai_response = handle_ai_mode_intercept(user_id, profile, query_text)
+                        if ai_response is not None:
+                            return ai_response
+
                 # Core keyword routing
                 if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
                     intent = "PatientIdentity"
@@ -508,3 +518,73 @@ def handle_line_image_event(event):
             )
         except Exception:
             logger.exception("Failed to push wound alert user=%s", user_id)
+
+
+def handle_ai_mode_intercept(user_id: str, profile: dict, query_text: str):
+    """Intercept incoming user text and handle AI consultation mode if active or triggered."""
+    if not isinstance(query_text, str):
+        return None
+
+    cleaned = query_text.strip().lower().replace(" ", "").replace("  ", "")
+    activation_keywords = {"คุยกับเอไอ", "โหมดเอไอ", "เปิดเอไอ", "ปรึกษาเอไอ", "คุยกับai", "โหมดai"}
+    deactivation_keywords = {"ออกจากเอไอ", "ปิดเอไอ", "คุยกับพยาบาล", "ยกเลิก", "ออกจากai", "ปิดai"}
+
+    # 1. Activation
+    if cleaned in activation_keywords:
+        from database.patient_profile import upsert_patient_profile
+        from services.patient_profile import invalidate_profile_cache
+        from routes.webhook.helpers import _make_dialogflow_response
+        
+        try:
+            upsert_patient_profile(user_id, {"ai_mode": True})
+            invalidate_profile_cache(user_id)
+        except Exception:
+            logger.exception("Failed to update ai_mode for activation user=%s", user_id)
+            
+        reply = (
+            "🤖 ยินดีต้อนรับเข้าสู่โหมดคุยกับ AI (พยาบาลขวัญใจ AI) ค่ะ!\n"
+            "คุณสามารถสอบถามเรื่องสุขภาพ การดูแลแผล หรือยาได้เลยค่ะ\n\n"
+            "💡 หากต้องการออกจากโหมดนี้ พิมพ์คำว่า 'ออกจากเอไอ' หรือ 'คุยกับพยาบาล' ได้ทุกเมื่อค่ะ"
+        )
+        return jsonify(_make_dialogflow_response(reply)), 200
+
+    # 2. Deactivation
+    if cleaned in deactivation_keywords and profile.get("ai_mode") is True:
+        from database.patient_profile import upsert_patient_profile
+        from services.patient_profile import invalidate_profile_cache
+        from routes.webhook.helpers import _make_dialogflow_response
+        
+        try:
+            upsert_patient_profile(user_id, {"ai_mode": False})
+            invalidate_profile_cache(user_id)
+        except Exception:
+            logger.exception("Failed to update ai_mode for deactivation user=%s", user_id)
+            
+        reply = (
+            "👋 ออกจากโหมดคุยกับ AI เรียบร้อยแล้วค่ะ\n"
+            "บอทจะกลับมาทำงานตามระบบปกติและติดต่อพยาบาลหากท่านต้องการค่ะ"
+        )
+        return jsonify(_make_dialogflow_response(reply)), 200
+
+    # 3. Intercept and reply via LLM
+    if profile.get("ai_mode") is True:
+        from services.llm import complete
+        from routes.webhook.helpers import _make_dialogflow_response
+        
+        _AI_MODE_SYSTEM_PROMPT = (
+            "คุณคือ 'พยาบาลขวัญใจ AI' ผู้ช่วยดูแลผู้ป่วยหลังผ่าตัดอย่างเป็นกันเองและใส่ใจ. "
+            "ให้คำแนะนำเรื่องสุขภาพ การดูแลแผลผ่าตัด และการรับประทานยาอย่างถูกต้อง ปลอดภัย และสุภาพในภาษาไทย. "
+            "หากผู้ป่วยมีอาการวิกฤต รุนแรง (เช่น หายใจลำบาก เลือดไหลไม่หยุด แผลติดเชื้อรุนแรง) "
+            "ให้แนะนำให้โทร 1669 หรือติดต่อโรงพยาบาลทันทีอย่างชัดเจน. "
+            "ตอบสั้น กระชับ เข้าใจง่าย หลีกเลี่ยงศัพท์แพทย์ที่ยากเกินไป."
+        )
+        
+        reply_text = complete(_AI_MODE_SYSTEM_PROMPT, query_text)
+        if not reply_text:
+            reply_text = (
+                "🤖 ขณะนี้ AI มีผู้ใช้งานจำนวนมากและไม่สามารถตอบคำถามได้ชั่วคราว\n"
+                "กรุณาลองใหม่อีกครั้ง หรือพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรงค่ะ"
+            )
+        return jsonify(_make_dialogflow_response(reply_text)), 200
+
+    return None

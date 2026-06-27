@@ -92,6 +92,29 @@ def _fallback_briefing(issue_type, description, triage):
     }
 
 
+def build_pre_consult_briefing_data(user_id, issue_type, description=""):
+    """
+    Return raw structured briefing data (risk, summary, questions) for Flex message formatting.
+    """
+    try:
+        triage = analyze_free_text(description or "")
+        briefing = _llm_briefing(issue_type, description, triage)
+        if briefing is None:
+            briefing = _fallback_briefing(issue_type, description, triage)
+        return {
+            "risk": triage.get("risk_level", "low"),
+            "summary": briefing.get("summary") or "",
+            "questions": briefing.get("questions") or []
+        }
+    except Exception:
+        logger.exception("Failed to build pre-consult briefing data")
+        return {
+            "risk": "low",
+            "summary": "",
+            "questions": []
+        }
+
+
 def build_pre_consult_briefing(user_id, issue_type, description=""):
     """
     Return a formatted Thai briefing string ready to append to the nurse

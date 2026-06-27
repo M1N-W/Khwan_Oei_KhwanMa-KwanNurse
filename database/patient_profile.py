@@ -30,7 +30,7 @@ HEADERS = [
     "User_ID", "Age", "Sex", "Surgery_Type", "Surgery_Date", "Diseases",
     "Updated_At", "First_Name", "Last_Name", "HN", "Phone",
     "Registration_Status", "Registered_At", "Consent_Version", "Consent_At",
-    "Last_Active_At",
+    "Last_Active_At", "AI_Mode",
 ]
 
 _FIELD_TO_HEADER = {
@@ -44,6 +44,7 @@ _FIELD_TO_HEADER = {
     "hn": "HN",
     "phone": "Phone",
     "last_active_at": "Last_Active_At",
+    "ai_mode": "AI_Mode",
 }
 
 
@@ -141,6 +142,8 @@ def _apply_profile_to_record(
             rec[header] = _coerce_phone(value)
         elif field == "last_active_at":
             rec[header] = str(value or "").strip()
+        elif field == "ai_mode":
+            rec[header] = "true" if value is True or str(value).lower() in ("true", "1", "yes", "on") else "false"
         else:
             limit = 40 if field == "hn" else 80
             text = " ".join(str(value or "").strip().split())[:limit]
@@ -187,6 +190,9 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
         display_label = f"{display_name} · HN {hn}"
 
     status = _registration_status(rec)
+    ai_mode_raw = (rec.get("AI_Mode") or "").strip().lower()
+    ai_mode = ai_mode_raw in ("true", "1", "yes", "on")
+
     return {
         "user_id": rec.get("User_ID", ""),
         "age": age,
@@ -208,6 +214,7 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
         "last_active_at": (rec.get("Last_Active_At") or "").strip() or None,
         "display_name": display_name or None,
         "display_label": display_label or None,
+        "ai_mode": ai_mode,
     }
 
 
