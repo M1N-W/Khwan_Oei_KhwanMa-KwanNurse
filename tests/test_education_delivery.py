@@ -93,7 +93,8 @@ class TestRecommendKnowledgeUsesCarousel(unittest.TestCase):
 
     def test_recommend_knowledge_sends_flex_carousel(self):
         with patch("services.line_message.push_rich_message") as mock_push, \
-             patch("database.patient_profile.read_patient_profile", return_value=None):
+             patch("database.patient_profile.read_patient_profile", return_value=None), \
+             patch("config.ENABLE_RICH_MESSAGES", True):
             resp = self.client.post(
                 "/webhook",
                 json=self._df_payload({"surgery_type": "knee_replacement"}),

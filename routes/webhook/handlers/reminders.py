@@ -134,6 +134,17 @@ def handle_recommend_knowledge(user_id, params):
                 )
         except Exception:
             logger.exception("EducationLog write failed (non-fatal)")
+
+        # T5 (S2-3): Wire Flex carousel into RecommendKnowledge
+        from config import ENABLE_RICH_MESSAGES
+        if ENABLE_RICH_MESSAGES and user_id and recommendations:
+            try:
+                from services.line_message import build_education_carousel, push_rich_message
+                carousel = build_education_carousel(recommendations)
+                push_rich_message([carousel], user_id)
+            except Exception:
+                logger.exception("Failed to push education carousel user=%s", user_id)
+
         return jsonify({"fulfillmentText": message}), 200
 
     except Exception:
