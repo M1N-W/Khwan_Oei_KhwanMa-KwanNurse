@@ -61,7 +61,7 @@ BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
 NURSE_GROUP_ID = os.environ.get("NURSE_GROUP_ID")
-NURSE_CONTACT_LINK = os.environ.get("NURSE_CONTACT_LINK", "https://line.me/ti/p/0899181839")
+NURSE_CONTACT_LINK = os.environ.get("NURSE_CONTACT_LINK", "https://line.me/ti/p/~0899181839")
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 LINE_REPLY_API_URL = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_API_URL = "https://api-data.line.me/v2/bot/message"  # /<id>/content

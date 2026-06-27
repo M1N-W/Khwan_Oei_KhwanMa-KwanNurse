@@ -1,7 +1,7 @@
 # Design Spec: Teleconsult Hybrid Workflow & Knowledge Base Polish
 
 This document details the design specifications for:
-1. Enhancing the "ปรึกษาพยาบาล" (Teleconsultation) flow to integrate a direct chat link for Nurse Kwanruean (`https://line.me/ti/p/0899181839`) while maintaining the existing triage and queue dashboard features.
+1. Enhancing the "ปรึกษาพยาบาล" (Teleconsultation) flow to integrate a direct chat link for Nurse Kwanruean (`https://line.me/ti/p/~0899181839`) while maintaining the existing triage and queue dashboard features.
 2. Standardizing and polishing the "ความรู้และคำแนะนำ" (Knowledge Base) texts to resolve formatting clutter and line overflow/wrapping on mobile screens.
 
 ---
@@ -46,7 +46,7 @@ sequenceDiagram
 #### A. LINE Contact Settings
 Configure the nurse contact link in `config.py` via environment variable with a fallback default:
 * Env key: `NURSE_CONTACT_LINK`
-* Default value: `https://line.me/ti/p/0899181839`
+* Default value: `https://line.me/ti/p/~0899181839`
 
 #### B. Dashboard Acceptance Trigger (`services/dashboard_actions.py`)
 In `assign_nurse_to_session`, after updating the status to `in_progress`, trigger a LINE push notification to the patient:
@@ -54,11 +54,11 @@ In `assign_nurse_to_session`, after updating the status to `in_progress`, trigge
 * Content:
   - Header: `💚 พยาบาลรับคำขอของคุณแล้ว`
   - Body: `พยาบาลขวัญเรือนยินดีให้บริการค่ะ คุณสามารถกดปุ่มด้านล่างเพื่อแอดไลน์พยาบาลและเริ่มพูดคุยปรึกษาได้ทันทีค่ะ`
-  - Button CTA: `💬 แอดไลน์คุยกับพยาบาล` (URL: `https://line.me/ti/p/0899181839`)
+  - Button CTA: `💬 แอดไลน์คุยกับพยาบาล` (URL: `https://line.me/ti/p/~0899181839`)
 
 #### C. Emergency Fast-Path Response (`services/teleconsult.py`)
 In `handle_emergency`, append a quick CTA button or link in the response:
-* Plain text fallback: `"หากสะดวกติดต่อผ่านไลน์เพิ่มเติม สามารถแอดไลน์พยาบาลขวัญเรือนได้ที่นี่ค่ะ: https://line.me/ti/p/0899181839"`
+* Plain text fallback: `"หากสะดวกติดต่อผ่านไลน์เพิ่มเติม สามารถแอดไลน์พยาบาลขวัญเรือนได้ที่นี่ค่ะ: https://line.me/ti/p/~0899181839"`
 * Flex Message (if enabled) with a direct button.
 
 ---

@@ -93,7 +93,7 @@ class AssignNurseTests(unittest.TestCase):
         self.assertEqual(target_id, "U1")
         self.assertEqual(len(messages), 1)
         self.assertIn("ขวัญเรือน", messages[0]["altText"])
-        self.assertIn("https://line.me/ti/p/0899181839", messages[0]["altText"])
+        self.assertIn("https://line.me/ti/p/~0899181839", messages[0]["altText"])
 
     def test_assign_queue_not_found(self):
         from services import dashboard_actions
