@@ -216,6 +216,12 @@ def prepare_registration_update(
     missing = registration_missing_fields(merged)
     if merged.get("consent_granted") is True and "consent" in missing:
         missing.remove("consent")
+
+    if not missing:
+        merged["registration_status"] = "registered"
+    else:
+        merged["registration_status"] = "incomplete"
+
     return RegistrationUpdate(
         profile=merged,
         missing_fields=missing,
@@ -466,6 +472,14 @@ def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str
     out: dict[str, str] = {}
     first = _clean_text(first_name, 80)
     last = _clean_text(last_name, 80)
+    
+    if first:
+        given, family = _split_person_name(first)
+        if family:
+            first = given
+            if not last:
+                last = family
+
     hn_norm = _clean_text(hn, 40).upper()
     if first:
         out["first_name"] = first

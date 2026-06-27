@@ -139,3 +139,28 @@ class TestUIUXImprovements(unittest.TestCase):
         )
         self.assertEqual(bubble["body"]["spacing"], "md")
         self.assertEqual(bubble["footer"]["spacing"], "sm")
+
+    def test_normalize_identity_fields_splits_full_name_always(self):
+        from services.patient_profile import normalize_identity_fields
+        # Test full name split even when last name is present in input
+        res = normalize_identity_fields({
+            "first_name": "นายมาวิน อยู่เย็น",
+            "last_name": "อยู่เย็น"
+        })
+        self.assertEqual(res.get("first_name"), "นายมาวิน")
+        self.assertEqual(res.get("last_name"), "อยู่เย็น")
+
+    def test_prepare_registration_update_sets_registered_status(self):
+        from services.patient_profile import prepare_registration_update
+        from config import PATIENT_CONSENT_VERSION
+        existing = {
+            "first_name": "มาวิน",
+            "last_name": "อยู่เย็น",
+            "hn": "123456"
+        }
+        params = {
+            "phone": "0946477416",
+            "consent": "yes"
+        }
+        update = prepare_registration_update(existing, params)
+        self.assertEqual(update.profile.get("registration_status"), "registered")
