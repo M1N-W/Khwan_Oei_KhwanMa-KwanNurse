@@ -15,8 +15,44 @@ from config import NURSE_GROUP_ID
 logger = get_logger(__name__)
 
 
-def _mask_user_id_for_log(user_id):
-    return scrub_user_id(user_id)
+def _extract_line_user_id(req: dict) -> str | None:
+    """
+    Extract the actual LINE User ID from Dialogflow's originalDetectIntentRequest
+    when available (e.g. when called via real LINE integration).
+    """
+    if not isinstance(req, dict):
+        return None
+        
+    original_req = req.get("originalDetectIntentRequest")
+    if not isinstance(original_req, dict) or original_req.get("source") != "line":
+        return None
+    
+    payload = original_req.get("payload")
+    if not isinstance(payload, dict):
+        return None
+        
+    # Path 1: payload.data.source.userId
+    data = payload.get("data")
+    if isinstance(data, dict):
+        source = data.get("source")
+        if isinstance(source, dict):
+            user_id = source.get("userId")
+            if isinstance(user_id, str):
+                return user_id
+                
+    # Path 2: payload.source.userId
+    source = payload.get("source")
+    if isinstance(source, dict):
+        user_id = source.get("userId")
+        if isinstance(user_id, str):
+            return user_id
+            
+    # Path 3: payload.userId
+    user_id = payload.get("userId")
+    if isinstance(user_id, str):
+        return user_id
+        
+    return None
 
 
 def register_routes(app):
@@ -24,11 +60,14 @@ def register_routes(app):
     
     @app.route('/', methods=['GET', 'HEAD'])
     def health_check():
-        """Health check endpoint for monitoring services"""
+        """Health check endpoint for monitoring services with full configuration status (v5.0)"""
+        from config import validate_runtime_config
+        config_status = validate_runtime_config()
+        
         return jsonify({
-            "status": "ok",
-            "service": "KwanNurse-Bot v4.0",
-            "version": "4.0 - Complete (6/6 Features)",
+            "status": "ok" if config_status["ok"] else "warning",
+            "service": "KwanNurse-Bot v5.0",
+            "version": "5.0 - Complete (UX/UI Polish)",
             "features": [
                 "ReportSymptoms", 
                 "AssessRisk", 
@@ -37,6 +76,12 @@ def register_routes(app):
                 "FollowUpReminders",
                 "Teleconsult"
             ],
+            "diagnostics": {
+                "config_ok": config_status["ok"],
+                "missing_items": config_status["missing"],
+                "can_notify_line": config_status["can_notify"],
+                "can_persist_sheets": config_status["can_persist"]
+            },
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat()
         }), 200
 
@@ -116,8 +161,76 @@ def register_routes(app):
         try:
             intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
             params = req.get('queryResult', {}).get('parameters', {}) or {}
-            user_id = req.get('session', 'unknown').split('/')[-1]
+            
+            # Extract LINE User ID if available, otherwise fallback to Dialogflow session ID
+            line_user_id = _extract_line_user_id(req)
+            if line_user_id:
+                user_id = line_user_id
+            else:
+                user_id = req.get('session', 'unknown').split('/')[-1]
+                
             query_text = req.get('queryResult', {}).get('queryText', '')
+            
+            # Deterministic router & State Machine: bypass Dialogflow ML misclassification
+            if isinstance(query_text, str):
+                cleaned_query = query_text.strip().lower()
+                
+                # Check registration status from the DB to drive the slot-filling state machine
+                try:
+                    from database.patient_profile import read_patient_profile_result
+                    from services.patient_profile import registration_missing_fields
+                    read_result = read_patient_profile_result(user_id)
+                except Exception:
+                    read_result = None
+
+                # Reset/Cancel registration flow if user says cancel while registration is incomplete
+                if cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน"):
+                    if read_result and read_result.available and read_result.profile:
+                        from services.patient_profile import is_registration_complete
+                        if not is_registration_complete(read_result.profile):
+                            try:
+                                from database.patient_profile import upsert_patient_profile
+                                from services.patient_profile import invalidate_profile_cache
+                                upsert_patient_profile(user_id, {
+                                    "first_name": "", "last_name": "", "hn": "", "phone": "", 
+                                    "consent_granted": False, "consent_version": "", "consent_at": ""
+                                })
+                                invalidate_profile_cache(user_id)
+                                return jsonify({
+                                    "fulfillmentText": "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
+                                }), 200
+                            except Exception:
+                                pass
+
+                # Core keyword routing
+                if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
+                    intent = "PatientIdentity"
+                elif cleaned_query in ("ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ"):
+                    intent = "GetKnowledge"
+                    params = {}
+                elif cleaned_query in ("ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล"):
+                    intent = "ContactNurse"
+                    params = {}
+                elif cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา"):
+                    intent = "CancelConsultation"
+                elif cleaned_query in ("แจ้งเรื่องฉุกเฉิน", "รอเวลาทำการ"):
+                    intent = "AfterHoursChoice"
+                elif read_result and read_result.available and read_result.profile:
+                    profile = read_result.profile
+                    missing = registration_missing_fields(profile)
+                    if missing:
+                        intent = "PatientIdentity"
+                        first_missing = missing[0]
+                        if first_missing == "first_name":
+                            params = {"first_name": query_text}
+                        elif first_missing == "last_name":
+                            params = {"last_name": query_text}
+                        elif first_missing == "hn":
+                            params = {"hn": query_text}
+                        elif first_missing == "phone":
+                            params = {"phone": query_text}
+                        elif first_missing == "consent":
+                            params = {"consent": query_text}
         except Exception:
             logger.exception("Error parsing request")
             return jsonify({

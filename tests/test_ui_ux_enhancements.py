@@ -450,5 +450,287 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         self.assertEqual(fifth["action"]["text"], "1")
 
 
+class TestHealthCheckDiagnostics(unittest.TestCase):
+    def test_health_check_returns_v5_and_diagnostics(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+        with patch("config.LINE_CHANNEL_ACCESS_TOKEN", "mock_token"), \
+             patch("config.NURSE_GROUP_ID", "mock_group"), \
+             patch("config.GSPREAD_CREDENTIALS", "mock_creds"):
+            response = client.get("/")
+            data = json.loads(response.data)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(data["service"], "KwanNurse-Bot v5.0")
+            self.assertEqual(data["version"], "5.0 - Complete (UX/UI Polish)")
+            self.assertIn("diagnostics", data)
+            self.assertTrue(data["diagnostics"]["config_ok"])
+
+
+class TestLINEUserIDExtraction(unittest.TestCase):
+    def test_extract_line_user_id_data_source_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "data": {
+                        "source": {
+                            "userId": "U123456"
+                        }
+                    }
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U123456")
+
+    def test_extract_line_user_id_payload_source_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "source": {
+                        "userId": "U789012"
+                    }
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U789012")
+
+    def test_extract_line_user_id_payload_root_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "userId": "U345678"
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U345678")
+
+    def test_extract_line_user_id_none_source(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "source": None
+                }
+            }
+        }
+        self.assertIsNone(_extract_line_user_id(req))
+
+    def test_extract_line_user_id_non_dict_inputs(self):
+        from routes.webhook.handler import _extract_line_user_id
+        self.assertIsNone(_extract_line_user_id(None))
+        self.assertIsNone(_extract_line_user_id([]))
+        self.assertIsNone(_extract_line_user_id("string"))
+
+
+class TestThreadLocalSheetsAndRetry(unittest.TestCase):
+    def test_is_transient_includes_ssl_and_maxretry(self):
+        from database.retry import is_transient_error
+        import urllib3
+        import requests
+
+        ssl_exc = requests.exceptions.SSLError("decryption failed or bad record mac")
+        max_retry_exc = urllib3.exceptions.MaxRetryError(None, "url", "max retries exceeded")
+        self.assertTrue(is_transient_error(ssl_exc))
+        self.assertTrue(is_transient_error(max_retry_exc))
+
+    def test_thread_local_isolation(self):
+        from database.sheets import _get_local_cache, get_sheet_client
+        import threading
+
+        cache = _get_local_cache()
+        cache.sheet_client = "main_thread_client"
+
+        other_client = []
+        def worker():
+            cache_other = _get_local_cache()
+            other_client.append(cache_other.sheet_client)
+
+        t = threading.Thread(target=worker)
+        t.start()
+        t.join()
+
+        self.assertIsNone(other_client[0])
+        self.assertEqual(cache.sheet_client, "main_thread_client")
+        # Clean up
+        cache.sheet_client = None
+
+    @patch("database.sheets.invalidate_sheet_client")
+    def test_retry_invalidates_client_on_ssl_error(self, mock_invalidate):
+        from database.retry import retry_sheet_op
+        import requests
+
+        call_count = 0
+        def failing_fn():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise requests.exceptions.SSLError("decryption failed")
+            return "success"
+
+        res = retry_sheet_op(failing_fn, max_attempts=2, base_delay=0.01)
+        self.assertEqual(res, "success")
+        self.assertEqual(call_count, 2)
+        mock_invalidate.assert_called_once()
+
+
+class TestDeterministicRouter(unittest.TestCase):
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_deterministic_router_overrides_intent(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch:
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ลงทะเบียน",
+                    "intent": {
+                        "displayName": "FreeTextSymptom"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "ลงทะเบียน")
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_state_machine_intercepts_unregistered_user(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        incomplete_profile = {
+            "first_name": "",
+            "last_name": "",
+            "hn": ""
+        }
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch, \
+             patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, incomplete_profile)):
+            
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "มาวิน",
+                    "intent": {
+                        "displayName": "RequestAppointment"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {"first_name": "มาวิน"}, "มาวิน")
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_state_machine_cancel_resets_profile(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        incomplete_profile = {
+            "first_name": "มาวิน",
+            "last_name": "",
+            "hn": ""
+        }
+
+        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, incomplete_profile)), \
+             patch("database.patient_profile.upsert_patient_profile") as mock_upsert, \
+             patch("services.patient_profile.invalidate_profile_cache") as mock_invalidate:
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ยกเลิก",
+                    "intent": {
+                        "displayName": "CancelConsultation"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("ยกเลิกการลงทะเบียนเรียบร้อย", response.get_json()["fulfillmentText"])
+            mock_upsert.assert_called_once()
+            mock_invalidate.assert_called_once()
+
+
+class TestParameterCoercion(unittest.TestCase):
+    def test_coerce_string_handles_varied_types(self):
+        from services.patient_profile import _coerce_string
+
+        # Strings are unchanged
+        self.assertEqual(_coerce_string("hello"), "hello")
+        self.assertEqual(_coerce_string(""), "")
+        self.assertEqual(_coerce_string(None), "")
+
+        # Simple dict with standard name key
+        self.assertEqual(_coerce_string({"name": "มาวิน"}), "มาวิน")
+        # Dict with given-name key
+        self.assertEqual(_coerce_string({"given-name": "มาวิน"}), "มาวิน")
+        # Nested dict structures from Dialogflow person entity
+        self.assertEqual(_coerce_string({"person": {"name": "มาวิน"}}), "มาวิน")
+        # Fallback to formatting other values if key not found
+        self.assertEqual(_coerce_string({"custom-key": "มาวิน"}), "มาวิน")
+        self.assertEqual(_coerce_string(123), "123")
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_webhook_unpacks_appointment_params(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handlers.symptoms.create_appointment", return_value=(True, "นัดหมายสำเร็จ")) as mock_create:
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ขอนัด",
+                    "intent": {
+                        "displayName": "RequestAppointment"
+                    },
+                    "parameters": {
+                        "date": "2026-06-28T16:00:00+07:00",
+                        "time": "16:00:00",
+                        "name": {
+                            "name": "มาวิน"
+                        },
+                        "phone-number": "081-234-5678",
+                        "reason": {
+                            "symptom": "ตรวจแผล"
+                        }
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            self.assertEqual(response.status_code, 200)
+            mock_create.assert_called_once_with(
+                "U_TEST", "มาวิน", "0812345678", "2026-06-28", "16:00", "ตรวจแผล"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

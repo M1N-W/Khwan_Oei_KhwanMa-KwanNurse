@@ -160,12 +160,12 @@ class WebhookErrorMetricsTests(unittest.TestCase):
         importlib.reload(app_module)
         return app_module.application.test_client()
 
-    def _df_payload(self, intent="GetKnowledge"):
+    def _df_payload(self, intent="GetKnowledge", query_text=None):
         return {
             "queryResult": {
                 "intent": {"displayName": intent},
                 "parameters": {},
-                "queryText": "ความรู้",
+                "queryText": query_text if query_text is not None else intent,
             },
             "session": "projects/x/agent/sessions/U-test-1",
         }
