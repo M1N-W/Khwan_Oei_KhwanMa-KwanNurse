@@ -127,6 +127,65 @@ def get_spreadsheet():
         return None
 
 
+_SHEET_VALUES_CACHE = {}
+
+
+def _patch_worksheet_read_methods(worksheet):
+    import sys
+    is_testing = "unittest" in sys.modules
+    if is_testing:
+        return
+
+    title = worksheet.title
+    orig_get_all_values = worksheet.get_all_values
+
+    def get_all_values_cached(*args, **kwargs):
+        if args or kwargs:
+            return orig_get_all_values(*args, **kwargs)
+        now = time.monotonic()
+        cached = _SHEET_VALUES_CACHE.get(title)
+        if cached:
+            val, expiry = cached
+            if now < expiry:
+                return val
+        val = orig_get_all_values()
+        _SHEET_VALUES_CACHE[title] = (val, now + 10.0)
+        return val
+
+    worksheet.get_all_values = get_all_values_cached
+
+    # Patch write methods to invalidate cache on write
+    orig_append_row = worksheet.append_row
+    def append_row_cached(*args, **kwargs):
+        _SHEET_VALUES_CACHE.pop(title, None)
+        return orig_append_row(*args, **kwargs)
+    worksheet.append_row = append_row_cached
+
+    orig_update = worksheet.update
+    def update_cached(*args, **kwargs):
+        _SHEET_VALUES_CACHE.pop(title, None)
+        return orig_update(*args, **kwargs)
+    worksheet.update = update_cached
+
+    orig_delete_rows = worksheet.delete_rows
+    def delete_rows_cached(*args, **kwargs):
+        _SHEET_VALUES_CACHE.pop(title, None)
+        return orig_delete_rows(*args, **kwargs)
+    worksheet.delete_rows = delete_rows_cached
+
+    orig_batch_update = worksheet.batch_update
+    def batch_update_cached(*args, **kwargs):
+        _SHEET_VALUES_CACHE.pop(title, None)
+        return orig_batch_update(*args, **kwargs)
+    worksheet.batch_update = batch_update_cached
+
+    orig_update_cells = worksheet.update_cells
+    def update_cells_cached(*args, **kwargs):
+        _SHEET_VALUES_CACHE.pop(title, None)
+        return orig_update_cells(*args, **kwargs)
+    worksheet.update_cells = update_cells_cached
+
+
 def get_worksheet(sheet_name):
     """
     Get a worksheet handle with the same TTL lifecycle as the sheet client.
@@ -141,6 +200,7 @@ def get_worksheet(sheet_name):
 
     try:
         worksheet = spreadsheet.worksheet(sheet_name)
+        _patch_worksheet_read_methods(worksheet)
         cache.worksheet_cache[sheet_name] = worksheet
         return worksheet
     except Exception:

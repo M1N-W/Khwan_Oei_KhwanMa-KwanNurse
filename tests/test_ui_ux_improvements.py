@@ -164,3 +164,29 @@ class TestUIUXImprovements(unittest.TestCase):
         }
         update = prepare_registration_update(existing, params)
         self.assertEqual(update.profile.get("registration_status"), "registered")
+
+    def test_worksheet_monkeypatch_cache_and_invalidation(self):
+        from database.sheets import _patch_worksheet_read_methods
+        mock_sheet = MagicMock()
+        mock_sheet.title = "TestSheet"
+        mock_sheet.get_all_values.return_value = [["Header"], ["Row1"]]
+        mock_sheet.append_row.return_value = {}
+
+        # Bypass the is_testing check by patching sys.modules
+        with patch("sys.modules", {"unittest": None}):
+            _patch_worksheet_read_methods(mock_sheet)
+            
+            # First read should hit original get_all_values
+            v1 = mock_sheet.get_all_values()
+            self.assertEqual(v1, [["Header"], ["Row1"]])
+            
+            # Second read should be cached
+            v2 = mock_sheet.get_all_values()
+            self.assertEqual(v2, [["Header"], ["Row1"]])
+
+            # Write operation (append_row) should invalidate the cache
+            mock_sheet.append_row([["Row2"]])
+            
+            # Third read should fetch again from original
+            v3 = mock_sheet.get_all_values()
+            self.assertEqual(v3, [["Header"], ["Row1"]])
