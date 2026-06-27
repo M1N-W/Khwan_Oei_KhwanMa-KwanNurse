@@ -119,7 +119,7 @@
   ],
   "priority": 500000,
   "webhookUsed": true,
-  "webhookForSlotFilling": false,
+  "webhookForSlotFilling": true,
   "fallbackIntent": false,
   "events": [],
   "conditionalResponses": [],
