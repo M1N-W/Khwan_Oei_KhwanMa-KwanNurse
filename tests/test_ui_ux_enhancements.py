@@ -607,6 +607,74 @@ class TestDeterministicRouter(unittest.TestCase):
             response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
             mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "ลงทะเบียน")
 
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_state_machine_intercepts_unregistered_user(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        incomplete_profile = {
+            "first_name": "",
+            "last_name": "",
+            "hn": ""
+        }
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch, \
+             patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, incomplete_profile)):
+            
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "มาวิน",
+                    "intent": {
+                        "displayName": "RequestAppointment"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {"first_name": "มาวิน"}, "มาวิน")
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_state_machine_cancel_resets_profile(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        incomplete_profile = {
+            "first_name": "มาวิน",
+            "last_name": "",
+            "hn": ""
+        }
+
+        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, incomplete_profile)), \
+             patch("database.patient_profile.upsert_patient_profile") as mock_upsert, \
+             patch("services.patient_profile.invalidate_profile_cache") as mock_invalidate:
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ยกเลิก",
+                    "intent": {
+                        "displayName": "CancelConsultation"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("ยกเลิกการลงทะเบียนเรียบร้อย", response.get_json()["fulfillmentText"])
+            mock_upsert.assert_called_once()
+            mock_invalidate.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

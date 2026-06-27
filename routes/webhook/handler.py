@@ -171,9 +171,38 @@ def register_routes(app):
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
             
-            # Deterministic router: bypass Dialogflow ML misclassification for core keywords
+            # Deterministic router & State Machine: bypass Dialogflow ML misclassification
             if isinstance(query_text, str):
                 cleaned_query = query_text.strip().lower()
+                
+                # Check registration status from the DB to drive the slot-filling state machine
+                try:
+                    from database.patient_profile import read_patient_profile_result
+                    from services.patient_profile import registration_missing_fields
+                    read_result = read_patient_profile_result(user_id)
+                except Exception:
+                    read_result = None
+
+                # Reset/Cancel registration flow if user says cancel while registration is incomplete
+                if cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน"):
+                    if read_result and read_result.available and read_result.profile:
+                        from services.patient_profile import is_registration_complete
+                        if not is_registration_complete(read_result.profile):
+                            try:
+                                from database.patient_profile import upsert_patient_profile
+                                from services.patient_profile import invalidate_profile_cache
+                                upsert_patient_profile(user_id, {
+                                    "first_name": "", "last_name": "", "hn": "", "phone": "", 
+                                    "consent_granted": False, "consent_version": "", "consent_at": ""
+                                })
+                                invalidate_profile_cache(user_id)
+                                return jsonify({
+                                    "fulfillmentText": "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
+                                }), 200
+                            except Exception:
+                                pass
+
+                # Core keyword routing
                 if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
                     intent = "PatientIdentity"
                 elif cleaned_query in ("ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ"):
@@ -186,6 +215,22 @@ def register_routes(app):
                     intent = "CancelConsultation"
                 elif cleaned_query in ("แจ้งเรื่องฉุกเฉิน", "รอเวลาทำการ"):
                     intent = "AfterHoursChoice"
+                elif read_result and read_result.available and read_result.profile:
+                    profile = read_result.profile
+                    missing = registration_missing_fields(profile)
+                    if missing:
+                        intent = "PatientIdentity"
+                        first_missing = missing[0]
+                        if first_missing == "first_name":
+                            params = {"first_name": query_text}
+                        elif first_missing == "last_name":
+                            params = {"last_name": query_text}
+                        elif first_missing == "hn":
+                            params = {"hn": query_text}
+                        elif first_missing == "phone":
+                            params = {"phone": query_text}
+                        elif first_missing == "consent":
+                            params = {"consent": query_text}
         except Exception:
             logger.exception("Error parsing request")
             return jsonify({
