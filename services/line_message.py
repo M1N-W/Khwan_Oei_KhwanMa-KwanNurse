@@ -384,3 +384,64 @@ def build_wound_photography_guide() -> dict:
         },
     }
 
+
+_SEVERITY_CONFIG = {
+    "high":   {"color": "#C62828", "icon": "🔴", "label": "ความรุนแรงสูง",    "needs_nurse": True},
+    "medium": {"color": "#EF6C00", "icon": "🟠", "label": "ความรุนแรงปานกลาง","needs_nurse": True},
+    "low":    {"color": "#2E7D32", "icon": "🟢", "label": "ความรุนแรงต่ำ",    "needs_nurse": False},
+}
+
+
+def build_wound_flex_result(severity: str, observations: list, advice: str, confidence: float) -> dict:
+    """Flex bubble: wound analysis result, color-coded so non-tech users understand instantly."""
+    severity = str(severity or "").strip().lower()
+    cfg = _SEVERITY_CONFIG.get(severity, _SEVERITY_CONFIG["medium"])
+    obs_rows = (
+        [{"type": "text", "text": f"• {o}", "wrap": True, "size": "sm", "color": "#555555"}
+         for o in observations]
+        if observations else
+        [{"type": "text", "text": "ไม่พบสิ่งผิดปกติชัดเจน", "size": "sm", "color": "#888888"}]
+    )
+    nurse_notice = ([{
+        "type": "text",
+        "text": "⚠️ พยาบาลจะได้รับการแจ้งเตือนเพื่อตรวจสอบ",
+        "wrap": True, "size": "xs", "color": "#B71C1C", "weight": "bold",
+    }] if cfg["needs_nurse"] else [])
+
+    return {
+        "type": "flex",
+        "altText": f"ผลการประเมินแผล: {cfg['label']}",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box", "layout": "vertical",
+                "backgroundColor": cfg["color"],
+                "contents": [
+                    {"type": "text", "text": f"{cfg['icon']} {cfg['label']}",
+                     "color": "#FFFFFF", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": f"ความมั่นใจ: {int(confidence * 100)}%",
+                     "color": "#FFFFFF", "size": "xs"},
+                ],
+            },
+            "body": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "text", "text": "สิ่งที่พบ", "weight": "bold", "size": "sm"},
+                    *obs_rows,
+                    {"type": "separator", "margin": "md"},
+                    {"type": "text", "text": "คำแนะนำ", "weight": "bold",
+                     "size": "sm", "margin": "md"},
+                    {"type": "text", "text": advice, "wrap": True, "size": "sm", "color": "#333333"},
+                    *nurse_notice,
+                ],
+            },
+            "footer": {
+                "type": "box", "layout": "vertical",
+                "contents": [{"type": "button", "style": "secondary",
+                               "action": {"type": "message", "label": "📞 ติดต่อพยาบาล",
+                                          "text": "ต้องการพูดคุยกับพยาบาล"}}],
+            },
+        },
+    }
+
+

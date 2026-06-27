@@ -291,14 +291,36 @@ def handle_line_image_event(event):
 
     # 4. Reply to user
     if reply_token:
-        reply_line_message(
-            reply_token,
-            build_wound_user_reply(
-                severity=result["severity"],
-                observations=result["observations"],
-                advice=result["advice"],
-            ),
-        )
+        from config import ENABLE_RICH_MESSAGES
+        if ENABLE_RICH_MESSAGES:
+            try:
+                from services.line_message import build_wound_flex_result, reply_rich_message
+                flex_msg = build_wound_flex_result(
+                    severity=result["severity"],
+                    observations=result["observations"],
+                    advice=result["advice"],
+                    confidence=result["confidence"],
+                )
+                reply_rich_message(reply_token, [flex_msg])
+            except Exception:
+                logger.exception("Failed to reply with flex result, falling back to text")
+                reply_line_message(
+                    reply_token,
+                    build_wound_user_reply(
+                        severity=result["severity"],
+                        observations=result["observations"],
+                        advice=result["advice"],
+                    ),
+                )
+        else:
+            reply_line_message(
+                reply_token,
+                build_wound_user_reply(
+                    severity=result["severity"],
+                    observations=result["observations"],
+                    advice=result["advice"],
+                ),
+            )
 
     # 5. Alert nurse if medium or high
     if result["severity"] in ("medium", "high") and NURSE_GROUP_ID:
