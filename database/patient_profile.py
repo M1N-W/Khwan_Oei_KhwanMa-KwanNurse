@@ -21,6 +21,7 @@ from config import (
 from database.sheets import column_number_to_letter, get_worksheet
 from utils.parsers import is_valid_thai_mobile, normalize_phone_number
 from utils.pii import scrub_user_id
+from services.cache import ttl_cache
 
 logger = get_logger(__name__)
 
@@ -203,6 +204,7 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
         "registered_at": (rec.get("Registered_At") or "").strip() or None,
         "consent_version": (rec.get("Consent_Version") or "").strip() or None,
         "consent_at": (rec.get("Consent_At") or "").strip() or None,
+        "consent_granted": (rec.get("Consent_Version") or "").strip() == PATIENT_CONSENT_VERSION and bool((rec.get("Consent_At") or "").strip()),
         "last_active_at": (rec.get("Last_Active_At") or "").strip() or None,
         "display_name": display_name or None,
         "display_label": display_label or None,
@@ -213,6 +215,17 @@ def read_patient_profile_result(user_id: str) -> PatientProfileReadResult:
     """Read profile with an explicit storage availability signal."""
     if not user_id:
         return PatientProfileReadResult(True, None)
+    
+    # Check process-level cache (disabled during unit tests to prevent test pollution)
+    import sys
+    cache_key = f"db:profile:v1:{user_id}"
+    is_testing = "unittest" in sys.modules
+    
+    if not is_testing:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            return PatientProfileReadResult(True, cached)
+
     try:
         sheet = get_worksheet(SHEET_PATIENT_PROFILE)
         if not sheet:
@@ -225,7 +238,10 @@ def read_patient_profile_result(user_id: str) -> PatientProfileReadResult:
         idx_uid = headers.index("User_ID") if "User_ID" in headers else 0
         for row in reversed(values[1:]):
             if len(row) > idx_uid and row[idx_uid] == user_id:
-                return PatientProfileReadResult(True, _row_to_dict(headers, row))
+                profile_dict = _row_to_dict(headers, row)
+                if not is_testing:
+                    ttl_cache.set(cache_key, profile_dict, ttl_seconds=30)
+                return PatientProfileReadResult(True, profile_dict)
         return PatientProfileReadResult(True, None)
     except Exception:
         logger.exception("read_patient_profile failed user_id=%s", scrub_user_id(user_id))
@@ -241,6 +257,11 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
     """Insert or update one profile row, migrating headers additively."""
     if not user_id:
         return False
+    
+    # Invalidate cache before/during write to avoid stale reads
+    cache_key = f"db:profile:v1:{user_id}"
+    ttl_cache.invalidate(cache_key)
+
     try:
         sheet = get_worksheet(SHEET_PATIENT_PROFILE)
         if not sheet:

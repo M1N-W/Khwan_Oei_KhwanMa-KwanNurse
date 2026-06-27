@@ -398,9 +398,11 @@ def enrich_registration_params(
             enriched["phone"] = phone
             return enriched
 
-    first = (state.get("first_name") or "").strip()
-    last = (state.get("last_name") or "").strip()
-    hn = (state.get("hn") or "").strip()
+    # Read base first/last from existing profile to determine which field we are actually prompt-filling
+    db_state = dict(existing or {})
+    first = (db_state.get("first_name") or "").strip()
+    last = (db_state.get("last_name") or "").strip()
+    hn = (db_state.get("hn") or "").strip()
 
     if first and last and not hn and _looks_like_hn(text):
         enriched.setdefault("hn", text.strip().upper())
@@ -783,13 +785,22 @@ def build_profile_flex_summary(profile: dict) -> dict:
     phone_raw = profile.get("phone") or ""
     phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
     status = profile.get("registration_status") or "incomplete"
-    consent = profile.get("consent_granted")
+    status_th = "ลงทะเบียนแล้ว" if status == "registered" else "ยังลงทะเบียนไม่ครบ"
+    
+    consent_version = profile.get("consent_version") or ""
+    consent_at = profile.get("consent_at") or ""
+    
+    if consent_version == PATIENT_CONSENT_VERSION and bool(consent_at):
+        consent_text = "ยินยอมแล้ว ✅"
+    elif consent_version or consent_at:
+        consent_text = "ไม่ยินยอม ❌"
+    else:
+        consent_text = "ยังไม่ระบุ"
 
     status_emoji = "✅" if status == "registered" else "⏳"
-    consent_text = "ยินยอมแล้ว ✅" if consent is True else ("ไม่ยินยอม ❌" if consent is False else "ยังไม่ระบุ")
 
     body_items = [
-        flex_text(f"{status_emoji} สถานะ: {status}", weight="bold", size="lg"),
+        flex_text(f"{status_emoji} สถานะ: {status_th}", weight="bold", size="lg"),
         flex_separator(),
         flex_text(f"👤 ชื่อ: {full_name}"),
         flex_text(f"🏥 HN: {hn}"),

@@ -203,9 +203,22 @@ def handle_contact_nurse(user_id, params, query_text):
         if issue_type:
             description = str(description_param) if description_param else ""
             result = start_teleconsult(user_id, issue_type, description)
+            if result.get('awaiting_choice'):
+                after_hours_replies = [
+                    quick_reply_item("🚨 1. ฉุกเฉิน", "1"),
+                    quick_reply_item("📝 2. ไม่เร่งด่วน", "2"),
+                ]
+                return jsonify(_make_dialogflow_response(result['message'], quick_replies=after_hours_replies)), 200
             return jsonify({"fulfillmentText": result['message']}), 200
         else:
             menu = get_category_menu()
+            
+            # Categories quick replies:
+            from config import ISSUE_CATEGORIES
+            categories_quick_replies = [
+                quick_reply_item(f"{info['icon']} {info['name_th']}", str(i))
+                for i, (key, info) in enumerate(ISSUE_CATEGORIES.items(), 1)
+            ]
             
             if not is_office_hours():
                 now = datetime.now(tz=LOCAL_TZ)
@@ -218,7 +231,7 @@ def handle_contact_nurse(user_id, params, query_text):
                 )
                 return jsonify(_make_dialogflow_response(menu, quick_replies=_AFTER_HOURS_QUICK_REPLIES)), 200
 
-            return jsonify({"fulfillmentText": menu}), 200
+            return jsonify(_make_dialogflow_response(menu, quick_replies=categories_quick_replies)), 200
         
     except Exception as e:
         logger.exception(f"Error in ContactNurse: {e}")
@@ -260,5 +273,11 @@ def handle_unknown_intent(intent):
 def handle_after_hours_choice(user_id, query_text):
     """Handle AfterHoursChoice intent"""
     result = teleconsult_after_hours_choice(user_id, query_text)
+    if result.get('awaiting_choice'):
+        after_hours_replies = [
+            quick_reply_item("🚨 1. ฉุกเฉิน", "1"),
+            quick_reply_item("📝 2. ไม่เร่งด่วน", "2"),
+        ]
+        return jsonify(_make_dialogflow_response(result['message'], quick_replies=after_hours_replies)), 200
     return jsonify({"fulfillmentText": result['message']}), 200
 

@@ -194,6 +194,7 @@ def flex_bubble(
             "type": "box",
             "layout": "vertical",
             "contents": body_components,
+            "spacing": "md",
         },
     }
     if header_text:
@@ -210,6 +211,7 @@ def flex_bubble(
             "type": "box",
             "layout": "vertical",
             "contents": footer_components,
+            "spacing": "sm",
         }
     return bubble
 

@@ -176,15 +176,39 @@ def send_line_push_objects(messages: list, target_id: str) -> bool:
     return False
 
 
+def _get_patient_prefix_label(user_id: str) -> str:
+    """Helper to return Name Surname (HN: xxx) or fallback to User ID if not registered."""
+    if not user_id:
+        return "-"
+    try:
+        from database.patient_profile import read_patient_profile
+        profile = read_patient_profile(user_id)
+        if profile:
+            first = (profile.get("first_name") or "").strip()
+            last = (profile.get("last_name") or "").strip()
+            hn = (profile.get("hn") or "").strip()
+            name = f"{first} {last}".strip()
+            if name:
+                label = name
+                if hn:
+                    label += f" (HN: {hn})"
+                return label
+    except Exception:
+        logger.exception("Failed to retrieve profile for prefix label user_id=%s", user_id)
+    return user_id
+
+
 def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level, risk_score):
     """
     Build notification message for symptom report
     Returns: formatted message string
     """
+    patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"🚨 รายงานอาการเร่งด่วน!\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 User ID: {user_id}\n"
+        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"🆔 User ID: {user_id}\n"
         f"⚠️ ความเสี่ยง: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         f"📋 อาการ:\n"
@@ -203,10 +227,12 @@ def build_risk_notification(user_id, age, bmi, diseases_str, risk_level, risk_sc
     Build notification message for risk assessment
     Returns: formatted message string
     """
+    patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"🆕 ผู้ป่วยกลุ่มเสี่ยงสูง!\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 User ID: {user_id}\n"
+        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"🆔 User ID: {user_id}\n"
         f"⚠️ ระดับ: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         f"📋 ข้อมูล:\n"
@@ -395,10 +421,12 @@ def build_wound_alert_message(
     obs_lines = "\n".join(f"  • {o}" for o in (observations or [])[:4]) or "  • (ไม่มีข้อสังเกตเพิ่มเติม)"
     confidence_pct = int(round(confidence * 100))
 
+    patient_label = _get_patient_prefix_label(user_id)
     return (
         "📸 ภาพแผลผู้ป่วยใหม่!\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 User ID: {user_id}\n"
+        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"🆔 User ID: {user_id}\n"
         f"{severity_emoji} ความรุนแรง: {severity_label}\n"
         f"🎯 ความมั่นใจ AI: {confidence_pct}%\n\n"
         "📋 ข้อสังเกต:\n"
@@ -451,10 +479,12 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     except:
         date_display = preferred_date
     
+    patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"📅 การนัดหมายใหม่!\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"👤 User ID: {user_id}\n"
+        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"🆔 User ID: {user_id}\n"
     )
     
     if name:

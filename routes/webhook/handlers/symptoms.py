@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 
 # Human-readable labels for each symptom slot (used in focused ask prompts).
 SLOT_LABELS = {
-    "pain":     "ระดับความปวด (0-10)",
+    "pain":     "ระดับความปวด (1-5)",
     "wound":    "สภาพแผล",
     "fever":    "อาการไข้",
     "mobility": "การเคลื่อนไหว",
@@ -36,6 +36,17 @@ SLOT_LABELS = {
 def handle_report_symptoms(user_id, params):
     """Handle ReportSymptoms intent"""
     pain = params.get('pain_score')
+    
+    # Map pain score 1-5 to standard clinical 0-10 VAS score if it's within 1-5 range
+    if pain is not None and str(pain).strip() != "":
+        try:
+            val = int(float(pain))
+            if 1 <= val <= 5:
+                # Map 1->0, 2->2, 3->5, 4->7, 5->9
+                pain = {1: 0, 2: 2, 3: 5, 4: 7, 5: 9}[val]
+        except (ValueError, TypeError):
+            pass
+
     wound = params.get('wound_status')
     fever = params.get('fever_check')
     mobility = params.get('mobility_status')
@@ -49,7 +60,7 @@ def handle_report_symptoms(user_id, params):
     # Validate required parameters
     missing = []
     if pain is None or str(pain).strip() == "":
-        missing.append("ระดับความปวด (0-10)")
+        missing.append("ระดับความปวด (1-5)")
     if not wound:
         missing.append("สภาพแผล")
     if not fever:
@@ -63,11 +74,21 @@ def handle_report_symptoms(user_id, params):
         if pain is None or str(pain).strip() == "":
             first_missing_key = "pain"
             quick_replies = [
-                quick_reply_item("🟢 0-2 (ปวดน้อย)", "2"),
-                quick_reply_item("🟡 3-5 (ปวดปานกลาง)", "5"),
-                quick_reply_item("🟠 6-7 (ปวดมาก)", "7"),
-                quick_reply_item("🔴 8-10 (ปวดรุนแรง)", "9"),
+                quick_reply_item("🟢 1 (ปวดน้อย)", "1"),
+                quick_reply_item("🟡 2 (ปวดเล็กน้อย)", "2"),
+                quick_reply_item("🟠 3 (ปวดปานกลาง)", "3"),
+                quick_reply_item("🔴 4 (ปวดมาก)", "4"),
+                quick_reply_item("🚨 5 (ปวดรุนแรง)", "5"),
             ]
+            ask = (
+                "วันนี้ระดับความปวดของคนไข้อยู่ที่ระดับใดคะ? (กรุณาเลือก 1-5):\n\n"
+                "🟢 1: ไม่ปวดเลย / ปวดน้อยมาก (มีตึงเล็กน้อย)\n"
+                "🟡 2: ปวดเล็กน้อย (ทำงาน/กิจกรรมได้ปกติ)\n"
+                "🟠 3: ปวดปานกลาง (เริ่มรบกวนกิจกรรม/ต้องพัก)\n"
+                "🔴 4: ปวดมาก (รบกวนมาก/เริ่มนอนไม่หลับ)\n"
+                "🚨 5: ปวดรุนแรงที่สุด (ทรมานมาก/ทนไม่ไหว)"
+            )
+            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
         elif not wound:
             first_missing_key = "wound"
             quick_replies = [
@@ -75,12 +96,16 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🟡 แผลซึม/แดง", "แผลแดงซึม"),
                 quick_reply_item("🔴 แผลบวม/มีหนอง", "แผลบวมหนอง"),
             ]
+            ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
+            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
         elif not fever:
             first_missing_key = "fever"
             quick_replies = [
                 quick_reply_item("🟢 ไม่มีไข้", "ไม่มีไข้"),
                 quick_reply_item("🔴 มีไข้ตัวร้อน", "มีไข้"),
             ]
+            ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
+            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
         else:  # mobility
             first_missing_key = "mobility"
             quick_replies = [
@@ -88,8 +113,8 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🟡 ต้องพยุงเดิน", "ต้องพยุง"),
                 quick_reply_item("🔴 เดินไม่ได้เลย", "เดินไม่ได้"),
             ]
-        ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
-        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+            ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
+            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
 
     # Calculate risk
     result = calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=neuro)
@@ -245,11 +270,14 @@ def handle_free_text_symptom(user_id, params, query_text):
 
         if result.get('risk_level') == 'high' and NURSE_GROUP_ID:
             try:
+                from services.notification import _get_patient_prefix_label
+                patient_label = _get_patient_prefix_label(user_id)
                 flags = ", ".join(result.get('flags') or []) or "-"
                 summary = result.get('summary') or "-"
                 alert = (
                     "🚨 รายงานอาการจากแชต (เสี่ยงสูง)\n"
-                    f"👤 ผู้ป่วย: {user_id}\n"
+                    f"👤 ผู้ป่วย: {patient_label}\n"
+                    f"🆔 User ID: {user_id}\n"
                     f"🔎 Flags: {flags}\n"
                     f"📋 สรุป: {summary}\n"
                     "กรุณาติดต่อกลับโดยเร็ว"

@@ -249,9 +249,12 @@ def handle_emergency(user_id, description):
         update_session_status(session['session_id'], SessionStatus.IN_PROGRESS)
         
         # Send URGENT alert to nurse
+        from services.notification import _get_patient_prefix_label
+        patient_label = _get_patient_prefix_label(user_id)
         alert_message = (
             f"🚨🚨 เรื่องฉุกเฉิน 🚨🚨\n\n"
-            f"👤 ผู้ป่วย: {user_id}\n"
+            f"👤 ผู้ป่วย: {patient_label}\n"
+            f"🆔 User ID: {user_id}\n"
             f"💬 อาการ: {description or '(ไม่ระบุ)'}\n"
             f"🕐 เวลา: {datetime.now(tz=LOCAL_TZ).strftime('%H:%M น.')}\n\n"
             f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที\n"
@@ -405,9 +408,12 @@ def handle_after_hours_choice(user_id, choice_text):
             # ยืนยันว่าบันทึกแล้ว และแจ้งพยาบาล
             session = get_user_active_session(user_id)
             if session:
+                from services.notification import _get_patient_prefix_label
+                patient_label = _get_patient_prefix_label(user_id)
                 nurse_alert = (
                     f"📋 มีคำขอนอกเวลาทำการ (ไม่เร่งด่วน)\n\n"
-                    f"👤 ผู้ป่วย: {user_id}\n"
+                    f"👤 ผู้ป่วย: {patient_label}\n"
+                    f"🆔 User ID: {user_id}\n"
                     f"📂 ประเภท: {session.get('Issue_Type', '-')}\n"
                     f"💬 รายละเอียด: {session.get('Description', '(ไม่มี)')}\n\n"
                     f"⏰ กรุณาติดต่อกลับในวันทำการถัดไปค่ะ"
