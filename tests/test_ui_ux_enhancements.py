@@ -582,5 +582,31 @@ class TestThreadLocalSheetsAndRetry(unittest.TestCase):
         mock_invalidate.assert_called_once()
 
 
+class TestDeterministicRouter(unittest.TestCase):
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_deterministic_router_overrides_intent(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch:
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ลงทะเบียน",
+                    "intent": {
+                        "displayName": "FreeTextSymptom"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "ลงทะเบียน")
+
+
 if __name__ == "__main__":
     unittest.main()

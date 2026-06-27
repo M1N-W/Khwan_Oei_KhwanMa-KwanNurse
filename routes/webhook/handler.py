@@ -170,6 +170,22 @@ def register_routes(app):
                 user_id = req.get('session', 'unknown').split('/')[-1]
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
+            
+            # Deterministic router: bypass Dialogflow ML misclassification for core keywords
+            if isinstance(query_text, str):
+                cleaned_query = query_text.strip().lower()
+                if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
+                    intent = "PatientIdentity"
+                elif cleaned_query in ("ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ"):
+                    intent = "GetKnowledge"
+                    params = {}
+                elif cleaned_query in ("ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล"):
+                    intent = "ContactNurse"
+                    params = {}
+                elif cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา"):
+                    intent = "CancelConsultation"
+                elif cleaned_query in ("แจ้งเรื่องฉุกเฉิน", "รอเวลาทำการ"):
+                    intent = "AfterHoursChoice"
         except Exception:
             logger.exception("Error parsing request")
             return jsonify({
