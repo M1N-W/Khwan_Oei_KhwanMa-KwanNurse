@@ -95,7 +95,7 @@ class TestUIUXEnhancements(unittest.TestCase):
 
         app = Flask("test_app")
         with app.app_context():
-            # 1. Test missing pain_score
+            # 1. Test missing pain_score — ask must mention ONLY pain, not other missing fields.
             response = handle_report_symptoms("U_TEST", {
                 "pain_score": "",
                 "wound_status": "แผลแห้งดี",
@@ -103,6 +103,9 @@ class TestUIUXEnhancements(unittest.TestCase):
                 "mobility_status": "เดินได้ปกติ"
             })
             data = json.loads(response[0].data)
+            # Focused ask text must reference only the pain slot
+            self.assertIn("ระดับความปวด", data["fulfillmentText"])
+            self.assertNotIn("สภาพแผล", data["fulfillmentText"])
             line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
             self.assertIn("quickReply", line_payload)
             items = line_payload["quickReply"]["items"]
@@ -116,7 +119,7 @@ class TestUIUXEnhancements(unittest.TestCase):
             self.assertEqual(items[3]["action"]["label"], "🔴 8-10 (ปวดรุนแรง)")
             self.assertEqual(items[3]["action"]["text"], "9")
 
-            # 2. Test missing wound_status
+            # 2. Test missing wound_status — ask must mention ONLY wound.
             response = handle_report_symptoms("U_TEST", {
                 "pain_score": "5",
                 "wound_status": "",
@@ -124,6 +127,8 @@ class TestUIUXEnhancements(unittest.TestCase):
                 "mobility_status": "เดินได้ปกติ"
             })
             data = json.loads(response[0].data)
+            self.assertIn("สภาพแผล", data["fulfillmentText"])
+            self.assertNotIn("อาการไข้", data["fulfillmentText"])
             line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
             self.assertIn("quickReply", line_payload)
             items = line_payload["quickReply"]["items"]
@@ -135,7 +140,7 @@ class TestUIUXEnhancements(unittest.TestCase):
             self.assertEqual(items[2]["action"]["label"], "🔴 แผลบวม/มีหนอง")
             self.assertEqual(items[2]["action"]["text"], "แผลบวมหนอง")
 
-            # 3. Test missing fever_check
+            # 3. Test missing fever_check — ask must mention ONLY fever.
             response = handle_report_symptoms("U_TEST", {
                 "pain_score": "5",
                 "wound_status": "แผลแห้งดี",
@@ -143,6 +148,8 @@ class TestUIUXEnhancements(unittest.TestCase):
                 "mobility_status": "เดินได้ปกติ"
             })
             data = json.loads(response[0].data)
+            self.assertIn("อาการไข้", data["fulfillmentText"])
+            self.assertNotIn("การเคลื่อนไหว", data["fulfillmentText"])
             line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
             self.assertIn("quickReply", line_payload)
             items = line_payload["quickReply"]["items"]
@@ -152,7 +159,7 @@ class TestUIUXEnhancements(unittest.TestCase):
             self.assertEqual(items[1]["action"]["label"], "🔴 มีไข้ตัวร้อน")
             self.assertEqual(items[1]["action"]["text"], "มีไข้")
 
-            # 4. Test missing mobility_status
+            # 4. Test missing mobility_status — ask must mention ONLY mobility.
             response = handle_report_symptoms("U_TEST", {
                 "pain_score": "5",
                 "wound_status": "แผลแห้งดี",
@@ -160,6 +167,8 @@ class TestUIUXEnhancements(unittest.TestCase):
                 "mobility_status": ""
             })
             data = json.loads(response[0].data)
+            self.assertIn("การเคลื่อนไหว", data["fulfillmentText"])
+            self.assertNotIn("อาการไข้", data["fulfillmentText"])
             line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
             self.assertIn("quickReply", line_payload)
             items = line_payload["quickReply"]["items"]

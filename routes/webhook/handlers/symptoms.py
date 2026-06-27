@@ -24,6 +24,15 @@ from services.line_message import quick_reply_item
 logger = get_logger(__name__)
 
 
+# Human-readable labels for each symptom slot (used in focused ask prompts).
+SLOT_LABELS = {
+    "pain":     "ระดับความปวด (0-10)",
+    "wound":    "สภาพแผล",
+    "fever":    "อาการไข้",
+    "mobility": "การเคลื่อนไหว",
+}
+
+
 def handle_report_symptoms(user_id, params):
     """Handle ReportSymptoms intent"""
     pain = params.get('pain_score')
@@ -49,9 +58,10 @@ def handle_report_symptoms(user_id, params):
         missing.append("การเคลื่อนไหว")
 
     if missing:
-        ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยค่ะ"
-        quick_replies = None
+        # Collect one slot at a time — show quick replies only for the first missing field.
+        # This keeps the ask prompt aligned with the buttons presented to the patient.
         if pain is None or str(pain).strip() == "":
+            first_missing_key = "pain"
             quick_replies = [
                 quick_reply_item("🟢 0-2 (ปวดน้อย)", "2"),
                 quick_reply_item("🟡 3-5 (ปวดปานกลาง)", "5"),
@@ -59,22 +69,26 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🔴 8-10 (ปวดรุนแรง)", "9"),
             ]
         elif not wound:
+            first_missing_key = "wound"
             quick_replies = [
                 quick_reply_item("🟢 แผลแห้งดี", "แผลแห้งดี"),
                 quick_reply_item("🟡 แผลซึม/แดง", "แผลแดงซึม"),
                 quick_reply_item("🔴 แผลบวม/มีหนอง", "แผลบวมหนอง"),
             ]
         elif not fever:
+            first_missing_key = "fever"
             quick_replies = [
                 quick_reply_item("🟢 ไม่มีไข้", "ไม่มีไข้"),
                 quick_reply_item("🔴 มีไข้ตัวร้อน", "มีไข้"),
             ]
-        elif not mobility:
+        else:  # mobility
+            first_missing_key = "mobility"
             quick_replies = [
                 quick_reply_item("🟢 เดินได้ปกติ", "เดินได้ปกติ"),
                 quick_reply_item("🟡 ต้องพยุงเดิน", "ต้องพยุง"),
                 quick_reply_item("🔴 เดินไม่ได้เลย", "เดินไม่ได้"),
             ]
+        ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
         return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
 
     # Calculate risk
