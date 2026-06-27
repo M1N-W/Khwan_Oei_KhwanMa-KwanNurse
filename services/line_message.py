@@ -341,3 +341,46 @@ def _extract_fallback_text(message: dict) -> str:
     if msg_type == "flex":
         return message.get("altText", "")
     return str(message)
+
+
+def build_wound_photography_guide() -> dict:
+    """Flex bubble: photography tips before patient sends wound photo."""
+    tips = [
+        ("☀️", "ถ่ายใกล้หน้าต่างหรือที่แสงธรรมชาติสว่าง"),
+        ("📏", "วางเหรียญหรือไม้บรรทัดข้างแผลเพื่อแสดงขนาด"),
+        ("🎯", "ให้แผลอยู่กลางภาพ ชัดเจน ไม่เบลอ"),
+        ("🚫", "ห้ามกรองสีหรือแต่งภาพก่อนส่ง"),
+    ]
+    tip_rows = [
+        {"type": "box", "layout": "horizontal", "spacing": "md", "contents": [
+            {"type": "text", "text": icon, "size": "xl", "flex": 0},
+            {"type": "text", "text": tip, "wrap": True, "size": "sm", "color": "#555555"},
+        ]}
+        for icon, tip in tips
+    ]
+    return {
+        "type": "flex",
+        "altText": "วิธีถ่ายภาพแผล",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box", "layout": "vertical",
+                "backgroundColor": "#1565C0",
+                "contents": [
+                    {"type": "text", "text": "📸 วิธีถ่ายภาพแผล",
+                     "color": "#FFFFFF", "weight": "bold", "size": "md"},
+                    {"type": "text", "text": "เพื่อให้พยาบาลเห็นแผลชัดเจนที่สุด",
+                     "color": "#BBDEFB", "size": "xs"},
+                ],
+            },
+            "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": tip_rows},
+            "footer": {
+                "type": "box", "layout": "vertical",
+                "contents": [{
+                    "type": "button", "style": "primary", "color": "#1565C0",
+                    "action": {"type": "message", "label": "📷 ส่งรูปแผล", "text": "ส่งรูปแผล"},
+                }],
+            },
+        },
+    }
+
