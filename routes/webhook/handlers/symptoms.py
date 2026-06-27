@@ -18,6 +18,8 @@ from services import (
 )
 from services.nlp import analyze_free_text, format_triage_message
 from services.notification import send_line_push
+from routes.webhook.helpers import _make_dialogflow_response
+from services.line_message import quick_reply_item
 
 logger = get_logger(__name__)
 
@@ -48,7 +50,32 @@ def handle_report_symptoms(user_id, params):
 
     if missing:
         ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยค่ะ"
-        return jsonify({"fulfillmentText": ask}), 200
+        quick_replies = None
+        if pain is None or str(pain).strip() == "":
+            quick_replies = [
+                quick_reply_item("🟢 0-2 (ปวดน้อย)", "2"),
+                quick_reply_item("🟡 3-5 (ปวดปานกลาง)", "5"),
+                quick_reply_item("🟠 6-7 (ปวดมาก)", "7"),
+                quick_reply_item("🔴 8-10 (ปวดรุนแรง)", "9"),
+            ]
+        elif not wound:
+            quick_replies = [
+                quick_reply_item("🟢 แผลแห้งดี", "แผลแห้งดี"),
+                quick_reply_item("🟡 แผลซึม/แดง", "แผลแดงซึม"),
+                quick_reply_item("🔴 แผลบวม/มีหนอง", "แผลบวมหนอง"),
+            ]
+        elif not fever:
+            quick_replies = [
+                quick_reply_item("🟢 ไม่มีไข้", "ไม่มีไข้"),
+                quick_reply_item("🔴 มีไข้ตัวร้อน", "มีไข้"),
+            ]
+        elif not mobility:
+            quick_replies = [
+                quick_reply_item("🟢 เดินได้ปกติ", "เดินได้ปกติ"),
+                quick_reply_item("🟡 ต้องพยุงเดิน", "ต้องพยุง"),
+                quick_reply_item("🔴 เดินไม่ได้เลย", "เดินไม่ได้"),
+            ]
+        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
 
     # Calculate risk
     result = calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=neuro)

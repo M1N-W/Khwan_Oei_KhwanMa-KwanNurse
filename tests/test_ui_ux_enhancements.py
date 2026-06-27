@@ -87,5 +87,89 @@ class TestUIUXEnhancements(unittest.TestCase):
         mock_send_push.assert_not_called()
         mock_update.assert_called_once_with("U12345", "day3", 2, "sent")
 
+    @patch("config.ENABLE_RICH_MESSAGES", True)
+    def test_symptom_report_quick_replies(self):
+        from routes.webhook.handlers.symptoms import handle_report_symptoms
+        from flask import Flask
+        import json
+
+        app = Flask("test_app")
+        with app.app_context():
+            # 1. Test missing pain_score
+            response = handle_report_symptoms("U_TEST", {
+                "pain_score": "",
+                "wound_status": "แผลแห้งดี",
+                "fever_check": "ไม่มีไข้",
+                "mobility_status": "เดินได้ปกติ"
+            })
+            data = json.loads(response[0].data)
+            line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
+            self.assertIn("quickReply", line_payload)
+            items = line_payload["quickReply"]["items"]
+            self.assertEqual(len(items), 4)
+            self.assertEqual(items[0]["action"]["label"], "🟢 0-2 (ปวดน้อย)")
+            self.assertEqual(items[0]["action"]["text"], "2")
+            self.assertEqual(items[1]["action"]["label"], "🟡 3-5 (ปวดปานกลาง)")
+            self.assertEqual(items[1]["action"]["text"], "5")
+            self.assertEqual(items[2]["action"]["label"], "🟠 6-7 (ปวดมาก)")
+            self.assertEqual(items[2]["action"]["text"], "7")
+            self.assertEqual(items[3]["action"]["label"], "🔴 8-10 (ปวดรุนแรง)")
+            self.assertEqual(items[3]["action"]["text"], "9")
+
+            # 2. Test missing wound_status
+            response = handle_report_symptoms("U_TEST", {
+                "pain_score": "5",
+                "wound_status": "",
+                "fever_check": "ไม่มีไข้",
+                "mobility_status": "เดินได้ปกติ"
+            })
+            data = json.loads(response[0].data)
+            line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
+            self.assertIn("quickReply", line_payload)
+            items = line_payload["quickReply"]["items"]
+            self.assertEqual(len(items), 3)
+            self.assertEqual(items[0]["action"]["label"], "🟢 แผลแห้งดี")
+            self.assertEqual(items[0]["action"]["text"], "แผลแห้งดี")
+            self.assertEqual(items[1]["action"]["label"], "🟡 แผลซึม/แดง")
+            self.assertEqual(items[1]["action"]["text"], "แผลแดงซึม")
+            self.assertEqual(items[2]["action"]["label"], "🔴 แผลบวม/มีหนอง")
+            self.assertEqual(items[2]["action"]["text"], "แผลบวมหนอง")
+
+            # 3. Test missing fever_check
+            response = handle_report_symptoms("U_TEST", {
+                "pain_score": "5",
+                "wound_status": "แผลแห้งดี",
+                "fever_check": "",
+                "mobility_status": "เดินได้ปกติ"
+            })
+            data = json.loads(response[0].data)
+            line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
+            self.assertIn("quickReply", line_payload)
+            items = line_payload["quickReply"]["items"]
+            self.assertEqual(len(items), 2)
+            self.assertEqual(items[0]["action"]["label"], "🟢 ไม่มีไข้")
+            self.assertEqual(items[0]["action"]["text"], "ไม่มีไข้")
+            self.assertEqual(items[1]["action"]["label"], "🔴 มีไข้ตัวร้อน")
+            self.assertEqual(items[1]["action"]["text"], "มีไข้")
+
+            # 4. Test missing mobility_status
+            response = handle_report_symptoms("U_TEST", {
+                "pain_score": "5",
+                "wound_status": "แผลแห้งดี",
+                "fever_check": "ไม่มีไข้",
+                "mobility_status": ""
+            })
+            data = json.loads(response[0].data)
+            line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
+            self.assertIn("quickReply", line_payload)
+            items = line_payload["quickReply"]["items"]
+            self.assertEqual(len(items), 3)
+            self.assertEqual(items[0]["action"]["label"], "🟢 เดินได้ปกติ")
+            self.assertEqual(items[0]["action"]["text"], "เดินได้ปกติ")
+            self.assertEqual(items[1]["action"]["label"], "🟡 ต้องพยุงเดิน")
+            self.assertEqual(items[1]["action"]["text"], "ต้องพยุง")
+            self.assertEqual(items[2]["action"]["label"], "🔴 เดินไม่ได้เลย")
+            self.assertEqual(items[2]["action"]["text"], "เดินไม่ได้")
+
 if __name__ == "__main__":
     unittest.main()
