@@ -70,6 +70,24 @@ def _registration_gate_response(intent, user_id, query_text):
     return None
 
 
+
+def _registration_intent_looks_like_knowledge(intent, params, query_text):
+    """Reroute misclassified knowledge topics during registration slot-filling."""
+    if intent not in _REGISTRATION_INTENTS:
+        return False
+    from routes.webhook.handlers.fallback import (
+        _KNOWLEDGE_MENU_TRIGGERS,
+        _resolve_knowledge_topic,
+    )
+    norm_q = (query_text or "").lower().strip()
+    if norm_q in _KNOWLEDGE_MENU_TRIGGERS:
+        return True
+    for candidate in (query_text, (params or {}).get("first_name")):
+        if candidate and _resolve_knowledge_topic(str(candidate)):
+            return True
+    return False
+
+
 def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None, output_contexts: list[dict] = None) -> dict:
     """Build a Dialogflow response, optionally including LINE custom payloads and output contexts (KWN-06)."""
     res = {"fulfillmentText": text}

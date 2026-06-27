@@ -328,6 +328,17 @@ def _dispatch_intent(intent, user_id, params, query_text):
     elif intent == 'RecommendKnowledge':
         response = handle_recommend_knowledge(user_id, params)
     elif intent in ('UpdatePatientIdentity', 'PatientIdentity', 'RegisterPatient'):
+        from routes.webhook.helpers import _registration_intent_looks_like_knowledge
+        if _registration_intent_looks_like_knowledge(intent, params, query_text):
+            logger.info(
+                "Rerouting %s -> GetKnowledge (query=%r first_name=%r)",
+                intent,
+                query_text,
+                (params or {}).get("first_name"),
+            )
+            response = handle_get_knowledge(user_id, params, query_text)
+            _touch_activity("GetKnowledge", user_id)
+            return response
         response = handle_patient_identity(user_id, params, query_text)
     else:
         response = handle_unknown_intent(intent)

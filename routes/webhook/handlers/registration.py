@@ -21,6 +21,7 @@ def handle_patient_identity(user_id, params, query_text=""):
             mark_last_active_throttled,
             mask_phone_number,
             normalize_identity_fields,
+            enrich_registration_params,
             prepare_registration_update,
             build_registration_quick_replies,
             build_profile_flex_summary,
@@ -44,6 +45,7 @@ def handle_patient_identity(user_id, params, query_text=""):
             }
             upsert_patient_profile(user_id, existing)
             invalidate_profile_cache(user_id)
+        params = enrich_registration_params(existing, params, query_text)
         update = prepare_registration_update(existing, params)
         merged = update.profile
         identity = normalize_identity_fields(params)

@@ -232,5 +232,84 @@ class DialogflowAgentSchemaTests(unittest.TestCase):
         self.assertEqual(seg.get("alias"), "topic")
 
 
+# -----------------------------------------------------------------------------
+# Bug 3: PatientIdentity context bleed swallows knowledge topic selection.
+# -----------------------------------------------------------------------------
+class PatientIdentityKnowledgeBleedTests(unittest.TestCase):
+
+    def setUp(self):
+        os.environ.setdefault("FLASK_SECRET_KEY",
+                              "test-secret-for-bugfix-knowledge-bleed")
+        from app import create_app
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.client = self.app.test_client()
+
+    def _get_text(self, resp):
+        return resp.get_json().get("fulfillmentText", "")
+
+    def _post_patient_identity(self, query_text, params=None):
+        return self.client.post("/webhook", json={
+            "queryResult": {
+                "intent": {"displayName": "PatientIdentity"},
+                "parameters": params or {},
+                "queryText": query_text,
+            },
+            "session": "projects/x/agent/sessions/U-bugfix-identity-bleed-123",
+        })
+
+    def test_physical_therapy_misclassified_returns_guide_not_last_name_prompt(self):
+        """Production bug: 'กายภาพบำบัด' after knowledge menu hit PatientIdentity."""
+        resp = self._post_patient_identity(
+            "กายภาพบำบัด",
+            params={"first_name": "กายภาพบำบัด"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        text = self._get_text(resp)
+        self.assertNotIn("นามสกุล", text,
+                         "Should not ask for last name during registration bleed")
+        self.assertNotIn("ชื่อจริง", text)
+        self.assertTrue(
+            any(token in text for token in ("กายภาพ", "ออกกำลัง", "บริหาร")),
+            f"Expected physical-therapy guide; got: {text[:200]}",
+        )
+
+    def test_register_patient_alias_also_reroutes_knowledge_topic(self):
+        resp = self.client.post("/webhook", json={
+            "queryResult": {
+                "intent": {"displayName": "RegisterPatient"},
+                "parameters": {"first_name": "ดูแลแผล"},
+                "queryText": "ดูแลแผล",
+            },
+            "session": "projects/x/agent/sessions/U-bugfix-register-bleed-123",
+        })
+        text = self._get_text(resp)
+        self.assertNotIn("เลือกหัวข้อที่ต้องการเรียนรู้", text)
+        self.assertTrue(
+            any(token in text for token in ("ดูแลแผล", "ทำความสะอาดแผล", "แผล")),
+            f"Expected wound-care guide; got: {text[:200]}",
+        )
+
+    def test_registration_name_not_rerouted(self):
+        """Real first names must still flow through PatientIdentity."""
+        from database.patient_profile import PatientProfileReadResult
+
+        with patch("database.patient_profile.read_patient_profile_result",
+                   return_value=PatientProfileReadResult(True, {})), \
+             patch("database.patient_profile.upsert_patient_profile", return_value=True), \
+             patch("services.dashboard_readers.invalidate_dashboard_cache", return_value=0):
+            resp = self._post_patient_identity(
+                "มาวิน",
+                params={},
+            )
+        text = self._get_text(resp)
+        self.assertIn("นามสกุล", text)
+
+    def test_knowledge_menu_request_reroutes_from_patient_identity(self):
+        resp = self._post_patient_identity("ความรู้", params={})
+        text = self._get_text(resp)
+        self.assertIn("เลือกหัวข้อที่ต้องการเรียนรู้", text)
+
+
 if __name__ == "__main__":
     unittest.main()

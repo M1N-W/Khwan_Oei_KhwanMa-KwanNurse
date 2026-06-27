@@ -48,6 +48,35 @@ REGISTRATION_FIELD_ORDER = ("first_name", "last_name", "hn", "phone", "consent")
 LAST_ACTIVE_CACHE_PREFIX = "profile:last-active:v1"
 LAST_ACTIVE_THROTTLE_SECONDS = 6 * 3600
 
+REGISTRATION_START_CACHE_PREFIX = "profile:registration-start:v1"
+REGISTRATION_START_TTL_SECONDS = 120
+
+_REGISTRATION_TRIGGER_SUBSTRINGS = (
+    "ลงทะเบียน",
+    "register",
+)
+_REGISTRATION_CANCEL_SUBSTRINGS = (
+    "ยกเลิก",
+    "cancel",
+)
+
+
+@dataclass(frozen=True)
+class RegistrationUpdate:
+    profile: dict[str, Any]
+    missing_fields: list[str]
+    invalid_fields: list[str]
+    consent_declined: bool = False
+
+
+@dataclass(frozen=True)
+class RegistrationPromptDecision:
+    prompt: bool
+    reason: str = ""
+    missing_fields: tuple[str, ...] = ()
+
+
+
 
 @dataclass(frozen=True)
 class RegistrationUpdate:
@@ -286,6 +315,130 @@ def _coerce_string(value: Any) -> str:
             if val:
                 return val
     return str(value)
+
+
+def is_registration_trigger_text(text: Any) -> bool:
+    norm = str(text or "").strip().lower()
+    if not norm:
+        return False
+    return any(token in norm for token in _REGISTRATION_TRIGGER_SUBSTRINGS)
+
+
+def is_registration_cancel_text(text: Any) -> bool:
+    norm = str(text or "").strip().lower()
+    if not norm:
+        return False
+    return any(token in norm for token in _REGISTRATION_CANCEL_SUBSTRINGS)
+
+
+def mark_registration_started(user_id: str) -> None:
+    if user_id:
+        ttl_cache.set(
+            f"{REGISTRATION_START_CACHE_PREFIX}:{user_id}",
+            True,
+            REGISTRATION_START_TTL_SECONDS,
+        )
+
+
+def has_recent_registration_start(user_id: str) -> bool:
+    if not user_id:
+        return False
+    return ttl_cache.get(f"{REGISTRATION_START_CACHE_PREFIX}:{user_id}") is not None
+
+
+def _split_person_name(text: str) -> tuple[str, str]:
+    cleaned = _clean_text(text, 161)
+    if not cleaned:
+        return "", ""
+    parts = cleaned.split()
+    if len(parts) >= 2:
+        return parts[0], " ".join(parts[1:])
+    return cleaned, ""
+
+
+def _looks_like_hn(text: str) -> bool:
+    candidate = _clean_text(text, 40).upper()
+    if not candidate or " " in candidate:
+        return False
+    if candidate.startswith("HN") and any(ch.isdigit() for ch in candidate):
+        return True
+    return candidate.isalnum() and any(ch.isdigit() for ch in candidate) and len(candidate) <= 20
+
+
+def _phone_param_present(params: Optional[dict[str, Any]]) -> bool:
+    if not params:
+        return False
+    return any(key in params for key in ("phone", "phone_number", "phone-number", "tel"))
+
+
+def enrich_registration_params(
+    existing: Optional[dict[str, Any]],
+    params: Optional[dict[str, Any]],
+    query_text: str = "",
+) -> dict[str, Any]:
+    """
+    Fill registration slots from ``query_text`` when Dialogflow returns empty
+    parameters during active PatientIdentity slot-filling.
+    """
+    enriched = dict(params or {})
+    text = _clean_text(query_text, 161)
+    if not text or is_registration_trigger_text(text) or is_registration_cancel_text(text):
+        return enriched
+
+    state = dict(existing or {})
+    state.update(normalize_identity_fields(enriched))
+
+    if parse_consent_value(text) is not None:
+        enriched.setdefault("consent", text)
+        return enriched
+
+    if not state.get("phone") and not _phone_param_present(enriched):
+        phone, bad = normalize_registration_phone(text)
+        if phone and not bad:
+            enriched["phone"] = phone
+            return enriched
+
+    first = (state.get("first_name") or "").strip()
+    last = (state.get("last_name") or "").strip()
+    hn = (state.get("hn") or "").strip()
+
+    if first and last and not hn and _looks_like_hn(text):
+        enriched.setdefault("hn", text.strip().upper())
+        return enriched
+
+    if not first:
+        given, family = _split_person_name(text)
+        if given:
+            enriched.setdefault("first_name", given)
+        if family:
+            enriched.setdefault("last_name", family)
+        return enriched
+
+    if not last:
+        given, family = _split_person_name(text)
+        if given and family and given == first:
+            enriched.setdefault("last_name", family)
+        else:
+            enriched.setdefault("last_name", text)
+    return enriched
+
+
+def clear_registration_identity_fields(user_id: str) -> bool:
+    """Drop in-progress registration identity fields; keep demographics."""
+    if not user_id:
+        return False
+    result = read_patient_profile_result(user_id)
+    if not result.available or not result.profile:
+        return False
+    ok = upsert_patient_profile(user_id, {
+        "first_name": "",
+        "last_name": "",
+        "hn": "",
+        "phone": "",
+    })
+    if ok:
+        invalidate_profile_cache(user_id)
+    return ok
 
 
 def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str]:
