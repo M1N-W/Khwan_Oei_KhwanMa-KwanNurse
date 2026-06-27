@@ -24,7 +24,9 @@
                     <div class="mono muted">{{ a.user_id_short }}</div>
                 </td>
                 <td>
-                    {% if a.risk_level == 'high' %}
+                    {% if a.risk_level == 'critical' %}
+                        <span class="badge badge-high"><span class="severity-marker severity-high"></span>วิกฤต</span>
+                    {% elif a.risk_level == 'high' %}
                         <span class="badge badge-high"><span class="severity-marker severity-high"></span>สูง</span>
                     {% elif a.risk_level == 'medium' %}
                         <span class="badge badge-medium"><span class="severity-marker severity-medium"></span>ปานกลาง</span>

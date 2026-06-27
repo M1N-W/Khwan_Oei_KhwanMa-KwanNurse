@@ -17,6 +17,46 @@ os.environ["RUN_SCHEDULER"] = "false"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
+class SymptomRiskLevelContractTests(unittest.TestCase):
+    """Canonical symptom risk code contract shared across production layers."""
+
+    def test_risk_level_from_score_boundaries(self):
+        from services.risk_levels import risk_level_from_score
+
+        cases = [
+            (0, "normal"),
+            (1, "low"),
+            (2, "medium"),
+            (3, "high"),
+            (4, "high"),
+            (5, "critical"),
+            (8, "critical"),
+        ]
+        for score, expected in cases:
+            with self.subTest(score=score):
+                self.assertEqual(risk_level_from_score(score), expected)
+
+    def test_legacy_display_labels_normalize_to_canonical_codes(self):
+        from services.risk_levels import normalize_risk_level
+
+        cases = [
+            ("✅ ปกติดี", "normal"),
+            ("🟢 เสี่ยงต่ำ (เฝ้าระวัง)", "low"),
+            ("🟡 เสี่ยงปานกลาง", "medium"),
+            ("⚠️ เสี่ยงสูง", "high"),
+            ("🚨 อันตราย - ต้องพบแพทย์ทันที!", "critical"),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_risk_level(raw), expected)
+
+    def test_unknown_or_empty_values_fall_back_to_score(self):
+        from services.risk_levels import normalize_risk_level
+
+        self.assertEqual(normalize_risk_level("unexpected label", score=2), "medium")
+        self.assertEqual(normalize_risk_level("", score=5), "critical")
+
+
 class NeuroSymptomTests(unittest.TestCase):
     """All tests patch persistence + notification so no external I/O happens."""
 

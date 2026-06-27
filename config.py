@@ -39,10 +39,29 @@ SHEET_WOUND_ANALYSIS_LOG = "WoundAnalysisLog"
 SHEET_PATIENT_PROFILE = "PatientProfile"
 SHEET_EDUCATION_LOG = "EducationLog"
 SHEET_VOICE_LOG = "VoiceMessageLog"  # Phase 5 P5-2 audit trail
+SHEET_FAILED_NURSE_ALERTS = "FailedNurseAlerts"
+SHEET_SURVEY_SCHEDULES = "SurveySchedules"  # KWN-07
+
+# Patient registry contract (KWN-02)
+PATIENT_CONSENT_VERSION = os.environ.get("PATIENT_CONSENT_VERSION", "v1").strip() or "v1"
+PATIENT_REGISTRATION_GATE_ENABLED = (
+    os.environ.get("PATIENT_REGISTRATION_GATE_ENABLED", "false").lower()
+    in ("1", "true", "yes", "on")
+)
+
+# KWN-05: Rich LINE message feature flag (Flex + Quick Reply).
+# Defaults to false so existing plain-text behaviour is unchanged.
+# Set ENABLE_RICH_MESSAGES=true in env to enable for all LINE send helpers.
+ENABLE_RICH_MESSAGES: bool = (
+    os.environ.get("ENABLE_RICH_MESSAGES", "false").lower()
+    in ("1", "true", "yes", "on")
+)
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")
 NURSE_GROUP_ID = os.environ.get("NURSE_GROUP_ID")
+NURSE_CONTACT_LINK = os.environ.get("NURSE_CONTACT_LINK", "https://line.me/ti/p/0899181839")
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 LINE_REPLY_API_URL = "https://api.line.me/v2/bot/message/reply"
 LINE_CONTENT_API_URL = "https://api-data.line.me/v2/bot/message"  # /<id>/content
@@ -219,6 +238,9 @@ class ReminderStatus:
     SENT = "sent"
     RESPONDED = "responded"
     NO_RESPONSE = "no_response"
+    CLAIMED = "claimed"
+    FAILED = "failed"
+    DEAD_LETTER = "dead_letter"
 
 
 # Teleconsult session statuses (used in database/teleconsult.py,

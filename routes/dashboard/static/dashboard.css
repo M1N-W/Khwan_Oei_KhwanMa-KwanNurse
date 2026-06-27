@@ -603,6 +603,13 @@ textarea {
   background: var(--panel-muted);
 }
 
+.degraded-state {
+  border-color: rgba(180, 83, 9, 0.45);
+  background: var(--medium-soft);
+  color: var(--medium);
+  font-weight: 800;
+}
+
 .filter-form,
 .identity-form {
   display: flex;

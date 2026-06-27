@@ -139,7 +139,12 @@ def column_number_to_letter(n):
 
 def save_symptom_data(user_id, pain, wound, fever, mobility, risk_level, risk_score):
     """
-    Save symptom report to SymptomLog sheet
+    Save symptom report to SymptomLog sheet.
+
+    The append is retried with a small webhook-safe budget. Because Google
+    Sheets append is not transactional, an ambiguous timeout can theoretically
+    create a duplicate row; this patch keeps the existing at-least-once shape.
+
     Returns: boolean (success/failure)
     """
     try:
@@ -160,7 +165,14 @@ def save_symptom_data(user_id, pain, wound, fever, mobility, risk_level, risk_sc
             risk_score
         ]
         
-        sheet.append_row(row, value_input_option='USER_ENTERED')
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option='USER_ENTERED'),
+            op_name="symptom_log.append",
+            max_attempts=2,
+            base_delay=0.25,
+            max_delay=0.5,
+        )
         logger.info("Symptom data saved for user %s", user_id)
         return True
     

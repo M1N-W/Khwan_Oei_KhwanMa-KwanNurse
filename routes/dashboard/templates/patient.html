@@ -9,15 +9,25 @@
         <p class="page-kicker">Patient Context</p>
         <h1 class="page-title">{{ patient.patient_display_name or 'ผู้ป่วยไม่ทราบชื่อ' }}</h1>
         <p class="muted">HN: <strong>{{ patient.patient_hn or '-' }}</strong></p>
+        <p class="muted">โทร: <strong>{{ patient.patient_phone_masked or '-' }}</strong></p>
         <p class="mono muted">System ID: {{ patient.user_id }}</p>
     </div>
     <div>
-        {% if patient.latest_risk_level == 'high' %}
+        {% if patient.patient_registration_status == 'registered' %}
+            <span class="badge badge-low">ข้อมูลลงทะเบียนครบแล้ว</span>
+        {% else %}
+            <span class="badge badge-neutral">ข้อมูลลงทะเบียนยังไม่ครบ</span>
+        {% endif %}
+        {% if patient.latest_risk_level == 'critical' %}
+            <span class="badge badge-high"><span class="severity-marker severity-high"></span>ความเสี่ยงล่าสุด: วิกฤต</span>
+        {% elif patient.latest_risk_level == 'high' %}
             <span class="badge badge-high"><span class="severity-marker severity-high"></span>ความเสี่ยงล่าสุด: สูง</span>
         {% elif patient.latest_risk_level == 'medium' %}
             <span class="badge badge-medium"><span class="severity-marker severity-medium"></span>ความเสี่ยงล่าสุด: ปานกลาง</span>
         {% elif patient.latest_risk_level == 'low' %}
             <span class="badge badge-low"><span class="severity-marker severity-low"></span>ความเสี่ยงล่าสุด: ต่ำ</span>
+        {% elif patient.latest_risk_level == 'normal' %}
+            <span class="badge badge-neutral"><span class="severity-marker severity-low"></span>ความเสี่ยงล่าสุด: ปกติ</span>
         {% else %}
             <span class="badge badge-neutral">ยังไม่มีรายงาน</span>
         {% endif %}
@@ -82,10 +92,37 @@
             <input class="input" id="hn" name="hn" value="{{ patient.patient_hn or '' }}" maxlength="40">
         </div>
         <div class="field">
+            <label for="phone">เบอร์โทรศัพท์</label>
+            <input class="input" id="phone" name="phone" value="{{ patient.patient_phone or '' }}" type="tel" maxlength="16" autocomplete="tel">
+        </div>
+        <div class="field">
             <label class="sr-only" for="identity-save">บันทึก</label>
             <button id="identity-save" type="submit" class="btn btn-primary full-width">บันทึก</button>
         </div>
     </form>
+    <div class="stats-rail">
+        <div class="metric">
+            <p class="metric-label">สถานะลงทะเบียน</p>
+            <p class="metric-value">{{ 'ครบแล้ว' if patient.patient_registration_status == 'registered' else 'ยังไม่ครบ' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ลงทะเบียนครบเมื่อ</p>
+            <p class="metric-value">{{ patient.patient_registered_at or '-' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ความยินยอม</p>
+            <p class="metric-value">{{ patient.patient_consent_version or '-' }}</p>
+            <p class="muted tiny">{{ patient.patient_consent_at or 'ต้องได้รับจากผู้ป่วยผ่าน LINE' }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric-label">ใช้งานล่าสุด</p>
+            <p class="metric-value">{{ patient.patient_last_active_at or '-' }}</p>
+        </div>
+    </div>
+    {% if patient.patient_missing_fields %}
+        <p class="muted tiny">ข้อมูลที่ยังขาด: {{ patient.patient_missing_fields | join(', ') }}</p>
+    {% endif %}
+    <p class="muted tiny">ความยินยอมต้องได้รับจากผู้ป่วยผ่าน LINE</p>
 </section>
 
 {% if trend and trend.summary.data_points > 0 %}
@@ -135,6 +172,60 @@
 <section class="panel stack-gap">
     <div class="panel-header">
         <div>
+            <h2 class="panel-title">สถานะแบบสอบถาม Milestone (Milestone Surveys)</h2>
+            <p class="muted tiny">การส่งและตอบกลับแบบสอบถามประเมินผลของผู้ป่วยรายนี้</p>
+        </div>
+    </div>
+    
+    {% if survey_timeline %}
+        <table class="table" style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+                <tr style="border-bottom: 2px solid var(--line);">
+                    <th style="padding: 10px 12px; font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);">วัน Milestone</th>
+                    <th style="padding: 10px 12px; font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);">สถานะการส่ง</th>
+                    <th style="padding: 10px 12px; font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);">ส่งเมื่อ (Sent At)</th>
+                    <th style="padding: 10px 12px; font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);">คลิกเมื่อ (Clicked At)</th>
+                    <th style="padding: 10px 12px; font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);">สถานะล่าช้า</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in survey_timeline %}
+                <tr style="border-bottom: 1px solid var(--line);">
+                    <td style="padding: 10px 12px;"><strong>Milestone Day {{ item.milestone_day }}</strong></td>
+                    <td style="padding: 10px 12px;">
+                        {% if item.status == 'clicked' %}
+                            <span class="badge badge-low">คลิกเปิดลิงก์แล้ว</span>
+                        {% elif item.status == 'sent' %}
+                            <span class="badge badge-blue">ส่งลิงก์แล้ว</span>
+                        {% elif item.status == 'failed' or item.status == 'dead_letter' %}
+                            <span class="badge badge-high">ส่งล้มเหลว</span>
+                        {% elif item.status == 'scheduled' %}
+                            <span class="badge badge-neutral">รอการส่ง ({{ item.scheduled_date or '-' }})</span>
+                        {% else %}
+                            <span class="badge badge-neutral">{{ item.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding: 10px 12px;">{{ item.sent_at or '-' }}</td>
+                    <td style="padding: 10px 12px;">{{ item.clicked_at or '-' }}</td>
+                    <td style="padding: 10px 12px;">
+                        {% if item.is_overdue %}
+                            <span class="badge badge-high" style="font-weight: 700;">ยังไม่ตอบกลับ (เกิน 72 ชม.)</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty-state">ยังไม่มีการตั้งเวลาส่งแบบสอบถามสำหรับผู้ป่วยรายนี้</p>
+    {% endif %}
+</section>
+
+<section class="panel stack-gap">
+    <div class="panel-header">
+        <div>
             <h2 class="panel-title">ไทม์ไลน์ ({{ patient.events|length }} รายการ)</h2>
             <p class="muted tiny">ข้อมูลในช่วง {{ filter_days }} วันล่าสุด</p>
         </div>
@@ -145,7 +236,7 @@
             {%- for ev in patient.events %}
             <li class="timeline-item">
                 <span class="timeline-dot
-                            {% if ev.type == 'symptom' and ev.risk_level == 'high' %}severity-high
+                            {% if ev.type == 'symptom' and ev.risk_level in ['critical', 'high'] %}severity-high
                             {% elif ev.type == 'symptom' and ev.risk_level == 'medium' %}severity-medium
                             {% elif ev.type == 'wound' and ev.severity == 'high' %}severity-high
                             {% elif ev.type == 'wound' and ev.severity == 'medium' %}severity-medium
@@ -156,7 +247,20 @@
                 </div>
                 <div class="timeline-body">
                     {% if ev.type == 'symptom' %}
-                        ความเสี่ยง <strong>{{ ev.risk_level or '-' }}</strong>
+                        ความเสี่ยง
+                        {% if ev.risk_level == 'critical' %}
+                            <strong class="text-high">วิกฤต</strong>
+                        {% elif ev.risk_level == 'high' %}
+                            <strong class="text-high">สูง</strong>
+                        {% elif ev.risk_level == 'medium' %}
+                            <strong class="text-medium">ปานกลาง</strong>
+                        {% elif ev.risk_level == 'low' %}
+                            <strong>ต่ำ</strong>
+                        {% elif ev.risk_level == 'normal' %}
+                            <strong>ปกติ</strong>
+                        {% else %}
+                            <strong>-</strong>
+                        {% endif %}
                         (คะแนน {{ ev.risk_score }}) ·
                         ปวด: {{ ev.pain }} · แผล: {{ ev.wound }} · ไข้: {{ ev.fever }} · เคลื่อนไหว: {{ ev.mobility }}
                     {% elif ev.type == 'wound' %}

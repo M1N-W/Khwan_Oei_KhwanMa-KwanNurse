@@ -76,5 +76,31 @@
     "count": 0,
     "lang": "th",
     "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000007",
+    "data": [
+      {
+        "text": "รอเวลาทำการ",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "c1a2b3d4-0001-0001-0001-000000000008",
+    "data": [
+      {
+        "text": "แจ้งเรื่องฉุกเฉิน",
+        "userDefined": false
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
   }
 ]

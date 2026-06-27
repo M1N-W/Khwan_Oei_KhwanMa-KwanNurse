@@ -70,7 +70,9 @@ class WebhookSymptomFlowTests(unittest.TestCase):
 
     def setUp(self):
         from services.early_warning import _reset_dedup_for_tests
+        from services.metrics import reset
         _reset_dedup_for_tests()
+        reset()
 
     # -------------------------------------------------------------------
     # Happy path: low-risk report should not fire any push notifications
@@ -82,8 +84,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             "fever_check": "ไม่มี",
             "mobility_status": "เดินได้",
         })
-        with patch("services.risk_assessment.save_symptom_data") as save, \
-             patch("services.risk_assessment.send_line_push") as push_risk, \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True) as save, \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
              patch("services.early_warning.send_line_push") as push_warn, \
              patch("services.early_warning.get_recent_symptom_reports",
                    return_value=[_make_report(days_ago=0, score=1)]), \
@@ -107,8 +109,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             "fever_check": "มีไข้",
             "mobility_status": "ขยับไม่ได้",
         })
-        with patch("services.risk_assessment.save_symptom_data"), \
-             patch("services.risk_assessment.send_line_push") as push_risk, \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True), \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
              patch("services.early_warning.send_line_push") as push_warn, \
              patch("services.early_warning.get_recent_symptom_reports",
                    return_value=[_make_report(days_ago=0, score=5)]), \
@@ -138,8 +140,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             _make_report(days_ago=1, score=3),
             _make_report(days_ago=2, score=1),
         ]
-        with patch("services.risk_assessment.save_symptom_data"), \
-             patch("services.risk_assessment.send_line_push") as push_risk, \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True), \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
              patch("services.early_warning.send_line_push") as push_warn, \
              patch("services.early_warning.get_recent_symptom_reports",
                    return_value=history), \
@@ -163,8 +165,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             "fever_check": "ไม่มี",
             "mobility_status": "เดินได้",
         })
-        with patch("services.risk_assessment.save_symptom_data") as save, \
-             patch("services.risk_assessment.send_line_push") as push_risk, \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True) as save, \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
              patch("services.early_warning.send_line_push") as push_warn:
             resp = self.client.post("/webhook", json=payload)
 
@@ -185,8 +187,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             "fever_check": "ไม่มี",
             "mobility_status": "เดินได้",
         })
-        with patch("services.risk_assessment.save_symptom_data") as save, \
-             patch("services.risk_assessment.send_line_push") as push_risk, \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True) as save, \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
              patch("services.early_warning.send_line_push") as push_warn, \
              patch("services.early_warning.get_recent_symptom_reports",
                    return_value=[_make_report(days_ago=0, fever="ไม่มี",
@@ -203,6 +205,136 @@ class WebhookSymptomFlowTests(unittest.TestCase):
         push_risk.assert_not_called()
         push_warn.assert_not_called()
 
+    def test_symptom_risk_persists_canonical_code_and_dashboard_reads_alert(self):
+        from config import LOCAL_TZ
+        from services import dashboard_readers
+
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 9,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        captured = {}
+
+        def capture_symptom(user_id, pain, wound, fever, mobility, risk_level, risk_score):
+            captured.update({
+                "timestamp": datetime.now(tz=LOCAL_TZ),
+                "user_id": user_id,
+                "pain": pain,
+                "wound": wound,
+                "fever": fever,
+                "mobility": mobility,
+                "risk_level": risk_level,
+                "risk_score": risk_score,
+            })
+            return True
+
+        with patch("services.risk_assessment.save_symptom_data", side_effect=capture_symptom), \
+             patch("services.risk_assessment.send_line_push", return_value=True), \
+             patch("services.early_warning.get_recent_symptom_reports", return_value=[]):
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(captured["risk_score"], 3)
+        self.assertEqual(captured["risk_level"], "high")
+
+        with patch("database.sheets.get_recent_symptom_reports", return_value=[captured]):
+            alerts = dashboard_readers.get_recent_alerts(
+                min_risk_level="medium",
+                force_refresh=True,
+            )
+
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["risk_level"], "high")
+
+    def test_webhook_low_risk_save_failure_returns_safe_notice(self):
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 6,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        with patch("services.risk_assessment.save_symptom_data", return_value=False), \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
+             patch("services.risk_assessment.save_failed_symptom_alert") as backlog, \
+             patch("services.early_warning.check_user_early_warning") as early:
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        text = resp.get_json()["fulfillmentText"]
+        self.assertIn("ยังไม่สามารถยืนยันการบันทึกประวัติ", text)
+        self.assertIn("ลองรายงานอาการอีกครั้ง", text)
+        push_risk.assert_not_called()
+        backlog.assert_not_called()
+        early.assert_not_called()
+
+    def test_webhook_high_risk_save_success_push_failure_guides_direct_contact(self):
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 9,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        with patch("services.risk_assessment.save_symptom_data", return_value=True), \
+             patch("services.risk_assessment.send_line_push", return_value=False) as push_risk, \
+             patch("services.risk_assessment.save_failed_symptom_alert", return_value=True) as backlog, \
+             patch("services.early_warning.check_user_early_warning") as early:
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        text = resp.get_json()["fulfillmentText"]
+        self.assertIn("บันทึกรายงานไว้แล้ว", text)
+        self.assertIn("ยังไม่สามารถยืนยันว่าแจ้งพยาบาลสำเร็จ", text)
+        self.assertIn("กดปุ่ม 'ปรึกษาพยาบาล'", text)
+        push_risk.assert_called_once()
+        backlog.assert_called_once()
+        early.assert_called_once_with("u-e2e")
+
+    def test_webhook_high_risk_save_failure_push_success_does_not_suppress_push(self):
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 9,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        with patch("services.risk_assessment.save_symptom_data", return_value=False), \
+             patch("services.risk_assessment.send_line_push", return_value=True) as push_risk, \
+             patch("services.risk_assessment.save_failed_symptom_alert") as backlog, \
+             patch("services.early_warning.check_user_early_warning") as early:
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        text = resp.get_json()["fulfillmentText"]
+        self.assertIn("ส่งแจ้งเตือนพยาบาลแล้ว", text)
+        self.assertIn("ยังไม่สามารถยืนยันการบันทึกรายงาน", text)
+        push_risk.assert_called_once()
+        backlog.assert_not_called()
+        early.assert_not_called()
+
+    def test_webhook_both_save_and_push_failure_returns_safe_notice(self):
+        payload = _dialogflow_payload("ReportSymptoms", {
+            "pain_score": 9,
+            "wound_status": "ปกติ",
+            "fever_check": "ไม่มี",
+            "mobility_status": "เดินได้",
+        })
+        with patch("services.risk_assessment.save_symptom_data", return_value=False), \
+             patch("services.risk_assessment.send_line_push", return_value=False) as push_risk, \
+             patch("services.risk_assessment.save_failed_symptom_alert", return_value=False) as backlog, \
+             patch("services.early_warning.check_user_early_warning") as early:
+            resp = self.client.post("/webhook", json=payload)
+
+        self.assertEqual(resp.status_code, 200)
+        text = resp.get_json()["fulfillmentText"]
+        self.assertIn("ยังไม่สามารถยืนยันการบันทึกรายงาน", text)
+        self.assertIn("ยังไม่สามารถยืนยันว่าแจ้งพยาบาลสำเร็จ", text)
+        self.assertIn("กดปุ่ม 'ปรึกษาพยาบาล'", text)
+        self.assertNotIn("ระบบจะส่งซ้ำอัตโนมัติ", text)
+        push_risk.assert_called_once()
+        backlog.assert_called_once()
+        early.assert_not_called()
+
     # -------------------------------------------------------------------
     # Early-warning failure must not bubble up and break the user response.
     # -------------------------------------------------------------------
@@ -213,8 +345,8 @@ class WebhookSymptomFlowTests(unittest.TestCase):
             "fever_check": "ไม่มี",
             "mobility_status": "เดินได้",
         })
-        with patch("services.risk_assessment.save_symptom_data"), \
-             patch("services.risk_assessment.send_line_push"), \
+        with patch("services.risk_assessment.save_symptom_data", return_value=True), \
+             patch("services.risk_assessment.send_line_push", return_value=True), \
              patch("services.early_warning.get_recent_symptom_reports",
                    side_effect=RuntimeError("sheets down")):
             resp = self.client.post("/webhook", json=payload)

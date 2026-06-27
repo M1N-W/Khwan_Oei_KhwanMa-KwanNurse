@@ -240,6 +240,7 @@ python -m unittest test_dashboard_actions.py -v
 | [`README.md`](./README.md) | First contact — overview + quick start |
 | [`DASHBOARD_SETUP.md`](./DASHBOARD_SETUP.md) | Setting up nurse dashboard (env vars, login flow, security) |
 | [`DEPLOY_RUNBOOK.md`](./DEPLOY_RUNBOOK.md) | Deploying to Render + operations runbook |
+| [`docs/MASTER_ROADMAP.md`](./docs/MASTER_ROADMAP.md) | Operational source of truth for implementation order, status, dependencies, and commit tracking |
 | [`PRODUCT_VISION.md`](./PRODUCT_VISION.md) | Product roadmap, gaps vs source documents, next sprint |
 
 ---
@@ -258,7 +259,7 @@ python -m unittest test_dashboard_actions.py -v
 
 ## 🗺 Roadmap
 
-ดู [`PRODUCT_VISION.md`](./PRODUCT_VISION.md) สำหรับ gap analysis ฉบับเต็ม. หัวข้อหลักที่อยู่ในแผน:
+ดู [`PRODUCT_VISION.md`](./PRODUCT_VISION.md) สำหรับ gap analysis ฉบับเต็ม และดู [`docs/MASTER_ROADMAP.md`](./docs/MASTER_ROADMAP.md) สำหรับลำดับ implementation และสถานะปัจจุบันที่ใช้ลงมือจริง. หัวข้อหลักที่อยู่ในแผน:
 
 - ✅ **Phase 1** — Stabilize core (scheduler, queue, alerts) — *done*
 - ✅ **Phase 2** — Performance + reliability (cache, batch updates, circuit breaker) — *done*

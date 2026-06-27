@@ -31,14 +31,19 @@ from services.dashboard_actions import (
     dismiss_alert,
     mark_session_completed,
     update_patient_identity,
+    retry_failed_alert,
+    resolve_failed_alert,
 )
 from services.dashboard_readers import (
     get_home_stats,
+    get_failed_nurse_alert_snapshot,
     get_patient_timeline,
     get_patient_trend,
     get_preconsult_packet,
     get_queue_snapshot,
     get_recent_alerts,
+    get_survey_analytics_reader,
+    get_patient_survey_timeline_reader,
 )
 
 logger = get_logger(__name__)
@@ -54,6 +59,7 @@ def home():
     stats = get_home_stats()
     queue_preview = get_queue_snapshot(limit=5)
     alerts_preview = get_recent_alerts(days=7, limit=5, min_risk_level="medium")
+    survey_stats = get_survey_analytics_reader()
     return render_template(
         "home.html",
         nurse=current_nurse(),
@@ -61,6 +67,7 @@ def home():
         stats=stats,
         queue=queue_preview,
         alerts=alerts_preview,
+        survey_stats=survey_stats,
     )
 
 
@@ -96,6 +103,19 @@ def alerts_view():
     )
 
 
+@dashboard_bp.route("/failed-alerts", methods=["GET"])
+@require_nurse_auth
+def failed_alerts_view():
+    """Read-only backlog of nurse notification delivery failures."""
+    snapshot = get_failed_nurse_alert_snapshot(limit=200)
+    return render_template(
+        "failed_alerts.html",
+        nurse=current_nurse(),
+        csrf_token=get_csrf_token(),
+        failed_alerts=snapshot,
+    )
+
+
 # -----------------------------------------------------------------------------
 # HTMX partials — refresh เฉพาะ fragment โดยไม่ต้อง reload ทั้งหน้า
 # -----------------------------------------------------------------------------
@@ -119,6 +139,14 @@ def alerts_partial():
     return render_template("_alerts_table.html", alerts=items, csrf_token=get_csrf_token())
 
 
+@dashboard_bp.route("/partials/failed-alerts", methods=["GET"])
+@require_nurse_auth
+def failed_alerts_partial():
+    """Return read-only failed nurse alert backlog fragment."""
+    snapshot = get_failed_nurse_alert_snapshot(limit=200)
+    return render_template("_failed_alerts_table.html", failed_alerts=snapshot, csrf_token=get_csrf_token())
+
+
 # -----------------------------------------------------------------------------
 # Notification bell (S1-4)
 # -----------------------------------------------------------------------------
@@ -133,12 +161,17 @@ def bell_partial():
     ที่ cache อยู่แล้ว → ไม่โหลดเพิ่ม.
     """
     stats = get_home_stats()
+    failed_alerts_degraded = bool(stats.get("failed_alerts_degraded"))
     total = int(stats.get("queue_high_priority", 0)) + int(stats.get("alerts_today", 0))
+    if not failed_alerts_degraded:
+        total += int(stats.get("failed_alerts_actionable", 0))
     return render_template(
         "_bell.html",
         count=total,
         queue_high=stats.get("queue_high_priority", 0),
         alerts_today=stats.get("alerts_today", 0),
+        failed_alerts=stats.get("failed_alerts_actionable", 0),
+        failed_alerts_degraded=failed_alerts_degraded,
     )
 
 
@@ -184,6 +217,7 @@ def patient_view(user_id: str):
         abort(404)
     timeline = get_patient_timeline(user_id, days=days)
     trend = get_patient_trend(user_id, days=days)
+    survey_timeline = get_patient_survey_timeline_reader(user_id)
     return render_template(
         "patient.html",
         nurse=current_nurse(),
@@ -191,6 +225,7 @@ def patient_view(user_id: str):
         patient=timeline,
         trend=trend,
         filter_days=days,
+        survey_timeline=survey_timeline,
     )
 
 
@@ -247,6 +282,28 @@ def patient_identity_update(user_id: str):
     result = update_patient_identity(user_id, nurse, dict(request.form))
     flash(result.message, "success" if result.ok else "error")
     return redirect(url_for("dashboard.patient_view", user_id=user_id))
+
+
+@dashboard_bp.route("/failed-alerts/<idempotency_key>/retry", methods=["POST"])
+@require_nurse_auth
+def failed_alerts_retry(idempotency_key: str):
+    """Manually retry a failed nurse alert notification."""
+    _check_csrf()
+    nurse = current_nurse() or "unknown"
+    result = retry_failed_alert(idempotency_key, nurse)
+    flash(result.message, "success" if result.ok else "error")
+    return redirect(_safe_next_url(request.form.get("next"), default=url_for("dashboard.failed_alerts_view")))
+
+
+@dashboard_bp.route("/failed-alerts/<idempotency_key>/resolve", methods=["POST"])
+@require_nurse_auth
+def failed_alerts_resolve(idempotency_key: str):
+    """Manually resolve a failed nurse alert notification."""
+    _check_csrf()
+    nurse = current_nurse() or "unknown"
+    result = resolve_failed_alert(idempotency_key, nurse)
+    flash(result.message, "success" if result.ok else "error")
+    return redirect(_safe_next_url(request.form.get("next"), default=url_for("dashboard.failed_alerts_view")))
 
 
 # -----------------------------------------------------------------------------

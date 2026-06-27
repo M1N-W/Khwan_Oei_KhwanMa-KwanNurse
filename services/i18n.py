@@ -113,13 +113,37 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "th": "ขอทราบ HN (Hospital Number) ของคนไข้ค่ะ",
         "en": "Please tell me the patient's HN (Hospital Number).",
     },
+    "identity.ask_phone": {
+        "th": "ขอทราบเบอร์โทรศัพท์มือถือของคนไข้ค่ะ เช่น 0812345678",
+        "en": "Please tell me the patient's mobile phone number, for example 0812345678.",
+    },
+    "identity.invalid_phone": {
+        "th": "เบอร์โทรศัพท์ไม่ถูกต้องค่ะ กรุณาส่งเบอร์มือถือไทย 10 หลัก เช่น 0812345678",
+        "en": "That phone number is invalid. Please send a 10-digit Thai mobile number.",
+    },
+    "identity.ask_consent": {
+        "th": "ข้อมูลเกือบครบแล้วค่ะ กรุณายืนยันความยินยอมให้โรงพยาบาลใช้ข้อมูลนี้เพื่อดูแลและติดตามอาการ โดยพิมพ์หรือเลือก “ยินยอม”",
+        "en": "Almost done. Please confirm consent to use this information for care and follow-up by replying “agree”.",
+    },
+    "identity.consent_declined": {
+        "th": "รับทราบค่ะ ยังไม่สามารถลงทะเบียนให้ครบได้ หากต้องการดำเนินการต่อกรุณาพิมพ์ “ยินยอม”",
+        "en": "Understood. Registration cannot be completed without consent. Reply “agree” to continue.",
+    },
+    "identity.incomplete_prompt": {
+        "th": "กรุณาลงทะเบียนข้อมูลผู้ป่วยก่อนใช้เมนูนี้ โดยพิมพ์หรือเลือก “ลงทะเบียน” ค่ะ",
+        "en": "Please register patient information before using this menu. Type or select “Register”.",
+    },
     "identity.confirm": {
-        "th": "✅ บันทึกข้อมูลคนไข้แล้วค่ะ\n\nชื่อ: {first_name} {last_name}\nHN: {hn}",
-        "en": "✅ Patient identity saved.\n\nName: {first_name} {last_name}\nHN: {hn}",
+        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nโทร: {phone}",
+        "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nPhone: {phone}",
     },
     "identity.save_error": {
         "th": "ขอโทษค่ะ ไม่สามารถบันทึกข้อมูลคนไข้ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
         "en": "Sorry, I couldn't save the patient identity right now. Please try again.",
+    },
+    "identity.storage_unavailable": {
+        "th": "ขอโทษค่ะ ระบบบันทึกข้อมูลขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง",
+        "en": "Sorry, patient registration storage is temporarily unavailable. Please try again.",
     },
     "dashboard.no_data": {
         "th": "ยังไม่มีข้อมูล",

@@ -33,6 +33,7 @@ from typing import Any, Optional
 from config import LOCAL_TZ, get_logger
 from services.cache import ttl_cache
 from services.metrics import incr
+from services.risk_levels import normalize_risk_level, risk_rank
 
 logger = get_logger(__name__)
 
@@ -44,11 +45,13 @@ CACHE_KEY_STATS = "dash:stats:v1"
 CACHE_KEY_ALERTS_PREFIX = "dash:alerts:v1"
 CACHE_KEY_PRECONSULT_PREFIX = "dash:preconsult:v1"
 CACHE_KEY_IDENTITY_PREFIX = "dash:identity:v1"
+CACHE_KEY_FAILED_ALERTS = "dash:failed-alerts:v1"
 
 TTL_QUEUE_SECONDS = 10
 TTL_ALERTS_SECONDS = 30
 TTL_STATS_SECONDS = 15
 TTL_PRECONSULT_SECONDS = 30
+TTL_FAILED_ALERTS_SECONDS = 15
 
 
 # -----------------------------------------------------------------------------
@@ -93,7 +96,7 @@ class AlertItem:
 
     timestamp: Optional[datetime]
     user_id: str
-    risk_level: str  # "high" / "medium" / "low"
+    risk_level: str  # canonical: normal / low / medium / high / critical
     risk_score: int
     pain: str
     wound: str
@@ -126,6 +129,10 @@ class HomeStats:
     queue_high_priority: int
     alerts_today: int
     alerts_7d: int
+    failed_alerts_actionable: int
+    failed_alerts_pending: int
+    failed_alerts_failed: int
+    failed_alerts_degraded: bool
     refreshed_at: datetime
 
     def to_dict(self) -> dict[str, Any]:
@@ -134,6 +141,10 @@ class HomeStats:
             "queue_high_priority": self.queue_high_priority,
             "alerts_today": self.alerts_today,
             "alerts_7d": self.alerts_7d,
+            "failed_alerts_actionable": self.failed_alerts_actionable,
+            "failed_alerts_pending": self.failed_alerts_pending,
+            "failed_alerts_failed": self.failed_alerts_failed,
+            "failed_alerts_degraded": self.failed_alerts_degraded,
             "refreshed_at": self.refreshed_at.strftime("%H:%M:%S"),
         }
 
@@ -157,6 +168,8 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         "patient_hn": "",
         "patient_display_name": "",
         "patient_label": user_id_short,
+        "patient_registration_status": "incomplete",
+        "patient_phone_masked": "",
     }
     if not user_id:
         return fallback
@@ -168,13 +181,16 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         from database.patient_profile import read_patient_profile
         profile = read_patient_profile(user_id) or {}
     except Exception:
-        logger.exception("Error loading patient identity user_id=%s", user_id)
+        from utils.pii import scrub_user_id
+        logger.exception("Error loading patient identity user_id=%s", scrub_user_id(user_id))
         ttl_cache.set(cache_key, fallback, TTL_ALERTS_SECONDS)
         return fallback
 
     first_name = (profile.get("first_name") or "").strip()
     last_name = (profile.get("last_name") or "").strip()
     hn = (profile.get("hn") or "").strip()
+    status = (profile.get("registration_status") or "incomplete").strip() or "incomplete"
+    masked_phone = (profile.get("masked_phone") or "").strip()
     display_name = " ".join(part for part in (first_name, last_name) if part).strip()
     if display_name and hn:
         label = f"{display_name} · HN {hn}"
@@ -190,9 +206,57 @@ def _identity_for_user(user_id: str) -> dict[str, str]:
         "patient_hn": hn,
         "patient_display_name": display_name,
         "patient_label": label,
+        "patient_registration_status": status,
+        "patient_phone_masked": masked_phone,
     }
     ttl_cache.set(cache_key, result, TTL_ALERTS_SECONDS)
     return result
+
+
+def _registration_detail_for_user(user_id: str) -> dict[str, Any]:
+    fallback = {
+        "patient_phone": "",
+        "patient_phone_masked": "",
+        "patient_registration_status": "incomplete",
+        "patient_registered_at": "",
+        "patient_consent_version": "",
+        "patient_consent_at": "",
+        "patient_last_active_at": "",
+        "patient_missing_fields": ["first_name", "last_name", "hn", "phone", "consent"],
+    }
+    if not user_id:
+        return fallback
+    try:
+        from database.patient_profile import read_patient_profile
+        from services.patient_profile import registration_missing_fields
+
+        profile = read_patient_profile(user_id) or {}
+    except Exception:
+        from utils.pii import scrub_user_id
+        logger.exception("Error loading patient registry detail user_id=%s", scrub_user_id(user_id))
+        return fallback
+
+    missing_labels = {
+        "first_name": "ชื่อ",
+        "last_name": "นามสกุล",
+        "hn": "HN",
+        "phone": "เบอร์โทรศัพท์",
+        "consent": "ความยินยอมจากผู้ป่วย",
+    }
+    missing = [
+        missing_labels.get(field, field)
+        for field in registration_missing_fields(profile)
+    ]
+    return {
+        "patient_phone": profile.get("phone") or "",
+        "patient_phone_masked": profile.get("masked_phone") or "",
+        "patient_registration_status": profile.get("registration_status") or "incomplete",
+        "patient_registered_at": profile.get("registered_at") or "",
+        "patient_consent_version": profile.get("consent_version") or "",
+        "patient_consent_at": profile.get("consent_at") or "",
+        "patient_last_active_at": profile.get("last_active_at") or "",
+        "patient_missing_fields": missing,
+    }
 
 
 def _priority_label(priority: int) -> str:
@@ -217,6 +281,43 @@ def _parse_queue_timestamp(raw: str) -> Optional[datetime]:
         return dt.replace(tzinfo=LOCAL_TZ)
     except (ValueError, TypeError):
         return None
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(str(value).strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _failed_alert_status_label(status: str) -> str:
+    return {
+        "pending": "รอตรวจสอบ",
+        "failed": "ส่งล้มเหลว",
+    }.get(status, "รอตรวจสอบ")
+
+
+def _failed_alert_error_label(value: Any) -> str:
+    code = str(value or "").strip().casefold()
+    if code == "initial_line_push_failed":
+        return "ส่งแจ้งเตือน LINE ไม่สำเร็จ"
+    return "การส่งแจ้งเตือนไม่สำเร็จ"
+
+
+def _risk_label(level: str) -> str:
+    return {
+        "critical": "วิกฤต",
+        "high": "สูง",
+        "medium": "ปานกลาง",
+        "low": "ต่ำ",
+        "normal": "ปกติ",
+    }.get(level, "ไม่ทราบระดับ")
+
+
+def _event_type_label(event_type: str) -> str:
+    return {
+        "symptom_assessment": "รายงานอาการเสี่ยง",
+    }.get(event_type or "", "แจ้งพยาบาล")
 
 
 # -----------------------------------------------------------------------------
@@ -260,8 +361,9 @@ def get_recent_alerts(
     Args:
         days: ช่วงย้อนหลัง (default 7).
         limit: แถวสูงสุด (newest first).
-        min_risk_level: เกณฑ์ต่ำสุดที่นับเป็น alert. ``"low"`` = ทุกแถว,
-            ``"medium"`` = medium+high, ``"high"`` = เฉพาะ high.
+        min_risk_level: เกณฑ์ต่ำสุดที่นับเป็น alert. ``"low"`` =
+            low/medium/high/critical, ``"medium"`` = medium/high/critical,
+            ``"high"`` = high/critical. ``normal`` ไม่ถือเป็น alert.
         force_refresh: ข้าม cache.
 
     Returns:
@@ -281,6 +383,79 @@ def get_recent_alerts(
     return serialized[:limit]
 
 
+def get_failed_nurse_alert_snapshot(
+    limit: int = 200,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    """
+    Read-only failed nurse-delivery backlog for the dashboard.
+
+    Raw Payload_JSON and Notification_Message are intentionally omitted from
+    every returned item; this surface is for operator visibility only.
+    """
+    if not force_refresh:
+        cached = ttl_cache.get(CACHE_KEY_FAILED_ALERTS)
+        if cached is not None:
+            incr("dashboard.cache_hit.failed_alerts")
+            return _prepare_failed_alert_snapshot_for_return(cached, limit)
+
+    incr("dashboard.cache_miss.failed_alerts")
+    rows = _load_failed_alert_rows()
+    refreshed_at = datetime.now(tz=LOCAL_TZ).strftime("%H:%M:%S")
+
+    if rows is None:
+        incr("dashboard.failed_alerts.degraded")
+        snapshot = {
+            "items": [],
+            "pending_count": 0,
+            "failed_count": 0,
+            "actionable_count": 0,
+            "degraded": True,
+            "refreshed_at": refreshed_at,
+        }
+        ttl_cache.set(CACHE_KEY_FAILED_ALERTS, snapshot, TTL_FAILED_ALERTS_SECONDS)
+        return _prepare_failed_alert_snapshot_for_return(snapshot, limit)
+
+    items = [_serialize_failed_alert_row(row) for row in rows]
+    items = [item for item in items if item is not None]
+    items.sort(key=lambda i: (-risk_rank(i["risk_level"], score=i["risk_score"]),
+                              i["_sort_created_at"] or datetime.max.replace(tzinfo=LOCAL_TZ)))
+
+    pending_count = sum(1 for item in items if item["status"] == "pending")
+    failed_count = sum(1 for item in items if item["status"] == "failed")
+    for item in items:
+        item.pop("_sort_created_at", None)
+
+    snapshot = {
+        "items": items,
+        "pending_count": pending_count,
+        "failed_count": failed_count,
+        "actionable_count": pending_count + failed_count,
+        "degraded": False,
+        "refreshed_at": refreshed_at,
+    }
+    ttl_cache.set(CACHE_KEY_FAILED_ALERTS, snapshot, TTL_FAILED_ALERTS_SECONDS)
+    return _prepare_failed_alert_snapshot_for_return(snapshot, limit)
+
+
+def _prepare_failed_alert_snapshot_for_return(
+    snapshot: dict[str, Any],
+    limit: int,
+) -> dict[str, Any]:
+    """Copy the cached base snapshot and enrich identity only for returned rows."""
+    prepared = dict(snapshot)
+    limited_items = list(snapshot.get("items") or [])[:limit]
+    prepared["items"] = [_enrich_failed_alert_identity(item) for item in limited_items]
+    return prepared
+
+
+def _enrich_failed_alert_identity(item: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(item)
+    enriched.update(_identity_for_user(str(enriched.get("user_id") or "")))
+    return enriched
+
+
 def get_home_stats(*, force_refresh: bool = False) -> dict[str, Any]:
     """
     ตัวเลขรวมสำหรับหน้า home (queue count + alert count).
@@ -298,6 +473,7 @@ def get_home_stats(*, force_refresh: bool = False) -> dict[str, Any]:
 
     queue = get_queue_snapshot(limit=200)
     alerts_7d = get_recent_alerts(days=7, limit=500, min_risk_level="medium")
+    failed_alerts = get_failed_nurse_alert_snapshot(limit=1)
 
     today = datetime.now(tz=LOCAL_TZ).date()
     alerts_today = sum(
@@ -311,6 +487,10 @@ def get_home_stats(*, force_refresh: bool = False) -> dict[str, Any]:
         queue_high_priority=sum(1 for q in queue if q.get("priority") == 1),
         alerts_today=alerts_today,
         alerts_7d=len(alerts_7d),
+        failed_alerts_actionable=int(failed_alerts.get("actionable_count", 0)),
+        failed_alerts_pending=int(failed_alerts.get("pending_count", 0)),
+        failed_alerts_failed=int(failed_alerts.get("failed_count", 0)),
+        failed_alerts_degraded=bool(failed_alerts.get("degraded")),
         refreshed_at=datetime.now(tz=LOCAL_TZ),
     ).to_dict()
 
@@ -361,7 +541,7 @@ def get_patient_timeline(
             "type_label": "รายงานอาการ",
             "timestamp": ts,
             "timestamp_label": ts.strftime("%d/%m/%Y %H:%M") if ts else "",
-            "risk_level": (s.get("risk_level") or "").lower(),
+            "risk_level": normalize_risk_level(s.get("risk_level"), score=s.get("risk_score")),
             "risk_score": int(s.get("risk_score") or 0),
             "pain": s.get("pain") or "-",
             "wound": s.get("wound") or "-",
@@ -428,6 +608,7 @@ def get_patient_timeline(
         "events": events,
     }
     result.update(_identity_for_user(user_id))
+    result.update(_registration_detail_for_user(user_id))
     ttl_cache.set(key, result, 30)  # TTL 30s — patient view ไม่เปิดค้างนาน
     return result
 
@@ -444,6 +625,7 @@ def _empty_timeline(user_id: str) -> dict[str, Any]:
         "events": [],
     }
     result.update(_identity_for_user(user_id))
+    result.update(_registration_detail_for_user(user_id))
     return result
 
 
@@ -527,7 +709,7 @@ def get_patient_trend(
         risk_series.append({
             "ts_iso": ts_iso,
             "value": risk_score,
-            "level": (s.get("risk_level") or "").lower(),
+            "level": normalize_risk_level(s.get("risk_level"), score=risk_score),
         })
         pain_val = _extract_pain_score(s.get("pain"))
         if pain_val is not None:
@@ -708,6 +890,7 @@ def invalidate_dashboard_cache() -> int:
         "dash:patient:",
         "dash:preconsult:",
         "dash:identity:",
+        "dash:failed-alerts:",
     ):
         total += ttl_cache.invalidate_prefix(prefix)
     logger.info("Invalidated %d dashboard cache entries", total)
@@ -800,9 +983,6 @@ def _load_queue_from_sheets() -> list[QueueItem]:
         return []
 
 
-_RISK_RANK = {"low": 1, "medium": 2, "high": 3}
-
-
 def _load_alerts_from_sheets(
     days: int = 7,
     min_risk_level: str = "medium",
@@ -823,12 +1003,13 @@ def _load_alerts_from_sheets(
     from services.dashboard_actions import is_alert_dismissed
 
     try:
-        min_rank = _RISK_RANK.get(min_risk_level.lower(), 2)
+        min_rank = risk_rank(min_risk_level, score=2)
         rows = get_recent_symptom_reports(user_id=None, days=days, limit=500)
         items: list[AlertItem] = []
         for r in rows:
-            risk = (r.get("risk_level") or "").strip().lower()
-            if _RISK_RANK.get(risk, 0) < min_rank:
+            risk_score = int(r.get("risk_score") or 0)
+            risk = normalize_risk_level(r.get("risk_level"), score=risk_score)
+            if risk_rank(risk) < min_rank:
                 continue
             # กรอง alert ที่พยาบาล dismiss ไปแล้ว (เก็บ in-memory 24h)
             if is_alert_dismissed(r.get("user_id") or "", r.get("timestamp")):
@@ -837,8 +1018,8 @@ def _load_alerts_from_sheets(
                 AlertItem(
                     timestamp=r.get("timestamp"),
                     user_id=r.get("user_id") or "",
-                    risk_level=risk or "low",
-                    risk_score=int(r.get("risk_score") or 0),
+                    risk_level=risk,
+                    risk_score=risk_score,
                     pain=r.get("pain") or "",
                     wound=r.get("wound") or "",
                     fever=r.get("fever") or "",
@@ -850,6 +1031,49 @@ def _load_alerts_from_sheets(
     except Exception:
         logger.exception("Error loading alerts from Sheets")
         return []
+
+
+def _load_failed_alert_rows() -> list[dict[str, str]] | None:
+    try:
+        from database.failed_nurse_alerts import read_failed_nurse_alert_rows
+    except ImportError:
+        logger.exception("Failed to import failed nurse alert reader")
+        return None
+    return read_failed_nurse_alert_rows()
+
+
+def _serialize_failed_alert_row(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    status = str(row.get("Status") or "").strip().lower()
+    if status not in {"pending", "failed"}:
+        return None
+
+    user_id = str(row.get("User_ID") or "").strip()
+    if not user_id:
+        return None
+
+    score = _safe_int(row.get("Risk_Score"), 0)
+    risk_level = normalize_risk_level(row.get("Risk_Level"), score=score)
+    created_at = _parse_queue_timestamp(str(row.get("Created_At") or ""))
+    age_minutes = _age_minutes(created_at) if created_at else 0
+    item = {
+        "idempotency_key": str(row.get("Idempotency_Key") or "").strip(),
+        "created_at": created_at.strftime("%d/%m %H:%M") if created_at else "-",
+        "created_at_full": created_at.strftime("%Y-%m-%d %H:%M") if created_at else "",
+        "age_minutes": age_minutes,
+        "user_id": user_id,
+        "user_id_short": _short_user_id(user_id),
+        "risk_level": risk_level,
+        "risk_label": _risk_label(risk_level),
+        "risk_score": score,
+        "status": status,
+        "status_label": _failed_alert_status_label(status),
+        "retry_count": _safe_int(row.get("Retry_Count"), 0),
+        "error_label": _failed_alert_error_label(row.get("Last_Error")),
+        "event_type": str(row.get("Event_Type") or "").strip(),
+        "event_type_label": _event_type_label(str(row.get("Event_Type") or "").strip()),
+        "_sort_created_at": created_at,
+    }
+    return item
 
 
 # -----------------------------------------------------------------------------
@@ -1043,3 +1267,38 @@ def get_preconsult_packet(
 
     ttl_cache.set(cache_key, packet, TTL_PRECONSULT_SECONDS)
     return packet
+
+
+def get_survey_analytics_reader(*, force_refresh: bool = False) -> dict[str, Any]:
+    """Get survey analytics, caching the results (KWN-08)."""
+    from services.cache import ttl_cache
+    from database.surveys import get_survey_analytics
+    
+    cache_key = "dash:survey-analytics:v1"
+    if not force_refresh:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            return cached
+            
+    stats = get_survey_analytics()
+    ttl_cache.set(cache_key, stats, 30)
+    return stats
+
+
+def get_patient_survey_timeline_reader(user_id: str, *, force_refresh: bool = False) -> list[dict[str, Any]]:
+    """Get patient survey timeline, caching the results (KWN-08)."""
+    from services.cache import ttl_cache
+    from database.surveys import get_patient_survey_timeline
+    
+    if not user_id:
+        return []
+        
+    cache_key = f"dash:survey-timeline:v1:{user_id}"
+    if not force_refresh:
+        cached = ttl_cache.get(cache_key)
+        if cached is not None:
+            return cached
+            
+    timeline = get_patient_survey_timeline(user_id)
+    ttl_cache.set(cache_key, timeline, 30)
+    return timeline

@@ -269,9 +269,12 @@ def handle_emergency(user_id, description):
 
         send_line_push(alert_message, NURSE_GROUP_ID)
         
+        from config import NURSE_CONTACT_LINK
         message = (
             "🚨 รับเรื่องฉุกเฉินแล้วค่ะ\n\n"
             "📞 กำลังติดต่อพยาบาลด่วน...\n\n"
+            "💬 หรือกดเพื่อติดต่อพยาบาลขวัญเรือนโดยตรง:\n"
+            f"{NURSE_CONTACT_LINK}\n\n"
             "⚠️ ถ้าอาการรุนแรงมาก\n"
             "โปรดโทร 1669 ทันทีค่ะ\n\n"
             "พยาบาลจะติดต่อกลับภายใน 5 นาที"
@@ -398,7 +401,7 @@ def handle_after_hours_choice(user_id, choice_text):
             description = session.get('Description', '') if session else ''
             return handle_emergency(user_id, description)
 
-        elif stripped == "2" or "ไม่เร่งด่วน" in stripped or "บันทึก" in stripped:
+        elif stripped == "2" or "ไม่เร่งด่วน" in stripped or "บันทึก" in stripped or "รอเวลาทำการ" in stripped:
             # ยืนยันว่าบันทึกแล้ว และแจ้งพยาบาล
             session = get_user_active_session(user_id)
             if session:

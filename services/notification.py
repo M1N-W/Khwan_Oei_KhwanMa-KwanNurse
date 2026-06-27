@@ -109,6 +109,73 @@ def send_line_push(message, target_id=None):
     return False
 
 
+def send_line_push_objects(messages: list, target_id: str) -> bool:
+    """
+    Send a list of LINE message objects (Text, Flex, Quick Reply, etc.)
+    via the push API (KWN-05).
+
+    Unlike ``send_line_push`` which accepts a plain string, this function
+    accepts pre-built LINE message dicts so callers can send Flex / Quick
+    Reply payloads.
+
+    Args:
+        messages:  List of LINE message object dicts.
+        target_id: Target LINE user/group ID.
+
+    Returns:
+        bool: True on success.
+    """
+    access_token = LINE_CHANNEL_ACCESS_TOKEN
+    if not access_token or not target_id or not messages:
+        logger.warning("send_line_push_objects: token, target_id, or messages missing")
+        _metric("line_push_objects.skip_unconfigured")
+        return False
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+    }
+    payload = {"to": target_id, "messages": messages}
+
+    last_status = None
+    for attempt in range(_LINE_PUSH_RETRIES + 1):
+        try:
+            resp = requests.post(
+                LINE_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=_LINE_PUSH_TIMEOUT_SECONDS,
+            )
+            last_status = resp.status_code
+            if resp.status_code // 100 == 2:
+                _metric("line_push_objects.success")
+                logger.info("Rich push sent to %s (%d objects)", target_id, len(messages))
+                return True
+            if resp.status_code // 100 == 5:
+                logger.warning(
+                    "line_push_objects 5xx attempt %d/%d: %s",
+                    attempt + 1, _LINE_PUSH_RETRIES + 1, resp.status_code,
+                )
+            else:
+                logger.error("line_push_objects 4xx (no retry): %s %s", resp.status_code, resp.text)
+                _metric("line_push_objects.4xx")
+                return False
+        except requests.exceptions.Timeout:
+            logger.warning("line_push_objects timeout attempt %d/%d", attempt + 1, _LINE_PUSH_RETRIES + 1)
+        except requests.exceptions.RequestException as e:
+            logger.warning("line_push_objects network error attempt %d/%d: %s", attempt + 1, _LINE_PUSH_RETRIES + 1, e)
+        except Exception:
+            logger.exception("line_push_objects unexpected error")
+            return False
+
+        if attempt < _LINE_PUSH_RETRIES:
+            time.sleep(_LINE_PUSH_BACKOFF_SECONDS[min(attempt, len(_LINE_PUSH_BACKOFF_SECONDS) - 1)])
+
+    logger.error("line_push_objects giving up after %d attempts (last status=%s)", _LINE_PUSH_RETRIES + 1, last_status)
+    _metric("line_push_objects.gave_up")
+    return False
+
+
 def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level, risk_score):
     """
     Build notification message for symptom report
@@ -263,6 +330,54 @@ def reply_line_message(reply_token: str, message: str) -> bool:
         return False
 
 
+def reply_line_message_objects(reply_token: str, messages: list) -> bool:
+    """
+    Send a list of LINE message objects via reply API (KWN-05).
+
+    Args:
+        reply_token: ``event.replyToken`` from the LINE webhook.
+        messages:    List of LINE message object dicts.
+
+    Returns:
+        bool: True on success.
+    """
+    if not reply_token or not messages:
+        return False
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        logger.warning("LINE token not configured — cannot reply with objects")
+        _metric("line_reply_objects.skip_unconfigured")
+        return False
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+    payload = {"replyToken": reply_token, "messages": messages}
+    try:
+        resp = requests.post(
+            LINE_REPLY_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=_LINE_REPLY_TIMEOUT_SECONDS,
+        )
+        if resp.status_code // 100 == 2:
+            _metric("line_reply_objects.success")
+            return True
+        logger.warning("line_reply_objects non-2xx status=%s body=%s", resp.status_code, resp.text[:200])
+        _metric(f"line_reply_objects.status_{resp.status_code // 100}xx")
+        return False
+    except requests.exceptions.Timeout:
+        _metric("line_reply_objects.timeout")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.warning("line_reply_objects network error: %s", e)
+        _metric("line_reply_objects.network_error")
+        return False
+    except Exception:
+        logger.exception("line_reply_objects unexpected error")
+        return False
+
+
 def build_wound_alert_message(
     user_id: str,
     severity: str,
@@ -356,3 +471,49 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     )
     
     return message
+
+
+def build_clinical_alert(alert_type: str, user_id: str, context: dict) -> str:
+    """
+    Unified router for building clinical alert notifications (KWN-09).
+    Bridges to individual notification builder functions.
+    """
+    if alert_type == "symptom":
+        return build_symptom_notification(
+            user_id=user_id,
+            pain=context.get("pain", "-"),
+            wound=context.get("wound", "-"),
+            fever=context.get("fever", "-"),
+            mobility=context.get("mobility", "-"),
+            risk_level=context.get("risk_level", "-"),
+            risk_score=context.get("risk_score", 0)
+        )
+    elif alert_type == "risk":
+        return build_risk_notification(
+            user_id=user_id,
+            age=context.get("age", 0),
+            bmi=context.get("bmi", 0.0),
+            diseases_str=context.get("diseases_str", "-"),
+            risk_level=context.get("risk_level", "-"),
+            risk_score=context.get("risk_score", 0)
+        )
+    elif alert_type == "appointment":
+        return build_appointment_notification(
+            user_id=user_id,
+            name=context.get("name", "-"),
+            phone=context.get("phone", "-"),
+            preferred_date=context.get("preferred_date", "-"),
+            preferred_time=context.get("preferred_time", "-"),
+            reason=context.get("reason", "-")
+        )
+    elif alert_type == "wound":
+        return build_wound_alert_message(
+            user_id=user_id,
+            severity=context.get("severity", "medium"),
+            observations=context.get("observations", []),
+            advice=context.get("advice", ""),
+            confidence=context.get("confidence", 0.0)
+        )
+    else:
+        raise ValueError(f"Unknown alert type: {alert_type}")
+

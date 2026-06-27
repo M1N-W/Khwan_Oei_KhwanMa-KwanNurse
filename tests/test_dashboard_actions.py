@@ -72,6 +72,29 @@ class AssignNurseTests(unittest.TestCase):
         # ตรวจว่า cache ถูก invalidate
         self.assertIsNone(ttl_cache.get("dash:queue:v1"))
 
+    def test_assign_success_sends_notification(self):
+        from services import dashboard_actions
+
+        sheet = _FakeQueueSheet([
+            ["q1", "2026-04-24 00:00:00", "S100", "U1", "med", "2", "waiting", "10"],
+        ])
+        with patch("database.sheets.get_worksheet", return_value=sheet), \
+             patch("database.teleconsult.update_session_status", return_value=True), \
+             patch("database.teleconsult.remove_from_queue", return_value=True), \
+             patch("services.line_message.push_rich_message") as m_push:
+            
+            result = dashboard_actions.assign_nurse_to_session("q1", "nurse_kwan")
+            
+        self.assertTrue(result.ok)
+        m_push.assert_called_once()
+        args, kwargs = m_push.call_args
+        messages = args[0]
+        target_id = args[1]
+        self.assertEqual(target_id, "U1")
+        self.assertEqual(len(messages), 1)
+        self.assertIn("ขวัญเรือน", messages[0]["altText"])
+        self.assertIn("https://line.me/ti/p/0899181839", messages[0]["altText"])
+
     def test_assign_queue_not_found(self):
         from services import dashboard_actions
 

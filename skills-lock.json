@@ -1,10 +1,22 @@
 {
   "version": 1,
   "skills": {
+    "flask-python": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "flask-python/SKILL.md",
+      "computedHash": "35f4d421129a992a70eeceb570fb4eca7ea1a84b2fcd5706e9df09ecb8c24194"
+    },
     "next-best-practices": {
       "source": "vercel-labs/next-skills",
       "sourceType": "github",
       "computedHash": "c31ddd68ba5798a79a516c619b1e1fc4408cc4876ad600fefa4f5add4425719d"
+    },
+    "skill-to-linebot": {
+      "source": "wolke/skill-to-linebot",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "fece609848e8bd51690ea1bc0b1e8c7a1d1fe5fb8a269ece193b80586baf72d8"
     }
   }
 }

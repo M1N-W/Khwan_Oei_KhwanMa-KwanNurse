@@ -1,0 +1,340 @@
+# -*- coding: utf-8 -*-
+"""Persistent backlog for failed high-risk nurse alerts."""
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime
+from typing import Any
+
+from config import LOCAL_TZ, SHEET_FAILED_NURSE_ALERTS, get_logger
+from database.sheets import get_spreadsheet, get_worksheet
+
+logger = get_logger(__name__)
+
+HEADER = [
+    "Created_At",
+    "Idempotency_Key",
+    "Event_Type",
+    "User_ID",
+    "Risk_Level",
+    "Risk_Score",
+    "Payload_JSON",
+    "Notification_Message",
+    "Status",
+    "Retry_Count",
+    "Last_Error",
+    "Last_Attempt_At",
+    "Resolved_At",
+    "Resolved_By",
+]
+READ_REQUIRED_HEADERS = {
+    "Created_At",
+    "User_ID",
+    "Risk_Level",
+    "Risk_Score",
+    "Status",
+}
+
+_EVENT_TYPE = "symptom_assessment"
+_STATUS_PENDING = "pending"
+_LAST_ERROR = "initial_line_push_failed"
+USER_ID_MAX_CHARS = 255
+RISK_CODE_MAX_CHARS = 32
+PAIN_MAX_CHARS = 64
+WOUND_MAX_CHARS = 500
+FEVER_MAX_CHARS = 500
+MOBILITY_MAX_CHARS = 500
+NEURO_MAX_CHARS = 500
+NOTIFICATION_MESSAGE_MAX_CHARS = 4000
+PAYLOAD_JSON_MAX_CHARS = 4000
+
+
+def _bound(value: str, limit: int) -> str:
+    return value[:limit]
+
+
+def _normalize_identifier(value: Any, limit: int = USER_ID_MAX_CHARS) -> str:
+    """Normalize an opaque identifier without changing its case."""
+    raw = "" if value is None else str(value).strip()
+    return _bound(raw, limit)
+
+
+def _normalize_free_text(value: Any, limit: int) -> str:
+    return "" if value is None else str(value).strip().casefold()
+
+
+def _normalized_payload(
+    user_id: Any,
+    risk_code: Any,
+    risk_score: Any,
+    pain: Any,
+    wound: Any,
+    fever: Any,
+    mobility: Any,
+    neuro: Any = None,
+) -> dict[str, Any]:
+    try:
+        score = int(risk_score)
+    except (TypeError, ValueError):
+        score = 0
+    return {
+        "user_id": _normalize_identifier(user_id),
+        "risk_code": _bound(_normalize_free_text(risk_code, RISK_CODE_MAX_CHARS), RISK_CODE_MAX_CHARS),
+        "risk_score": score,
+        "pain": _bound(_normalize_free_text(pain, PAIN_MAX_CHARS), PAIN_MAX_CHARS),
+        "wound": _bound(_normalize_free_text(wound, WOUND_MAX_CHARS), WOUND_MAX_CHARS),
+        "fever": _bound(_normalize_free_text(fever, FEVER_MAX_CHARS), FEVER_MAX_CHARS),
+        "mobility": _bound(_normalize_free_text(mobility, MOBILITY_MAX_CHARS), MOBILITY_MAX_CHARS),
+        "neuro": _bound(_normalize_free_text(neuro, NEURO_MAX_CHARS), NEURO_MAX_CHARS),
+    }
+
+
+def _canonical_json(payload: dict[str, Any]) -> str:
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _idempotency_key_from_payload(payload: dict[str, Any]) -> str:
+    digest = hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+    return f"symptom-alert:v1:{digest}"
+
+
+def build_symptom_alert_idempotency_key(
+    user_id: Any,
+    risk_code: Any,
+    risk_score: Any,
+    pain: Any,
+    wound: Any,
+    fever: Any,
+    mobility: Any,
+    neuro: Any = None,
+) -> str:
+    """Return an opaque deterministic key for a failed symptom alert."""
+    payload = _normalized_payload(
+        user_id, risk_code, risk_score, pain, wound, fever, mobility, neuro,
+    )
+    return _idempotency_key_from_payload(payload)
+
+
+def _safe_cell(value: Any, limit: int) -> str:
+    text = "" if value is None else str(value)
+    return text[:limit]
+
+
+def read_failed_nurse_alert_rows() -> list[dict[str, str]] | None:
+    """
+    Read raw FailedNurseAlerts rows without creating or mutating the sheet.
+
+    Returns:
+        None: spreadsheet access failed or an unexpected worksheet read error occurred.
+        []: spreadsheet is reachable but the worksheet is missing or has no data rows.
+        list[dict]: rows keyed by header names, padded for short rows.
+    """
+    try:
+        spreadsheet = get_spreadsheet()
+        if spreadsheet is None:
+            logger.warning("failed_nurse_alerts: spreadsheet unavailable for read")
+            return None
+
+        try:
+            sheet = spreadsheet.worksheet(SHEET_FAILED_NURSE_ALERTS)
+        except Exception as exc:
+            if exc.__class__.__name__ == "WorksheetNotFound":
+                logger.info("failed_nurse_alerts: worksheet missing during read")
+                return []
+            logger.exception("failed_nurse_alerts: worksheet open failed during read")
+            return None
+
+        values = sheet.get_all_values()
+        if not values:
+            return []
+
+        headers = [str(h).strip() for h in values[0]]
+        if not any(headers):
+            logger.warning("failed_nurse_alerts: invalid visibility schema during read")
+            return None
+        if not READ_REQUIRED_HEADERS.issubset(set(headers)):
+            logger.warning("failed_nurse_alerts: invalid visibility schema during read")
+            return None
+        if len(values) < 2:
+            return []
+
+        rows: list[dict[str, str]] = []
+        for row in values[1:]:
+            padded = list(row) + [""] * max(0, len(headers) - len(row))
+            record = dict(zip(headers, padded))
+            rows.append(record)
+        return rows
+    except Exception:
+        logger.exception("failed_nurse_alerts: read failed")
+        return None
+
+
+def _get_or_create_sheet():
+    sheet = get_worksheet(SHEET_FAILED_NURSE_ALERTS)
+    if sheet is not None:
+        return sheet
+
+    spreadsheet = get_spreadsheet()
+    if spreadsheet is None:
+        logger.warning("failed_nurse_alerts: no spreadsheet handle")
+        return None
+
+    try:
+        sheet = spreadsheet.add_worksheet(
+            title=SHEET_FAILED_NURSE_ALERTS,
+            rows=1000,
+            cols=len(HEADER),
+        )
+        sheet.append_row(HEADER, value_input_option="USER_ENTERED")
+        logger.info("failed_nurse_alerts: auto-created sheet")
+        return sheet
+    except Exception:
+        logger.exception("failed_nurse_alerts: auto-create failed")
+        return None
+
+
+def _verify_headers_and_get_sheet():
+    sheet = _get_or_create_sheet()
+    if sheet is None:
+        return None
+    try:
+        values = sheet.get_all_values()
+        if values:
+            raw_headers = [str(h).strip() for h in values[0]]
+            headers = list(raw_headers)
+            changed = False
+            for h in HEADER:
+                if h not in headers:
+                    headers.append(h)
+                    changed = True
+            if changed:
+                from database.sheets import column_number_to_letter
+                end_col = column_number_to_letter(len(headers))
+                sheet.update(f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED")
+    except Exception:
+        logger.exception("failed_nurse_alerts: header verification failed")
+    return sheet
+
+
+def save_failed_symptom_alert(
+    *,
+    user_id: Any,
+    risk_code: Any,
+    risk_score: Any,
+    pain: Any,
+    wound: Any,
+    fever: Any,
+    mobility: Any,
+    neuro: Any = None,
+    notification_message: str = "",
+) -> bool:
+    """
+    Append one failed high-risk symptom alert row.
+
+    This does not scan for duplicates and does not retry; the idempotency key is
+    for a future worker contract, while the webhook path remains bounded.
+    """
+    try:
+        sheet = _verify_headers_and_get_sheet()
+        if sheet is None:
+            return False
+
+        payload = _normalized_payload(
+            user_id, risk_code, risk_score, pain, wound, fever, mobility, neuro,
+        )
+        payload_json = _canonical_json(payload)
+        if len(payload_json) > PAYLOAD_JSON_MAX_CHARS:
+            logger.error("failed_nurse_alerts: bounded payload still too large")
+            return False
+        key = _idempotency_key_from_payload(payload)
+        created_at = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        row = [
+            created_at,
+            key,
+            _EVENT_TYPE,
+            payload["user_id"],
+            payload["risk_code"],
+            payload["risk_score"],
+            payload_json,
+            _safe_cell(notification_message, NOTIFICATION_MESSAGE_MAX_CHARS),
+            _STATUS_PENDING,
+            0,
+            _LAST_ERROR,
+        ]
+        # Pad row to match HEADER length
+        row = row + [""] * max(0, len(HEADER) - len(row))
+        sheet.append_row(row, value_input_option="USER_ENTERED")
+        logger.info(
+            "failed_nurse_alerts: appended event=%s risk=%s score=%s key=%s",
+            _EVENT_TYPE, payload["risk_code"], payload["risk_score"], key,
+        )
+        return True
+    except Exception:
+        logger.exception("failed_nurse_alerts: append failed")
+        return False
+
+
+def read_failed_nurse_alert_by_key(idempotency_key: str) -> Optional[dict[str, Any]]:
+    """Read a specific failed alert row by Idempotency_Key."""
+    if not idempotency_key:
+        return None
+    try:
+        sheet = _verify_headers_and_get_sheet()
+        if not sheet:
+            return None
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return None
+        headers = [str(h).strip() for h in values[0]]
+        if "Idempotency_Key" not in headers:
+            return None
+        idx_key = headers.index("Idempotency_Key")
+        for row in reversed(values[1:]):
+            if len(row) > idx_key and row[idx_key] == idempotency_key:
+                padded = list(row) + [""] * max(0, len(headers) - len(row))
+                return dict(zip(headers, padded))
+        return None
+    except Exception:
+        logger.exception("failed_nurse_alerts: read_failed_nurse_alert_by_key failed key=%s", idempotency_key)
+        return None
+
+
+def update_failed_alert_by_key(idempotency_key: str, updates: dict[str, Any]) -> bool:
+    """Update columns in a failed alert row by Idempotency_Key."""
+    if not idempotency_key:
+        return False
+    try:
+        sheet = _verify_headers_and_get_sheet()
+        if not sheet:
+            return False
+        values = sheet.get_all_values()
+        if not values or len(values) < 2:
+            return False
+        headers = [str(h).strip() for h in values[0]]
+        if "Idempotency_Key" not in headers:
+            return False
+        idx_key = headers.index("Idempotency_Key")
+        for sheet_row_index, row in enumerate(values[1:], start=2):
+            if len(row) > idx_key and row[idx_key] == idempotency_key:
+                padded = list(row) + [""] * max(0, len(headers) - len(row))
+                record = dict(zip(headers, padded))
+                # Apply updates
+                for key, val in updates.items():
+                    if key in headers:
+                        record[key] = val
+                new_row = [record.get(h, "") for h in headers]
+                from database.sheets import column_number_to_letter
+                end_col = column_number_to_letter(len(headers))
+                target_range = f"A{sheet_row_index}:{end_col}{sheet_row_index}"
+                sheet.update(target_range, [new_row], value_input_option="USER_ENTERED")
+                return True
+        return False
+    except Exception:
+        logger.exception("failed_nurse_alerts: update_failed_alert_by_key failed key=%s", idempotency_key)
+        return False

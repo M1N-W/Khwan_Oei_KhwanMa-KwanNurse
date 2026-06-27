@@ -5,6 +5,7 @@
     ('dashboard.home', url_for('dashboard.home'), 'หน้าหลัก'),
     ('dashboard.queue_view', url_for('dashboard.queue_view'), 'คิวปรึกษา'),
     ('dashboard.alerts_view', url_for('dashboard.alerts_view'), 'การแจ้งเตือน'),
+    ('dashboard.failed_alerts_view', url_for('dashboard.failed_alerts_view'), 'การส่งล้มเหลว'),
 ] %}
 {% set _active = request.endpoint %}
 

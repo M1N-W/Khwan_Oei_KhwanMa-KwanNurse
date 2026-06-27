@@ -336,6 +336,74 @@ class PreviewRouteTests(unittest.TestCase):
         self.assertIn("Q-1", body)
         self.assertIn("เจ็บมาก", body)
 
+    def test_preview_renders_critical_risk_as_urgent_thai_label(self):
+        from routes.dashboard import views as dashboard_views
+        with patch.object(dashboard_views, "get_preconsult_packet",
+                          return_value={
+                              "queue_id": "Q-1",
+                              "session_id": "S-1",
+                              "user_id": "U-abc",
+                              "user_id_short": "U-ab…",
+                              "issue_type": "wound",
+                              "issue_label": "แผลผ่าตัด",
+                              "priority": 1,
+                              "priority_label": "ด่วนมาก",
+                              "queued_at": "2026-04-26 10:00",
+                              "waited_minutes": 8,
+                              "description": "",
+                              "latest_risk_level": "critical",
+                              "symptom_count": 1,
+                              "session_count": 0,
+                              "recent_events": [],
+                              "pending_reminders": [],
+                              "risk_profile": None,
+                              "briefing": "",
+                          }):
+            resp = self.client.get("/dashboard/queue/Q-1/preview")
+
+        body = resp.get_data(as_text=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("text-high", body)
+        self.assertIn("วิกฤต", body)
+        self.assertNotIn(">critical<", body)
+
+    def test_preview_renders_existing_high_and_medium_risk_labels(self):
+        from routes.dashboard import views as dashboard_views
+
+        def packet(level):
+            return {
+                "queue_id": "Q-1",
+                "session_id": "S-1",
+                "user_id": "U-abc",
+                "user_id_short": "U-ab…",
+                "issue_type": "wound",
+                "issue_label": "แผลผ่าตัด",
+                "priority": 2,
+                "priority_label": "ปานกลาง",
+                "queued_at": "2026-04-26 10:00",
+                "waited_minutes": 8,
+                "description": "",
+                "latest_risk_level": level,
+                "symptom_count": 1,
+                "session_count": 0,
+                "recent_events": [],
+                "pending_reminders": [],
+                "risk_profile": None,
+                "briefing": "",
+            }
+
+        with patch.object(dashboard_views, "get_preconsult_packet",
+                          return_value=packet("high")):
+            high = self.client.get("/dashboard/queue/Q-1/preview").get_data(as_text=True)
+        with patch.object(dashboard_views, "get_preconsult_packet",
+                          return_value=packet("medium")):
+            medium = self.client.get("/dashboard/queue/Q-1/preview").get_data(as_text=True)
+
+        self.assertIn("text-high", high)
+        self.assertIn("สูง", high)
+        self.assertIn("text-medium", medium)
+        self.assertIn("ปานกลาง", medium)
+
     def test_preview_renders_not_found_when_packet_none(self):
         from routes.dashboard import views as dashboard_views
         with patch.object(dashboard_views, "get_preconsult_packet",

@@ -1,5 +1,7 @@
 # 🚀 Sprint 2 Plan — Phase 2 Functional Gaps
 
+> Historical sprint plan. Current implementation order, work-unit status, dependencies, and commit tracking live in [`docs/MASTER_ROADMAP.md`](./docs/MASTER_ROADMAP.md).
+
 **Goal**: ปิด **3 P0/P1 gaps** จาก `PRODUCT_VISION.md` Phase 2:
 
 1. 📋 **Pre-consult Summary** (P0) — รวบรวม context ผู้ป่วยก่อนพยาบาลรับเคส

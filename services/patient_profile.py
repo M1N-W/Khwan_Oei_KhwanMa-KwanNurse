@@ -23,18 +23,45 @@ conversation burst.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Optional
 
-from config import get_logger
-from database.patient_profile import read_patient_profile, upsert_patient_profile
+from config import LOCAL_TZ, PATIENT_CONSENT_VERSION, get_logger
+from database.patient_profile import (
+    read_patient_profile,
+    read_patient_profile_result,
+    upsert_patient_profile,
+)
 from services.cache import ttl_cache
 from services.metrics import incr as _metric
+from utils.parsers import is_valid_thai_mobile, normalize_phone_number
+from utils.pii import scrub_user_id
 
 logger = get_logger(__name__)
 
 
 CACHE_KEY_PREFIX = "profile:v1"
 CACHE_TTL_SECONDS = 60  # short — profile rarely changes mid-conversation
+
+REGISTRATION_FIELD_ORDER = ("first_name", "last_name", "hn", "phone", "consent")
+LAST_ACTIVE_CACHE_PREFIX = "profile:last-active:v1"
+LAST_ACTIVE_THROTTLE_SECONDS = 6 * 3600
+
+
+@dataclass(frozen=True)
+class RegistrationUpdate:
+    profile: dict[str, Any]
+    missing_fields: list[str]
+    invalid_fields: list[str]
+    consent_declined: bool = False
+
+
+@dataclass(frozen=True)
+class RegistrationPromptDecision:
+    prompt: bool
+    reason: str = ""
+    missing_fields: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +91,181 @@ def _clean_text(value: Any, max_len: int) -> str:
     if value in (None, ""):
         return ""
     return " ".join(str(value).strip().split())[:max_len]
+
+
+def mask_phone_number(phone: Any) -> str:
+    normalized = normalize_phone_number(phone)
+    if not normalized or not is_valid_thai_mobile(normalized):
+        return ""
+    return f"{normalized[:2]}X-XXX-{normalized[-4:]}"
+
+
+def normalize_registration_phone(value: Any) -> tuple[str, bool]:
+    if value in (None, ""):
+        return "", False
+    normalized = normalize_phone_number(value)
+    if normalized and is_valid_thai_mobile(normalized):
+        return normalized, False
+    return "", True
+
+
+def parse_consent_value(value: Any) -> Optional[bool]:
+    if value in (None, ""):
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    negatives = {"ไม่ยินยอม", "ไม่ตกลง", "no", "decline", "false", "0", "ไม่"}
+    positives = {"ยินยอม", "ตกลง", "yes", "agree", "true", "1"}
+    if text in negatives:
+        return False
+    if text in positives:
+        return True
+    return None
+
+
+def extract_explicit_consent(params: Optional[dict[str, Any]]) -> Optional[bool]:
+    if not params:
+        return None
+    for key in ("consent", "patient_consent", "privacy_consent", "registration_consent"):
+        if key in params:
+            parsed = parse_consent_value(params.get(key))
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def registration_missing_fields(profile: Optional[dict[str, Any]]) -> list[str]:
+    profile = profile or {}
+    missing: list[str] = []
+    for key in ("first_name", "last_name", "hn"):
+        if not (profile.get(key) or "").strip():
+            missing.append(key)
+    phone = profile.get("phone") or ""
+    if not (phone and is_valid_thai_mobile(str(phone))):
+        missing.append("phone")
+    if (
+        (profile.get("consent_version") or "") != PATIENT_CONSENT_VERSION
+        or not (profile.get("consent_at") or "")
+    ):
+        missing.append("consent")
+    return missing
+
+
+def is_registration_complete(profile: Optional[dict[str, Any]]) -> bool:
+    return not registration_missing_fields(profile)
+
+
+def prepare_registration_update(
+    existing: Optional[dict[str, Any]],
+    params: Optional[dict[str, Any]],
+) -> RegistrationUpdate:
+    merged = dict(existing or {})
+    normalized_identity = normalize_identity_fields(params)
+    merged.update(normalized_identity)
+
+    invalid: list[str] = []
+    if params and any(k in params for k in ("phone", "phone_number", "phone-number", "tel")):
+        raw_phone = (
+            params.get("phone")
+            or params.get("phone_number")
+            or params.get("phone-number")
+            or params.get("tel")
+        )
+        phone, bad = normalize_registration_phone(raw_phone)
+        if bad:
+            invalid.append("phone")
+        elif phone:
+            merged["phone"] = phone
+
+    consent = extract_explicit_consent(params)
+    consent_declined = consent is False
+    if consent is True:
+        merged["consent_granted"] = True
+        merged["consent_version"] = PATIENT_CONSENT_VERSION
+
+    missing = registration_missing_fields(merged)
+    if merged.get("consent_granted") is True and "consent" in missing:
+        missing.remove("consent")
+    return RegistrationUpdate(
+        profile=merged,
+        missing_fields=missing,
+        invalid_fields=invalid,
+        consent_declined=consent_declined,
+    )
+
+
+def should_prompt_registration(user_id: str) -> RegistrationPromptDecision:
+    if not user_id:
+        return RegistrationPromptDecision(False, "missing_user")
+    result = read_patient_profile_result(user_id)
+    if not result.available:
+        return RegistrationPromptDecision(False, "storage_unavailable")
+    missing = registration_missing_fields(result.profile)
+    if missing:
+        return RegistrationPromptDecision(True, "incomplete", tuple(missing))
+    return RegistrationPromptDecision(False, "complete")
+
+
+def touch_last_active(user_id: str, now: Optional[datetime] = None) -> bool:
+    """Best-effort activity timestamp update for existing profiles only."""
+    if not user_id:
+        return False
+    throttle_key = f"{LAST_ACTIVE_CACHE_PREFIX}:{user_id}"
+    if ttl_cache.get(throttle_key) is not None:
+        _metric("patient_registration.last_active_skipped")
+        return False
+    try:
+        now = now or datetime.now(tz=LOCAL_TZ)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=LOCAL_TZ)
+        result = read_patient_profile_result(user_id)
+        if not result.available or not result.profile:
+            _metric("patient_registration.last_active_skipped")
+            return False
+        profile = dict(result.profile)
+        last_raw = profile.get("last_active_at") or ""
+        if last_raw:
+            try:
+                last = datetime.strptime(last_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=LOCAL_TZ)
+                age_seconds = max(0.0, (now - last).total_seconds())
+                if age_seconds < LAST_ACTIVE_THROTTLE_SECONDS:
+                    ttl_cache.set(
+                        throttle_key,
+                        True,
+                        max(1.0, LAST_ACTIVE_THROTTLE_SECONDS - age_seconds),
+                    )
+                    _metric("patient_registration.last_active_skipped")
+                    return False
+            except ValueError:
+                pass
+        profile["last_active_at"] = now.strftime("%Y-%m-%d %H:%M:%S")
+        ok = upsert_patient_profile(user_id, profile)
+        if ok:
+            invalidate_profile_cache(user_id)
+            ttl_cache.set(throttle_key, True, LAST_ACTIVE_THROTTLE_SECONDS)
+            _metric("patient_registration.last_active_updated")
+            
+            # Schedule milestone surveys if registered
+            if profile.get("registration_status") == "registered":
+                try:
+                    from services.survey import schedule_milestone_surveys
+                    schedule_milestone_surveys(user_id, now)
+                except Exception:
+                    logger.exception("Failed to schedule milestone surveys for user=%s", scrub_user_id(user_id))
+        else:
+            _metric("patient_registration.last_active_failed")
+        return ok
+    except Exception:
+        logger.exception("touch_last_active failed user_id=%s", scrub_user_id(user_id))
+        _metric("patient_registration.last_active_failed")
+        return False
+
+
+def mark_last_active_throttled(user_id: str) -> None:
+    """Mark activity as freshly written by another profile upsert."""
+    if user_id:
+        ttl_cache.set(f"{LAST_ACTIVE_CACHE_PREFIX}:{user_id}", True, LAST_ACTIVE_THROTTLE_SECONDS)
 
 
 def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str]:
@@ -325,3 +527,109 @@ def invalidate_profile_cache(user_id: str = "") -> int:
         ttl_cache.invalidate(f"{CACHE_KEY_PREFIX}:{user_id}")
         return 1
     return ttl_cache.invalidate_prefix(f"{CACHE_KEY_PREFIX}:")
+
+
+# ---------------------------------------------------------------------------
+# KWN-06: Registration Quick Reply and Flex UX helpers
+# ---------------------------------------------------------------------------
+
+#: Ordered list of fields shown in registration prompts and their Thai labels.
+_REGISTRATION_FIELD_LABELS: dict[str, str] = {
+    "first_name": "ชื่อ",
+    "last_name":  "นามสกุล",
+    "hn":         "HN (เลขบัตรผู้ป่วย)",
+    "phone":      "เบอร์โทรศัพท์",
+    "consent":    "ยินยอมให้ใช้ข้อมูล",
+}
+
+#: Quick-reply labels for the consent field specifically.
+_CONSENT_ITEMS_LABELS = [("ยินยอม ✅", "ยินยอม"), ("ไม่ยินยอม ❌", "ไม่ยินยอม")]
+
+
+def build_registration_quick_replies(missing_fields: list[str]) -> list[dict]:
+    """
+    Build Quick Reply button items for the next missing registration field.
+
+    Shows helpful shortcut answers for the *first* missing field only, so the
+    conversation remains one-step-at-a-time.  Falls back to an empty list when
+    no missing field matches a supported quick-reply pattern.
+
+    The consent field gets a bespoke Yes/No button pair.
+
+    Args:
+        missing_fields: Ordered list of field names that are still required.
+
+    Returns:
+        list[dict]: LINE Quick Reply item dicts (empty list = no quick reply).
+    """
+    from services.line_message import quick_reply_item  # deferred to avoid circular import at module load
+
+    if not missing_fields:
+        return []
+
+    next_field = missing_fields[0]
+
+    if next_field == "consent":
+        return [quick_reply_item(label, text) for label, text in _CONSENT_ITEMS_LABELS]
+
+    # Surgery type helper options
+    if next_field == "surgery_type":
+        options = [
+            ("ผ่าตัดข้อเข่า", "เปลี่ยนข้อเข่า"),
+            ("ผ่าตัดข้อสะโพก", "เปลี่ยนข้อสะโพก"),
+            ("ผ่าตัดอื่นๆ", "อื่นๆ"),
+        ]
+        return [quick_reply_item(label, text) for label, text in options]
+
+    # Generic: no pre-built options for name/HN/phone
+    return []
+
+
+def build_profile_flex_summary(profile: dict) -> dict:
+    """
+    Build a Flex bubble that summarises a patient's registration status.
+
+    Privacy rules (ADR-002, ADR-003):
+    - HN is shown (clinical identity field — nurses need it).
+    - Phone is masked (``0X-XXX-XXXX`` format via ``mask_phone_number``).
+    - LINE User ID is **never** shown.
+    - Name is shown as-is (self-entered, not verified — no special handling).
+
+    Args:
+        profile: Patient profile dict (from ``read_patient_profile`` or merged).
+
+    Returns:
+        dict: LINE Flex message object (``{"type": "flex", ...}``).
+    """
+    from services.line_message import (  # deferred to avoid circular import
+        flex_text, flex_separator, flex_bubble, build_flex_message,
+    )
+
+    # Safe field extraction
+    first_name = profile.get("first_name") or ""
+    last_name = profile.get("last_name") or ""
+    full_name = f"{first_name} {last_name}".strip() or "—"
+    hn = profile.get("hn") or "—"
+    phone_raw = profile.get("phone") or ""
+    phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
+    status = profile.get("registration_status") or "incomplete"
+    consent = profile.get("consent_given")
+
+    status_emoji = "✅" if status == "registered" else "⏳"
+    consent_text = "ยินยอมแล้ว ✅" if consent is True else ("ไม่ยินยอม ❌" if consent is False else "ยังไม่ระบุ")
+
+    body_items = [
+        flex_text(f"{status_emoji} สถานะ: {status}", weight="bold", size="lg"),
+        flex_separator(),
+        flex_text(f"👤 ชื่อ: {full_name}"),
+        flex_text(f"🏥 HN: {hn}"),
+        flex_text(f"📞 เบอร์: {phone_display}"),
+        flex_text(f"📋 ความยินยอม: {consent_text}", size="sm", color="#888888"),
+    ]
+
+    bubble = flex_bubble(
+        body_components=body_items,
+        header_text="📋 ข้อมูลการลงทะเบียน",
+        header_background_color="#0066CC",
+    )
+    return build_flex_message("สรุปข้อมูลการลงทะเบียนของคุณ", bubble)
