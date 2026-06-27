@@ -127,6 +127,33 @@ def assign_nurse_to_session(queue_id: str, nurse_username: str) -> ActionResult:
         # แค่ log warning แล้ว scheduler/manual จะ cleanup ทีหลัง
         remove_from_queue(session_id)
 
+        # ส่งลิงก์ติดต่อพยาบาลไปให้ผู้ป่วยใน LINE แชททันทีที่กดรับคิว
+        try:
+            from services.dashboard_readers import get_preconsult_packet
+            packet = get_preconsult_packet(queue_id)
+            if packet:
+                user_id = packet.get("user_id")
+                if user_id:
+                    from config import NURSE_CONTACT_LINK
+                    from services.line_message import (
+                        build_nurse_assigned_message,
+                        push_rich_message,
+                    )
+                    # แปลงชื่อพยาบาลภาษาไทยให้เป็นมิตร
+                    friendly_name = "ขวัญเรือน"
+                    if "joy" in nurse_username.lower():
+                        friendly_name = "จอย"
+                    elif "test" in nurse_username.lower():
+                        friendly_name = "ทดสอบ"
+                    elif "kwan" not in nurse_username.lower():
+                        friendly_name = nurse_username.replace("nurse_", "").replace("_", " ").title()
+                    
+                    msg = build_nurse_assigned_message(friendly_name, NURSE_CONTACT_LINK)
+                    push_rich_message([msg], user_id)
+                    logger.info("Sent nurse assignment push notification to patient=%s friendly_name=%s", user_id, friendly_name)
+        except Exception:
+            logger.exception("Failed to send nurse assignment push notification to patient")
+
         invalidate_dashboard_cache()
         incr("dashboard.action.assign.ok")
         logger.info(

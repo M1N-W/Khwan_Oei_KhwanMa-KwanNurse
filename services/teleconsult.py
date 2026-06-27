@@ -269,9 +269,12 @@ def handle_emergency(user_id, description):
 
         send_line_push(alert_message, NURSE_GROUP_ID)
         
+        from config import NURSE_CONTACT_LINK
         message = (
             "🚨 รับเรื่องฉุกเฉินแล้วค่ะ\n\n"
             "📞 กำลังติดต่อพยาบาลด่วน...\n\n"
+            "💬 หรือกดเพื่อติดต่อพยาบาลขวัญเรือนโดยตรง:\n"
+            f"{NURSE_CONTACT_LINK}\n\n"
             "⚠️ ถ้าอาการรุนแรงมาก\n"
             "โปรดโทร 1669 ทันทีค่ะ\n\n"
             "พยาบาลจะติดต่อกลับภายใน 5 นาที"
