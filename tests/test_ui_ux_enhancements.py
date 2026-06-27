@@ -792,6 +792,30 @@ class TestParameterCoercion(unittest.TestCase):
             response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
             mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "มาวิน")
 
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_webhook_maps_patient_identity_input_intent(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch:
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "มาวิน",
+                    "intent": {
+                        "displayName": "PatientIdentity_Input"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "มาวิน")
+
 
 if __name__ == "__main__":
     unittest.main()

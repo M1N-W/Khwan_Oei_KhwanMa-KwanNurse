@@ -1,0 +1,48 @@
+{
+  "id": "e6724015-871c-44ec-b63a-bd8e51e008ad",
+  "name": "PatientIdentity_Input",
+  "auto": true,
+  "contexts": [
+    "registering"
+  ],
+  "responses": [
+    {
+      "resetContexts": false,
+      "action": "",
+      "affectedContexts": [
+        {
+          "name": "registering",
+          "lifespanCount": 5
+        }
+      ],
+      "parameters": [
+        {
+          "id": "a98a011a-7b3c-4d2a-8b1e-6c2c8e9a0a01",
+          "required": false,
+          "dataType": "@sys.any",
+          "name": "any_input",
+          "value": "$any_input",
+          "isList": false
+        }
+      ],
+      "messages": [
+        {
+          "type": "0",
+          "title": "",
+          "textToSpeech": "",
+          "lang": "th",
+          "condition": ""
+        }
+      ],
+      "speech": []
+    }
+  ],
+  "priority": 1000000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

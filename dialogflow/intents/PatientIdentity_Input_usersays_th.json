@@ -1,0 +1,77 @@
+[
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ae",
+    "data": [
+      {
+        "text": "นายสมชาย",
+        "alias": "any_input",
+        "meta": "@sys.any",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008af",
+    "data": [
+      {
+        "text": "อยู่เย็น",
+        "alias": "any_input",
+        "meta": "@sys.any",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008b0",
+    "data": [
+      {
+        "text": "0812345678",
+        "alias": "any_input",
+        "meta": "@sys.any",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008b1",
+    "data": [
+      {
+        "text": "123456",
+        "alias": "any_input",
+        "meta": "@sys.any",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008b2",
+    "data": [
+      {
+        "text": "ยินยอม",
+        "alias": "any_input",
+        "meta": "@sys.any",
+        "userDefined": true
+      }
+    ],
+    "isTemplate": false,
+    "count": 0,
+    "lang": "th",
+    "updated": 0
+  }
+]

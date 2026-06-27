@@ -160,7 +160,7 @@ def register_routes(app):
         
         try:
             intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
-            if intent == "PatientIdentity_Fallback":
+            if intent in ("PatientIdentity_Fallback", "PatientIdentity_Input"):
                 intent = "PatientIdentity"
             params = req.get('queryResult', {}).get('parameters', {}) or {}
             
