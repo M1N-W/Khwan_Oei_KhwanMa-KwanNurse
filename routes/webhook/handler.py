@@ -160,6 +160,8 @@ def register_routes(app):
         
         try:
             intent = req.get('queryResult', {}).get('intent', {}).get('displayName')
+            if intent == "PatientIdentity_Fallback":
+                intent = "PatientIdentity"
             params = req.get('queryResult', {}).get('parameters', {}) or {}
             
             # Extract LINE User ID if available, otherwise fallback to Dialogflow session ID

@@ -70,16 +70,14 @@ def _registration_gate_response(intent, user_id, query_text):
     return None
 
 
-def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None) -> dict:
-    """Build a Dialogflow response, optionally including LINE custom payloads (KWN-06)."""
+def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None, output_contexts: list[dict] = None) -> dict:
+    """Build a Dialogflow response, optionally including LINE custom payloads and output contexts (KWN-06)."""
+    res = {"fulfillmentText": text}
+    
     from config import ENABLE_RICH_MESSAGES
-    if not ENABLE_RICH_MESSAGES:
-        return {"fulfillmentText": text}
-
-    if flex_message:
-        return {
-            "fulfillmentText": text,
-            "fulfillmentMessages": [
+    if ENABLE_RICH_MESSAGES:
+        if flex_message:
+            res["fulfillmentMessages"] = [
                 {
                     "platform": "LINE",
                     "payload": {
@@ -92,14 +90,10 @@ def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_
                     }
                 }
             ]
-        }
-
-    if quick_replies:
-        from services.line_message import build_quick_reply_message
-        line_msg = build_quick_reply_message(text, quick_replies)
-        return {
-            "fulfillmentText": text,
-            "fulfillmentMessages": [
+        elif quick_replies:
+            from services.line_message import build_quick_reply_message
+            line_msg = build_quick_reply_message(text, quick_replies)
+            res["fulfillmentMessages"] = [
                 {
                     "platform": "LINE",
                     "payload": {
@@ -112,6 +106,8 @@ def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_
                     }
                 }
             ]
-        }
 
-    return {"fulfillmentText": text}
+    if output_contexts:
+        res["outputContexts"] = output_contexts
+
+    return res

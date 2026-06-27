@@ -731,6 +731,67 @@ class TestParameterCoercion(unittest.TestCase):
                 "U_TEST", "มาวิน", "0812345678", "2026-06-28", "16:00", "ตรวจแผล"
             )
 
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_webhook_returns_output_contexts_during_registration(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        incomplete_profile = {
+            "first_name": "",
+            "last_name": "",
+            "hn": ""
+        }
+
+        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, incomplete_profile)), \
+             patch("database.patient_profile.upsert_patient_profile", return_value=True):
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ลงทะเบียน",
+                    "intent": {
+                        "displayName": "PatientIdentity"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIn("outputContexts", data)
+            contexts = data["outputContexts"]
+            self.assertEqual(len(contexts), 1)
+            self.assertEqual(contexts[0]["name"], "projects/mock/agent/sessions/U_TEST/contexts/registering")
+            self.assertEqual(contexts[0]["lifespanCount"], 5)
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_webhook_maps_patient_identity_fallback_intent(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handler._dispatch_intent") as mock_dispatch:
+            mock_dispatch.return_value = "mock_response"
+            
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "มาวิน",
+                    "intent": {
+                        "displayName": "PatientIdentity_Fallback"
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "มาวิน")
+
 
 if __name__ == "__main__":
     unittest.main()

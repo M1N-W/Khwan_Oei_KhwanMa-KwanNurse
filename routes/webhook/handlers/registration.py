@@ -70,20 +70,33 @@ def handle_patient_identity(user_id, params, query_text=""):
         # Gather remaining missing fields for quick replies
         missing_fields = update.missing_fields
 
+        # Set Dialogflow output context for registration to intercept turns
+        output_contexts = None
+        if missing_fields:
+            from flask import has_request_context, request as flask_req
+            if has_request_context():
+                req_json = flask_req.get_json(silent=True, force=True) or {}
+                session = req_json.get("session")
+                if session:
+                    output_contexts = [{
+                        "name": f"{session}/contexts/registering",
+                        "lifespanCount": 5
+                    }]
+
         if not first_name:
-            return jsonify(_make_dialogflow_response(t("identity.ask_first_name", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.ask_first_name", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if not last_name:
-            return jsonify(_make_dialogflow_response(t("identity.ask_last_name", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.ask_last_name", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if not hn:
-            return jsonify(_make_dialogflow_response(t("identity.ask_hn", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.ask_hn", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if "phone" in update.invalid_fields:
-            return jsonify(_make_dialogflow_response(t("identity.invalid_phone", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.invalid_phone", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if not phone:
-            return jsonify(_make_dialogflow_response(t("identity.ask_phone", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.ask_phone", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if update.consent_declined:
-            return jsonify(_make_dialogflow_response(t("identity.consent_declined", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.consent_declined", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if "consent" in missing_fields:
-            return jsonify(_make_dialogflow_response(t("identity.ask_consent", lang), build_registration_quick_replies(missing_fields))), 200
+            return jsonify(_make_dialogflow_response(t("identity.ask_consent", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
 
         # All registered successfully
         confirm_text = t(
@@ -102,7 +115,19 @@ def handle_patient_identity(user_id, params, query_text=""):
         except Exception:
             logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
             
-        return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary)), 200
+        # Clear registering context
+        clear_contexts = None
+        from flask import has_request_context, request as flask_req
+        if has_request_context():
+            req_json = flask_req.get_json(silent=True, force=True) or {}
+            session = req_json.get("session")
+            if session:
+                clear_contexts = [{
+                    "name": f"{session}/contexts/registering",
+                    "lifespanCount": 0
+                }]
+
+        return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary, output_contexts=clear_contexts)), 200
     except Exception:
         logger.exception("Error in PatientIdentity handler user=%s", _mask_user_id_for_log(user_id))
         return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"}), 200
