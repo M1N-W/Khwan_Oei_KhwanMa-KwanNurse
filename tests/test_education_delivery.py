@@ -143,7 +143,8 @@ class TestProactiveEducationAfterSymptoms(unittest.TestCase):
             "diseases": ["เบาหวาน"],
         }
         with patch("services.line_message.push_rich_message") as mock_push, \
-             patch("database.patient_profile.read_patient_profile", return_value=stored_profile):
+             patch("database.patient_profile.read_patient_profile", return_value=stored_profile), \
+             patch("config.ENABLE_RICH_MESSAGES", True):
             resp = self.client.post("/webhook", json=self._df_payload())
         self.assertEqual(resp.status_code, 200)
         # Verify that push_rich_message was called to send the carousel
