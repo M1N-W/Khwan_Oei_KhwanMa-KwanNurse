@@ -268,28 +268,45 @@ def mark_last_active_throttled(user_id: str) -> None:
         ttl_cache.set(f"{LAST_ACTIVE_CACHE_PREFIX}:{user_id}", True, LAST_ACTIVE_THROTTLE_SECONDS)
 
 
+def _coerce_string(value: Any) -> str:
+    """Recursively unpack and coerce a value (such as a Dialogflow person struct) to string."""
+    if value in (None, ""):
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("name", "given-name", "formatted", "family-name", "first_name", "last_name"):
+            sub = value.get(key)
+            if sub:
+                val = _coerce_string(sub)
+                if val:
+                    return val
+        for v in value.values():
+            val = _coerce_string(v)
+            if val:
+                return val
+    return str(value)
+
+
 def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str]:
     """Normalize patient identity fields from Dialogflow/form params."""
     if not params:
         return {}
-    first_name = (
+    first_name = _coerce_string(
         params.get("first_name")
         or params.get("patient_first_name")
         or params.get("given_name")
-        or ""
     )
-    last_name = (
+    last_name = _coerce_string(
         params.get("last_name")
         or params.get("patient_last_name")
         or params.get("family_name")
-        or ""
     )
-    hn = (
+    hn = _coerce_string(
         params.get("hn")
         or params.get("HN")
         or params.get("hospital_number")
         or params.get("hospital_no")
-        or ""
     )
     out: dict[str, str] = {}
     first = _clean_text(first_name, 80)

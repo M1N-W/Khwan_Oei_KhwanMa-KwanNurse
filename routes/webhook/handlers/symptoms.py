@@ -158,9 +158,14 @@ def handle_request_appointment(user_id, params):
                          params.get('date-original'))
     preferred_time_raw = params.get('time') or params.get('preferred_time')
     timeofday_raw = params.get('timeofday') or params.get('time_of_day')
-    reason = params.get('reason') or params.get('symptom') or params.get('description')
-    name = params.get('name') or None
-    phone_raw = params.get('phone-number') or params.get('phone') or None
+    reason_raw = params.get('reason') or params.get('symptom') or params.get('description')
+    name_raw = params.get('name')
+    phone_raw_param = params.get('phone-number') or params.get('phone')
+    
+    from services.patient_profile import _coerce_string
+    name = _coerce_string(name_raw) or None
+    phone_raw = _coerce_string(phone_raw_param) or None
+    reason = _coerce_string(reason_raw) or ""
     
     # Parse date and time
     preferred_date = parse_date_iso(preferred_date_raw)

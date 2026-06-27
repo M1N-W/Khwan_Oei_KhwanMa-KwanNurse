@@ -676,5 +676,61 @@ class TestDeterministicRouter(unittest.TestCase):
             mock_invalidate.assert_called_once()
 
 
+class TestParameterCoercion(unittest.TestCase):
+    def test_coerce_string_handles_varied_types(self):
+        from services.patient_profile import _coerce_string
+
+        # Strings are unchanged
+        self.assertEqual(_coerce_string("hello"), "hello")
+        self.assertEqual(_coerce_string(""), "")
+        self.assertEqual(_coerce_string(None), "")
+
+        # Simple dict with standard name key
+        self.assertEqual(_coerce_string({"name": "มาวิน"}), "มาวิน")
+        # Dict with given-name key
+        self.assertEqual(_coerce_string({"given-name": "มาวิน"}), "มาวิน")
+        # Nested dict structures from Dialogflow person entity
+        self.assertEqual(_coerce_string({"person": {"name": "มาวิน"}}), "มาวิน")
+        # Fallback to formatting other values if key not found
+        self.assertEqual(_coerce_string({"custom-key": "มาวิน"}), "มาวิน")
+        self.assertEqual(_coerce_string(123), "123")
+
+    @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
+    def test_webhook_unpacks_appointment_params(self):
+        from app import create_app
+        import json
+
+        app = create_app()
+        client = app.test_client()
+
+        with patch("routes.webhook.handlers.symptoms.create_appointment", return_value=(True, "นัดหมายสำเร็จ")) as mock_create:
+            payload = {
+                "session": "projects/mock/agent/sessions/U_TEST",
+                "queryResult": {
+                    "queryText": "ขอนัด",
+                    "intent": {
+                        "displayName": "RequestAppointment"
+                    },
+                    "parameters": {
+                        "date": "2026-06-28T16:00:00+07:00",
+                        "time": "16:00:00",
+                        "name": {
+                            "name": "มาวิน"
+                        },
+                        "phone-number": "081-234-5678",
+                        "reason": {
+                            "symptom": "ตรวจแผล"
+                        }
+                    }
+                }
+            }
+            
+            response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
+            self.assertEqual(response.status_code, 200)
+            mock_create.assert_called_once_with(
+                "U_TEST", "มาวิน", "0812345678", "2026-06-28", "16:00", "ตรวจแผล"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
