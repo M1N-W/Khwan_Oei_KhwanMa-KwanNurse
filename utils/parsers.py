@@ -159,6 +159,10 @@ def normalize_phone_number(raw):
     elif s.startswith("66") and len(s) > 2:
         s = "0" + s[2:]
     
+    # Restore leading zero if stripped by Google Sheets auto-formatting
+    if len(s) == 9 and s[0] in "6789":
+        s = "0" + s
+        
     return s
 
 

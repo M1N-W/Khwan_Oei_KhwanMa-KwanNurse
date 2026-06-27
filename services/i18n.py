@@ -102,27 +102,27 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
 
     # ---- Patient identity -----------------------------------------------
     "identity.ask_first_name": {
-        "th": "ขอทราบชื่อจริงของคนไข้ค่ะ",
-        "en": "Please tell me the patient's first name.",
+        "th": "ขอทราบ ชื่อจริงและนามสกุลจริง ของคนไข้ค่ะ (กรุณาระบุคำนำหน้านาม ชื่อ และนามสกุล เช่น นายสมชาย รักดี หรือ นางสาวสมศรี มีสุข)",
+        "en": "Please tell me the patient's full name, including prefix, first name, and last name (e.g., Mr. Somchai Rakdee).",
     },
     "identity.ask_last_name": {
-        "th": "ขอทราบนามสกุลของคนไข้ค่ะ",
+        "th": "ขอทราบนามสกุลจริงของคนไข้เพื่อความถูกต้องในการบันทึกประวัติค่ะ (เช่น รักดี)",
         "en": "Please tell me the patient's last name.",
     },
     "identity.ask_hn": {
-        "th": "ขอทราบ HN (Hospital Number) ของคนไข้ค่ะ",
+        "th": "ขอทราบหมายเลข HN (Hospital Number) ของคนไข้ค่ะ (สามารถดูได้จากบัตรโรงพยาบาลหรือใบเสร็จ/ใบนัดแพทย์ เช่น 123456)",
         "en": "Please tell me the patient's HN (Hospital Number).",
     },
     "identity.ask_phone": {
-        "th": "ขอทราบเบอร์โทรศัพท์มือถือของคนไข้ค่ะ เช่น 0812345678",
+        "th": "ขอทราบเบอร์โทรศัพท์มือถือ 10 หลัก ของคนไข้ค่ะ เช่น 0812345678",
         "en": "Please tell me the patient's mobile phone number, for example 0812345678.",
     },
     "identity.invalid_phone": {
-        "th": "เบอร์โทรศัพท์ไม่ถูกต้องค่ะ กรุณาส่งเบอร์มือถือไทย 10 หลัก เช่น 0812345678",
+        "th": "เบอร์โทรศัพท์มือถือไม่ถูกต้องค่ะ กรุณาส่งเบอร์มือถือไทย 10 หลัก (เช่น 0812345678) โดยไม่มีขีดคั่นหรือเว้นวรรคค่ะ",
         "en": "That phone number is invalid. Please send a 10-digit Thai mobile number.",
     },
     "identity.ask_consent": {
-        "th": "ข้อมูลเกือบครบแล้วค่ะ กรุณายืนยันความยินยอมให้โรงพยาบาลใช้ข้อมูลนี้เพื่อดูแลและติดตามอาการ โดยพิมพ์หรือเลือก “ยินยอม”",
+        "th": "ข้อมูลเกือบครบแล้วค่ะ กรุณายืนยันความยินยอมให้โรงพยาบาลใช้ข้อมูลนี้เพื่อการประเมินและติดตามอาการอย่างปลอดภัย โดยพิมพ์หรือเลือกคำว่า “ยินยอม” ค่ะ",
         "en": "Almost done. Please confirm consent to use this information for care and follow-up by replying “agree”.",
     },
     "identity.consent_declined": {

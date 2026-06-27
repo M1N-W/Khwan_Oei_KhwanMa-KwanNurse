@@ -31,6 +31,14 @@ class PatientIdentityServiceTests(unittest.TestCase):
             "hn": "HN-001",
         })
 
+    def test_normalize_phone_number_stripped_leading_zero(self):
+        from utils.parsers import normalize_phone_number
+        self.assertEqual(normalize_phone_number("946477416"), "0946477416")
+        self.assertEqual(normalize_phone_number("812345678"), "0812345678")
+        self.assertEqual(normalize_phone_number("0946477416"), "0946477416")
+        self.assertEqual(normalize_phone_number("invalid_phone"), "")
+
+
 
 class PatientIdentityWebhookTests(unittest.TestCase):
 
