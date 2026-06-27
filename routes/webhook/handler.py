@@ -310,7 +310,18 @@ def _dispatch_intent(intent, user_id, params, query_text):
     elif intent == 'AssessPersonalRisk' or intent == 'AssessRisk':
         response = handle_assess_risk(user_id, params)
     elif intent == 'RequestAppointment':
-        response = handle_request_appointment(user_id, params)
+        from routes.webhook.helpers import _appointment_during_registration_should_reroute
+        if _appointment_during_registration_should_reroute(user_id, params, query_text):
+            logger.info(
+                "Rerouting RequestAppointment -> PatientIdentity (query=%r user=%s)",
+                query_text,
+                _mask_user_id_for_log(user_id),
+            )
+            from routes.webhook.handlers.registration import handle_patient_identity
+            response = handle_patient_identity(user_id, params, query_text)
+        else:
+            from routes.webhook.handlers.symptoms import handle_request_appointment
+            response = handle_request_appointment(user_id, params)
     elif intent == 'GetKnowledge':
         response = handle_get_knowledge(user_id, params, query_text)
     elif intent == 'GetFollowUpSummary':
@@ -328,6 +339,20 @@ def _dispatch_intent(intent, user_id, params, query_text):
     elif intent == 'RecommendKnowledge':
         response = handle_recommend_knowledge(user_id, params)
     elif intent in ('UpdatePatientIdentity', 'PatientIdentity', 'RegisterPatient'):
+        from routes.webhook.helpers import _registration_intent_looks_like_knowledge
+        if _registration_intent_looks_like_knowledge(intent, params, query_text):
+            logger.info(
+                "Rerouting %s -> GetKnowledge (query=%r first_name=%r)",
+                intent,
+                query_text,
+                (params or {}).get("first_name"),
+            )
+            response = handle_get_knowledge(user_id, params, query_text)
+            _touch_activity("GetKnowledge", user_id)
+            return response
+        from services.patient_profile import is_registration_trigger_text, mark_registration_started
+        if intent == "RegisterPatient" or is_registration_trigger_text(query_text):
+            mark_registration_started(user_id)
         response = handle_patient_identity(user_id, params, query_text)
     else:
         response = handle_unknown_intent(intent)

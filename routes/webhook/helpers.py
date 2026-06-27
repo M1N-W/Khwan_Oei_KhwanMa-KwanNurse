@@ -70,6 +70,65 @@ def _registration_gate_response(intent, user_id, query_text):
     return None
 
 
+
+def _appointment_during_registration_should_reroute(user_id, params, query_text):
+    """
+    RequestAppointment follow-up context can swallow registration name turns.
+    Reroute name-like replies back to PatientIdentity while registration is incomplete.
+    """
+    try:
+        from database.patient_profile import read_patient_profile_result
+        from routes.webhook.handlers.fallback import _resolve_knowledge_topic
+        from services.patient_profile import (
+            enrich_registration_params,
+            is_registration_trigger_text,
+            normalize_identity_fields,
+            registration_missing_fields,
+        )
+
+        read_result = read_patient_profile_result(user_id)
+        if not read_result.available:
+            return False
+        missing = registration_missing_fields(read_result.profile)
+        if not any(field in missing for field in ("first_name", "last_name", "hn", "phone")):
+            return False
+
+        params = params or {}
+        if any(params.get(key) for key in ("date", "preferred_date", "time", "preferred_time", "reason")):
+            return False
+
+        text = (query_text or "").strip()
+        if not text or is_registration_trigger_text(text):
+            return False
+        if _resolve_knowledge_topic(text):
+            return False
+
+        enriched = enrich_registration_params(read_result.profile, params, query_text)
+        return bool(normalize_identity_fields(enriched) or enriched.get("phone"))
+    except Exception:
+        logger.exception(
+            "appointment registration reroute check failed user=%s",
+            _mask_user_id_for_log(user_id),
+        )
+        return False
+
+def _registration_intent_looks_like_knowledge(intent, params, query_text):
+    """Reroute misclassified knowledge topics during registration slot-filling."""
+    if intent not in _REGISTRATION_INTENTS:
+        return False
+    from routes.webhook.handlers.fallback import (
+        _KNOWLEDGE_MENU_TRIGGERS,
+        _resolve_knowledge_topic,
+    )
+    norm_q = (query_text or "").lower().strip()
+    if norm_q in _KNOWLEDGE_MENU_TRIGGERS:
+        return True
+    for candidate in (query_text, (params or {}).get("first_name")):
+        if candidate and _resolve_knowledge_topic(str(candidate)):
+            return True
+    return False
+
+
 def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None, output_contexts: list[dict] = None) -> dict:
     """Build a Dialogflow response, optionally including LINE custom payloads and output contexts (KWN-06)."""
     res = {"fulfillmentText": text}
