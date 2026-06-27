@@ -401,7 +401,7 @@ def handle_after_hours_choice(user_id, choice_text):
             description = session.get('Description', '') if session else ''
             return handle_emergency(user_id, description)
 
-        elif stripped == "2" or "ไม่เร่งด่วน" in stripped or "บันทึก" in stripped:
+        elif stripped == "2" or "ไม่เร่งด่วน" in stripped or "บันทึก" in stripped or "รอเวลาทำการ" in stripped:
             # ยืนยันว่าบันทึกแล้ว และแจ้งพยาบาล
             session = get_user_active_session(user_id)
             if session:

@@ -348,6 +348,22 @@ class TestAfterHoursQuickReplies(unittest.TestCase):
         self.assertEqual(second["action"]["label"], "🚨 แจ้งเรื่องฉุกเฉิน")
         self.assertEqual(second["action"]["text"], "แจ้งเรื่องฉุกเฉิน")
 
+    def test_after_hours_choice_wait_resolves_correctly(self):
+        """Passing 'รอเวลาทำการ' to handle_after_hours_choice returns success and routes correctly."""
+        from routes.webhook.handlers.fallback import handle_after_hours_choice
+        from flask import Flask
+        import json
+
+        app = Flask("test_after_hours_resolve")
+        with app.app_context():
+            with patch("services.teleconsult.is_office_hours", return_value=False), \
+                 patch("services.teleconsult.get_user_active_session", return_value={"Issue_Type": "med", "Description": "test"}), \
+                 patch("services.teleconsult.send_line_push") as m_push:
+                response = handle_after_hours_choice("U_TEST", "รอเวลาทำการ")
+                data = json.loads(response[0].data)
+                self.assertIn("บันทึกคำขอของคุณเรียบร้อยแล้วค่ะ", data["fulfillmentText"])
+                m_push.assert_called_once()
+
 
 class TestSurveyStarRatingQuickReplies(unittest.TestCase):
     """Task 4B: Satisfaction survey message must include 5 star-rating quick reply buttons."""
