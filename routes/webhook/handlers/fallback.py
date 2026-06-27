@@ -76,6 +76,12 @@ _KB_NAV_QUICK_REPLIES = [
     quick_reply_item("🏥 ปรึกษาพยาบาล", "ปรึกษาพยาบาล"),
 ]
 
+# After-hours choice quick replies (Task 4A).
+_AFTER_HOURS_QUICK_REPLIES = [
+    quick_reply_item("⏳ รอเวลาทำการ", "รอเวลาทำการ"),
+    quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
+]
+
 
 def _resolve_knowledge_topic(text):
     """Find the best-matching knowledge topic for raw user text."""
@@ -210,7 +216,8 @@ def handle_contact_nurse(user_id, params, query_text):
                     f"{menu}\n\n"
                     f"💡 หากเป็นเรื่องฉุกเฉิน เลือกหมายเลข 1"
                 )
-            
+                return jsonify(_make_dialogflow_response(menu, quick_replies=_AFTER_HOURS_QUICK_REPLIES)), 200
+
             return jsonify({"fulfillmentText": menu}), 200
         
     except Exception as e:

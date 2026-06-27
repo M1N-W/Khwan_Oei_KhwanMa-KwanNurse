@@ -25,6 +25,8 @@ from services.line_message import (
     flex_bubble,
     build_flex_message,
     push_rich_message,
+    quick_reply_item,
+    build_quick_reply_message,
 )
 
 logger = get_logger(__name__)
@@ -103,7 +105,31 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
     )
     flex_msg = build_flex_message(f"แบบสอบถามความพึงพอใจรอบ {thai_day}", bubble)
 
-    return [flex_msg]
+    return [flex_msg, build_survey_rating_question()]
+
+
+# Star-rating quick replies for satisfaction survey (Task 4B).
+_SURVEY_STAR_QUICK_REPLIES = [
+    quick_reply_item("⭐ 5 (ดีมาก)", "5"),
+    quick_reply_item("⭐ 4 (ดี)", "4"),
+    quick_reply_item("⭐ 3 (ปานกลาง)", "3"),
+    quick_reply_item("⭐ 2 (พอใช้)", "2"),
+    quick_reply_item("⭐ 1 (ควรปรับปรุง)", "1"),
+]
+
+
+def build_survey_rating_question() -> dict:
+    """
+    Build a star-rating quick reply text message for the satisfaction survey.
+    Patients tap 1-5 stars directly in chat (Task 4B).
+
+    Returns:
+        dict: LINE text message object with quickReply section.
+    """
+    return build_quick_reply_message(
+        "⭐ คุณเพิงพอใจการใช้งาน KwanNurse อยู่ในระดับใดคะ? (กดดาวเพื่อให้คะแนะนำได้เลยค่ะ)",
+        _SURVEY_STAR_QUICK_REPLIES,
+    )
 
 
 def process_due_surveys(now_dt: Optional[datetime] = None) -> int:
