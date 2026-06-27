@@ -445,3 +445,61 @@ def build_wound_flex_result(severity: str, observations: list, advice: str, conf
     }
 
 
+_GUIDE_COLORS = {
+    "wound_care": "#1565C0",
+    "physical_therapy": "#2E7D32",
+    "dvt_prevention": "#6A1B9A",
+    "medication": "#E65100",
+    "warning_signs": "#B71C1C",
+}
+_GUIDE_ICONS = {
+    "wound_care": "🩹",
+    "physical_therapy": "🏃",
+    "dvt_prevention": "🩸",
+    "medication": "💊",
+    "warning_signs": "⚠️",
+}
+
+
+def _build_guide_bubble(rec: dict) -> dict:
+    key = rec.get("key", "")
+    color = _GUIDE_COLORS.get(key, "#37474F")
+    icon = _GUIDE_ICONS.get(key, "📖")
+    return {
+        "type": "bubble",
+        "size": "micro",
+        "header": {
+            "type": "box", "layout": "vertical", "backgroundColor": color, "paddingAll": "12px",
+            "contents": [{"type": "text", "text": f"{icon} {rec['title']}",
+                          "color": "#FFFFFF", "weight": "bold", "size": "sm", "wrap": True}],
+        },
+        "body": {
+            "type": "box", "layout": "vertical", "paddingAll": "12px",
+            "contents": [{"type": "text", "text": rec.get("reason", ""),
+                          "wrap": True, "size": "xs", "color": "#555555"}],
+        },
+        "footer": {
+            "type": "box", "layout": "vertical", "paddingAll": "8px",
+            "contents": [{"type": "button", "style": "primary", "color": color, "height": "sm",
+                          "action": {"type": "message", "label": "อ่านเลย", "text": rec["title"]}}],
+        },
+    }
+
+
+def build_education_carousel(recommendations: list) -> dict:
+    """
+    Flex Carousel: up to 3 personalized education guide bubbles.
+    Falls back to a plain-text dict if no recommendations.
+    """
+    if not recommendations:
+        return {"type": "text",
+                "text": "ไม่พบคำแนะนำที่เหมาะสม กรุณาติดต่อพยาบาลโดยตรง"}
+    bubbles = [_build_guide_bubble(r) for r in recommendations]
+    return {
+        "type": "flex",
+        "altText": f"📚 ความรู้ที่แนะนำสำหรับคุณ ({len(recommendations)} หัวข้อ)",
+        "contents": {"type": "carousel", "contents": bubbles},
+    }
+
+
+
