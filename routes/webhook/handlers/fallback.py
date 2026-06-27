@@ -7,6 +7,8 @@ from datetime import datetime
 from flask import jsonify
 from config import get_logger, LOCAL_TZ, OFFICE_HOURS, DEBUG
 from database.education_logs import save_education_view
+from routes.webhook.helpers import _make_dialogflow_response
+from services.line_message import quick_reply_item
 from services import (
     get_knowledge_menu,
     get_wound_care_guide,
@@ -67,6 +69,12 @@ _KNOWLEDGE_TOPIC_MAP = {
 
 # Words that mean "show me the menu" — bypass topic resolution.
 _KNOWLEDGE_MENU_TRIGGERS = {'menu', 'เมนู', 'ความรู้', 'knowledge'}
+
+# Navigation quick replies appended to every educational guide response (Task 3).
+_KB_NAV_QUICK_REPLIES = [
+    quick_reply_item("📚 เมนูความรู้หลัก", "ความรู้"),
+    quick_reply_item("🏥 ปรึกษาพยาบาล", "ปรึกษาพยาบาล"),
+]
 
 
 def _resolve_knowledge_topic(text):
@@ -146,7 +154,8 @@ def handle_get_knowledge(user_id, params, query_text=""):
             )
         except Exception:
             logger.exception("EducationLog write failed (non-fatal)")
-        return jsonify({"fulfillmentText": guide_func()}), 200
+        guide_text = guide_func()
+        return jsonify(_make_dialogflow_response(guide_text, quick_replies=_KB_NAV_QUICK_REPLIES)), 200
 
     shown = topic_str or query_text or ""
     return jsonify({

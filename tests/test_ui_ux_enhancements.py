@@ -180,5 +180,104 @@ class TestUIUXEnhancements(unittest.TestCase):
             self.assertEqual(items[2]["action"]["label"], "🔴 เดินไม่ได้เลย")
             self.assertEqual(items[2]["action"]["text"], "เดินไม่ได้")
 
+
+class TestKBNavigationQuickReplies(unittest.TestCase):
+    """Task 3: KB Navigation Quick Replies appended to every educational guide."""
+
+    def _call_get_knowledge(self, topic_param, mock_guide_text="เนื้อหาคู่มือทดสอบ"):
+        """Helper: call handle_get_knowledge with ENABLE_RICH_MESSAGES=True."""
+        from flask import Flask
+        from routes.webhook.handlers.fallback import handle_get_knowledge
+        import json
+
+        app = Flask("test_kb_nav")
+        with app.app_context():
+            with patch("config.ENABLE_RICH_MESSAGES", True), \
+                 patch("routes.webhook.handlers.fallback.save_education_view"), \
+                 patch("routes.webhook.save_education_view"), \
+                 patch("routes.webhook.get_wound_care_guide", return_value=mock_guide_text), \
+                 patch("routes.webhook.get_physical_therapy_guide", return_value=mock_guide_text), \
+                 patch("routes.webhook.get_dvt_prevention_guide", return_value=mock_guide_text), \
+                 patch("routes.webhook.get_medication_guide", return_value=mock_guide_text), \
+                 patch("routes.webhook.get_warning_signs_guide", return_value=mock_guide_text):
+                response = handle_get_knowledge("U_TEST", {"topic": topic_param})
+                data = json.loads(response[0].data)
+        return data
+
+    def test_guide_response_has_quick_reply_block(self):
+        """A guide response must contain a quickReply block in the LINE payload."""
+        data = self._call_get_knowledge("wound_care")
+        msgs = data.get("fulfillmentMessages", [])
+        line_payload = next(
+            (m["payload"]["line"] for m in msgs if "payload" in m and "line" in m["payload"]),
+            None,
+        )
+        self.assertIsNotNone(line_payload, "Expected a LINE payload in fulfillmentMessages")
+        self.assertIn("quickReply", line_payload)
+
+    def test_guide_response_has_exactly_two_nav_buttons(self):
+        """The quickReply block must contain exactly 2 navigation items."""
+        data = self._call_get_knowledge("กายภาพบำบัด")
+        msgs = data.get("fulfillmentMessages", [])
+        line_payload = next(
+            (m["payload"]["line"] for m in msgs if "payload" in m and "line" in m["payload"]),
+            None,
+        )
+        items = line_payload["quickReply"]["items"]
+        self.assertEqual(len(items), 2)
+
+    def test_first_nav_button_is_knowledge_menu(self):
+        """First quick reply: label='📚 เมนูความรู้หลัก', text='ความรู้'."""
+        data = self._call_get_knowledge("ลิ่มเลือด")
+        msgs = data.get("fulfillmentMessages", [])
+        line_payload = next(
+            (m["payload"]["line"] for m in msgs if "payload" in m and "line" in m["payload"]),
+            None,
+        )
+        first = line_payload["quickReply"]["items"][0]
+        self.assertEqual(first["action"]["label"], "📚 เมนูความรู้หลัก")
+        self.assertEqual(first["action"]["text"], "ความรู้")
+
+    def test_second_nav_button_is_consult_nurse(self):
+        """Second quick reply: label='🏥 ปรึกษาพยาบาล', text='ปรึกษาพยาบาล'."""
+        data = self._call_get_knowledge("medication")
+        msgs = data.get("fulfillmentMessages", [])
+        line_payload = next(
+            (m["payload"]["line"] for m in msgs if "payload" in m and "line" in m["payload"]),
+            None,
+        )
+        second = line_payload["quickReply"]["items"][1]
+        self.assertEqual(second["action"]["label"], "🏥 ปรึกษาพยาบาล")
+        self.assertEqual(second["action"]["text"], "ปรึกษาพยาบาล")
+
+    def test_knowledge_menu_response_has_no_nav_quick_replies(self):
+        """The knowledge MENU (not a guide) should NOT get the nav quick replies."""
+        from flask import Flask
+        from routes.webhook.handlers.fallback import handle_get_knowledge
+        import json
+
+        app = Flask("test_kb_menu")
+        with app.app_context():
+            with patch("config.ENABLE_RICH_MESSAGES", True), \
+                 patch("services.get_knowledge_menu", return_value="เมนูความรู้"):
+                response = handle_get_knowledge("U_TEST", {"topic": ""}, query_text="ความรู้")
+                data = json.loads(response[0].data)
+        # Menu path just returns fulfillmentText — no rich payload
+        self.assertIn("fulfillmentText", data)
+        # fulfillmentMessages with nav quick replies must NOT be present
+        msgs = data.get("fulfillmentMessages", [])
+        nav_labels = {"📚 เมนูความรู้หลัก", "🏥 ปรึกษาพยาบาล"}
+        for m in msgs:
+            line_payload = m.get("payload", {}).get("line", {})
+            for item in line_payload.get("quickReply", {}).get("items", []):
+                self.assertNotIn(item["action"]["label"], nav_labels)
+
+    def test_guide_fulfillment_text_unchanged(self):
+        """The fulfillmentText must still be the guide text itself (unchanged content)."""
+        guide_text = "คู่มือดูแลแผลฉบับสมบูรณ์"
+        data = self._call_get_knowledge("wound_care", mock_guide_text=guide_text)
+        self.assertEqual(data["fulfillmentText"], guide_text)
+
+
 if __name__ == "__main__":
     unittest.main()
