@@ -148,7 +148,7 @@ MAX_PASSWORD_BYTES = 72
 _COMMON_PASSWORDS = frozenset({
     "password", "password1", "password123", "12345678", "123456789", "1234567890",
     "qwerty123", "admin1234", "letmein123", "welcome1234", "iloveyou1",
-    "nurse1234", "dashboard1", "kwannurse", "kwanbot123",
+    "nurse1234", "dashboard1", "kwannurse", "kwanbot123", "khwanoei", "khwanoeikhwanma",
 })
 
 

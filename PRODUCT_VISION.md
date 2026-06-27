@@ -1,4 +1,4 @@
-# KwanNurse-Bot — Product Vision & Roadmap
+# ขวัญเอ๋ยขวัญมา-บอท — Product Vision & Roadmap
 
 สรุปวิสัยทัศน์ของระบบจากเอกสารต้นทาง 2 ฉบับ พร้อม **gap analysis** ระหว่างสิ่งที่
 เอกสารตั้งใจกับ implementation ปัจจุบัน. เอกสารนี้สกัดมาจาก

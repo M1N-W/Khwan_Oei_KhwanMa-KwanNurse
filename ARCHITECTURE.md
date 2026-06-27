@@ -1,7 +1,7 @@
 # Architecture
 
 ## Overview
-KwanNurse-Bot is a Python 3.12 Flask application combining a LINE Messaging API chatbot for post-surgical patient follow-up with a Jinja2/HTMX web dashboard for nurses.
+ขวัญเอ๋ยขวัญมา-บอท is a Python 3.12 Flask application combining a LINE Messaging API chatbot for post-surgical patient follow-up with a Jinja2/HTMX web dashboard for nurses.
 
 ## System Diagram
 

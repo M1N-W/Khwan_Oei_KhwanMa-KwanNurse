@@ -66,7 +66,7 @@ def register_routes(app):
         
         return jsonify({
             "status": "ok" if config_status["ok"] else "warning",
-            "service": "KwanNurse-Bot v5.0",
+            "service": "ขวัญเอ๋ยขวัญมา-บอท v5.0",
             "version": "5.0 - Complete (UX/UI Polish)",
             "features": [
                 "ReportSymptoms", 

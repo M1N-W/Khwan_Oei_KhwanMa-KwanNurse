@@ -1,4 +1,4 @@
-# KwanNurse-Bot — Deploy Runbook (v4.2, Phase 2 complete)
+# ขวัญเอ๋ยขวัญมา-บอท — Deploy Runbook (v4.2, Phase 2 complete)
 
 Operational reference for deploying, smoke-testing, and rolling back the
 bot. Aimed at a single-node Render deploy with Gunicorn.

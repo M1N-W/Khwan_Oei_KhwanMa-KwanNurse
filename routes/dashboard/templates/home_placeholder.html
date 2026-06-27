@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}หน้าหลัก · KwanNurse Dashboard{% endblock %}
+{% block title %}หน้าหลัก · ขวัญเอ๋ยขวัญมา Dashboard{% endblock %}
 
 {% block body %}
 <header class="bg-white shadow-sm">
     <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
         <div>
-            <h1 class="text-xl font-bold text-gray-800">KwanNurse Dashboard</h1>
+            <h1 class="text-xl font-bold text-gray-800">ขวัญเอ๋ยขวัญมา Dashboard</h1>
             <p class="text-xs text-gray-500">พยาบาล: <span class="font-semibold">{{ nurse }}</span></p>
         </div>
         <form method="POST" action="{{ url_for('dashboard.logout') }}">

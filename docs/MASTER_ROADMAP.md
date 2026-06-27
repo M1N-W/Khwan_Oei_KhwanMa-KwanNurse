@@ -1,8 +1,8 @@
-# Kwan Nurse LINEBot - Master Roadmap
+# ขวัญเอ๋ยขวัญมา LINEBot - Master Roadmap
 
 ## 1. Document Purpose
 
-This document is the operational source of truth for implementation order, dependencies, status, acceptance criteria, and commit tracking for Kwan Nurse LINEBot work. `PRODUCT_VISION.md` remains the product vision, `ARCHITECTURE.md` remains the current architecture overview, and `SPRINT_2_PLAN.md` is historical sprint planning material.
+This document is the operational source of truth for implementation order, dependencies, status, acceptance criteria, and commit tracking for ขวัญเอ๋ยขวัญมา LINEBot work. `PRODUCT_VISION.md` remains the product vision, `ARCHITECTURE.md` remains the current architecture overview, and `SPRINT_2_PLAN.md` is historical sprint planning material.
 
 ## 2. Current Baseline
 

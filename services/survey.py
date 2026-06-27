@@ -84,7 +84,7 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
     thai_day = f"{milestone_day} วัน"
     text = (
         f"🏥 สวัสดีค่ะ กรุณาช่วยตอบแบบสอบถามความพึงพอใจ "
-        f"การใช้งานระบบ KwanNurse ของคุณในรอบ {thai_day} เพื่อให้ทีมพยาบาลนำไปพัฒนาการดูแลต่อไปค่ะ\n\n"
+        f"การใช้งานระบบขวัญเอ๋ยขวัญมาของคุณในรอบ {thai_day} เพื่อให้ทีมพยาบาลนำไปพัฒนาการดูแลต่อไปค่ะ\n\n"
         f"สามารถกดทำแบบสอบถามได้ที่ลิงก์นี้เลยนะคะ: {tracking_url}"
     )
 
@@ -100,7 +100,7 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
     bubble = flex_bubble(
         body_components=body,
         footer_components=footer,
-        header_text="📋 KwanNurse Survey",
+        header_text="📋 ขวัญเอ๋ยขวัญมา Survey",
         header_background_color="#0066CC",
     )
     flex_msg = build_flex_message(f"แบบสอบถามความพึงพอใจรอบ {thai_day}", bubble)
@@ -127,7 +127,7 @@ def build_survey_rating_question() -> dict:
         dict: LINE text message object with quickReply section.
     """
     return build_quick_reply_message(
-        "⭐ คุณเพิงพอใจการใช้งาน KwanNurse อยู่ในระดับใดคะ? (กดดาวเพื่อให้คะแนะนำได้เลยค่ะ)",
+        "⭐ คุณพึงพอใจการใช้งานขวัญเอ๋ยขวัญมาอยู่ในระดับใดคะ? (กดดาวเพื่อแนะนำได้เลยค่ะ)",
         _SURVEY_STAR_QUICK_REPLIES,
     )
 

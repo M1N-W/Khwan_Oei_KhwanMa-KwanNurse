@@ -3,7 +3,7 @@
 > **Status**: Research-only document (no code changes).
 > **Author**: Engineering · 2026-04-26
 > **Decision deadline**: Q3/2026 หรือเมื่อ active users > 100 คน — แล้วแต่อันไหนถึงก่อน
-> **Scope**: ตัดสินใจว่าจะ migrate KwanNurse-Bot จาก Dialogflow ES ไป Dialogflow CX หรือไม่
+> **Scope**: ตัดสินใจว่าจะ migrate ขวัญเอ๋ยขวัญมา-บอท จาก Dialogflow ES ไป Dialogflow CX หรือไม่
 
 ---
 
@@ -37,7 +37,7 @@ Google ตำแหน่ง CX = next-gen แต่ ES ยัง active (ไม
 
 ## 3. Feature Matrix
 
-| Feature | ES | CX | KwanNurse ใช้ไหม? |
+| Feature | ES | CX | ขวัญเอ๋ยขวัญมา ใช้ไหม? |
 |---|---|---|---|
 | **Intent matching** | ✅ training phrases | ✅ training phrases + intent re-use across flows | ✅ ใช้หนัก |
 | **Entities (Custom)** | ✅ KIND_MAP/LIST/REGEXP | ✅ + composite, fuzzy improved | ✅ KnowledgeTopic, WoundStatus |
@@ -53,7 +53,7 @@ Google ตำแหน่ง CX = next-gen แต่ ES ยัง active (ไม
 | **A/B testing** | ❌ | ✅ environment-based | ❌ |
 | **Voice quality** | basic | studio-grade | ❌ ไม่ใช่ |
 
-**Verdict**: ปัจจุบัน KwanNurse ใช้ ES feature ~30% ของที่มี. CX จะปลดล็อค multi-turn diagnosis + analytics — แต่ยังไม่ blocker
+**Verdict**: ปัจจุบัน ขวัญเอ๋ยขวัญมา ใช้ ES feature ~30% ของที่มี. CX จะปลดล็อค multi-turn diagnosis + analytics — แต่ยังไม่ blocker
 
 ---
 
@@ -207,4 +207,4 @@ Week 7:    Decommission ES agent
 ---
 
 > **Next review date**: 2026-09-01 (Q3 review)
-> **Trigger to revisit early**: Google ประกาศ ES EOL · KwanNurse active users > 100 · feature ที่ต้อง CX-only
+> **Trigger to revisit early**: Google ประกาศ ES EOL · ขวัญเอ๋ยขวัญมา active users > 100 · feature ที่ต้อง CX-only

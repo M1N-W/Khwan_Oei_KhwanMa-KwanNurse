@@ -1,9 +1,9 @@
-# Kwan Nurse Agent Handoff Prompt
+# ขวัญเอ๋ยขวัญมา Agent Handoff Prompt
 
 Use this prompt when continuing the project in Codex, Antigravity, or another AI coding agent.
 
 ```text
-You are continuing work on the Kwan Nurse LINEBot repository.
+You are continuing work on the ขวัญเอ๋ยขวัญมา LINEBot repository.
 
 Repository:
 C:\Kwan_LineBot\Linebot-Code\kwannurse-linebot

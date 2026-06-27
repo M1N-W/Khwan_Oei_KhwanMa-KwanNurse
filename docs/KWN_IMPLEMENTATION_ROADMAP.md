@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document explains the Kwan Nurse LINEBot implementation plan from the current state through production readiness.
+This document explains the ขวัญเอ๋ยขวัญมา LINEBot implementation plan from the current state through production readiness.
 
 It is written for AI coding agents and human reviewers who need to continue the project without re-deriving the architecture from chat history.
 
@@ -21,7 +21,7 @@ Important numbering decision:
 
 ## 2. Product Vision
 
-Kwan Nurse LINEBot is evolving from a LINE chatbot into a clinical digital assistant platform for post-surgical tele-nursing.
+ขวัญเอ๋ยขวัญมา LINEBot is evolving from a LINE chatbot into a clinical digital assistant platform for post-surgical tele-nursing.
 
 The platform should support:
 
@@ -54,7 +54,7 @@ Repository:
 
 ```text
 Repo ID: kwan-nurse-linebot
-Display name: Kwan Nurse LineBot
+Display name: ขวัญเอ๋ยขวัญมา LineBot
 Root: C:\Kwan_LineBot\Linebot-Code\kwannurse-linebot
 Branch: codex/dashboard-command-center
 Expected current HEAD for KWN-02 rework: d55e23471f3ea026040d86e2b2f0f5c6d511064a

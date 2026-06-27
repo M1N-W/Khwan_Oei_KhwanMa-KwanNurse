@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Configuration Module
-Centralized configuration management for KwanNurse-Bot
+Centralized configuration management for ขวัญเอ๋ยขวัญมา-บอท (Khwan Oei KhwanMa-Bot)
 """
 import os
 import logging

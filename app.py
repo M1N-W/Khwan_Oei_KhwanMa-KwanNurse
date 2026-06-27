@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-KwanNurse-Bot v4.0 - COMPLETE! 🎉
+ขวัญเอ๋ยขวัญมา-บอท v5.0 - COMPLETE! 🎉
 Main Application Entry Point
 
 6/6 Core Features (100%):
@@ -99,7 +99,7 @@ def create_app():
 
     # Log startup information
     logger.info("=" * 60)
-    logger.info("KwanNurse-Bot v4.0 - COMPLETE!")
+    logger.info("ขวัญเอ๋ยขวัญมา-บอท v5.0 - COMPLETE!")
     logger.info("=" * 60)
     logger.info("Debug Mode: %s", DEBUG)
     logger.info("Features (6/6 - 100%%): ")

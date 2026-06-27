@@ -463,7 +463,7 @@ class TestHealthCheckDiagnostics(unittest.TestCase):
             response = client.get("/")
             data = json.loads(response.data)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(data["service"], "KwanNurse-Bot v5.0")
+            self.assertEqual(data["service"], "ขวัญเอ๋ยขวัญมา-บอท v5.0")
             self.assertEqual(data["version"], "5.0 - Complete (UX/UI Polish)")
             self.assertIn("diagnostics", data)
             self.assertTrue(data["diagnostics"]["config_ok"])
