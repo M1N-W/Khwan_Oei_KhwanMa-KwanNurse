@@ -3,11 +3,32 @@
 Helper script to initialize all required worksheets in the Google Spreadsheet.
 """
 from __future__ import annotations
+import os
 import sys
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Load .env file manually into os.environ if it exists
+def load_env():
+    env_path = _PROJECT_ROOT / ".env"
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip()
+                # Remove quotes if present
+                if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                if key:
+                    os.environ[key] = val
+
+load_env()
 
 from config import (
     SPREADSHEET_NAME,
