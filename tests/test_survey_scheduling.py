@@ -156,13 +156,13 @@ class TestSurveyService(unittest.TestCase):
         now = datetime(2026, 6, 23, 8, 30, 0, tzinfo=LOCAL_TZ)
         ok = svc_survey.schedule_milestone_surveys("U-1", now)
         self.assertTrue(ok)
-        self.assertEqual(mock_save.call_count, 4)
+        self.assertEqual(mock_save.call_count, 1)
         
-        # Verify first call scheduled at 9 AM of activation_date + 7 days
+        # Verify call scheduled at 9 AM of activation_date + 30 days
         args = mock_save.call_args_list[0][1]
         self.assertEqual(args["user_id"], "U-1")
-        self.assertEqual(args["milestone_day"], 7)
-        self.assertEqual(args["scheduled_at"], datetime(2026, 6, 30, 9, 0, 0, tzinfo=LOCAL_TZ))
+        self.assertEqual(args["milestone_day"], 30)
+        self.assertEqual(args["scheduled_at"], datetime(2026, 7, 23, 9, 0, 0, tzinfo=LOCAL_TZ))
 
     @patch("services.survey.has_scheduled_surveys", return_value=True)
     @patch("services.survey.save_survey_schedule")

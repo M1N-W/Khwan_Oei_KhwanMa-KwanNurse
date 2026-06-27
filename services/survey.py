@@ -32,7 +32,7 @@ from services.line_message import (
 logger = get_logger(__name__)
 
 SURVEY_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSc8NM7wvIrhzo8zW6NbfvKI741KcEANGzc8BcdZsfCErqkQAQ/viewform"
-MILESTONES = [7, 14, 21, 30]
+MILESTONES = [30]
 
 
 def schedule_milestone_surveys(user_id: str, activation_date: Optional[datetime] = None) -> bool:
