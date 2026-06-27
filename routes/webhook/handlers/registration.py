@@ -32,7 +32,18 @@ def handle_patient_identity(user_id, params, query_text=""):
         if not read_result.available:
             return jsonify({"fulfillmentText": t("identity.storage_unavailable", lang)}), 200
 
-        existing = read_result.profile or {}
+        existing = read_result.profile
+        if existing is None:
+            existing = {
+                "first_name": "",
+                "last_name": "",
+                "hn": "",
+                "phone": "",
+                "consent_granted": False,
+                "registration_status": "incomplete"
+            }
+            upsert_patient_profile(user_id, existing)
+            invalidate_profile_cache(user_id)
         update = prepare_registration_update(existing, params)
         merged = update.profile
         identity = normalize_identity_fields(params)
