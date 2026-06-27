@@ -772,7 +772,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
         dict: LINE Flex message object (``{"type": "flex", ...}``).
     """
     from services.line_message import (  # deferred to avoid circular import
-        flex_text, flex_separator, flex_bubble, build_flex_message,
+        flex_text, flex_separator, flex_bubble, build_flex_message, flex_button,
     )
 
     # Safe field extraction
@@ -783,7 +783,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
     phone_raw = profile.get("phone") or ""
     phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
     status = profile.get("registration_status") or "incomplete"
-    consent = profile.get("consent_given")
+    consent = profile.get("consent_granted")
 
     status_emoji = "✅" if status == "registered" else "⏳"
     consent_text = "ยินยอมแล้ว ✅" if consent is True else ("ไม่ยินยอม ❌" if consent is False else "ยังไม่ระบุ")
@@ -797,9 +797,17 @@ def build_profile_flex_summary(profile: dict) -> dict:
         flex_text(f"📋 ความยินยอม: {consent_text}", size="sm", color="#888888"),
     ]
 
+    footer_items = [
+        flex_button("✏️ แก้ไขชื่อ-นามสกุล", action_type="message", action_text="แก้ไขชื่อ", style="secondary"),
+        flex_button("✏️ แก้ไขเลข HN", action_type="message", action_text="แก้ไข HN", style="secondary"),
+        flex_button("✏️ แก้ไขเบอร์โทรศัพท์", action_type="message", action_text="แก้ไขเบอร์โทร", style="secondary"),
+        flex_button("✏️ แก้ไขข้อมูลทั้งหมด", action_type="message", action_text="แก้ไขข้อมูล", style="secondary"),
+    ]
+
     bubble = flex_bubble(
         body_components=body_items,
         header_text="📋 ข้อมูลการลงทะเบียน",
         header_background_color="#0066CC",
+        footer_components=footer_items,
     )
     return build_flex_message("สรุปข้อมูลการลงทะเบียนของคุณ", bubble)

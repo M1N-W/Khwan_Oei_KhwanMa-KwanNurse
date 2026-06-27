@@ -631,3 +631,125 @@ def build_daily_checkin_reminder() -> dict:
             },
         },
     }
+
+
+def build_user_manual_flex() -> dict:
+    """
+    Flex message: User manual guide for the bot.
+    """
+    return {
+        "type": "flex",
+        "altText": "📖 วิธีใช้งานระบบบอทขวัญเอ๋ยขวัญมา",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#0066CC",
+                "paddingAll": "16px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "📖 คู่มือการใช้งานระบบ",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "lg",
+                    }
+                ],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "ยินดีต้อนรับสู่ระบบ ขวัญเอ๋ยขวัญมา บอทดูแลผู้ป่วยหลังผ่าตัดค่ะ คุณสามารถใช้งานเมนูต่างๆ ได้ดังนี้ค่ะ:",
+                        "wrap": True,
+                        "size": "sm",
+                        "color": "#333333",
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "margin": "md",
+                        "spacing": "xs",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "📝 รายงานอาการ - พิมพ์ \"รายงานอาการ\"",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#0066CC",
+                            },
+                            {
+                                "type": "text",
+                                "text": "เพื่อประเมินความเสี่ยงและติดตามอาการรายวัน",
+                                "size": "xs",
+                                "color": "#666666",
+                            },
+                            {
+                                "type": "text",
+                                "text": "👤 ข้อมูลของฉัน - พิมพ์ \"ข้อมูลของฉัน\"",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#0066CC",
+                                "margin": "sm",
+                            },
+                            {
+                                "type": "text",
+                                "text": "เพื่อตรวจสอบข้อมูลประวัติและกดเลือกแก้ไขข้อมูล",
+                                "size": "xs",
+                                "color": "#666666",
+                            },
+                            {
+                                "type": "text",
+                                "text": "🏥 นัดหมายพยาบาล - พิมพ์ \"นัดหมาย\"",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#0066CC",
+                                "margin": "sm",
+                            },
+                            {
+                                "type": "text",
+                                "text": "เพื่อแจ้งวันเวลาขอเข้าตรวจหรือทำแผลหลังผ่าตัด",
+                                "size": "xs",
+                                "color": "#666666",
+                            },
+                            {
+                                "type": "text",
+                                "text": "💬 ปรึกษาพยาบาล - พิมพ์ \"ปรึกษาพยาบาล\"",
+                                "size": "sm",
+                                "weight": "bold",
+                                "color": "#0066CC",
+                                "margin": "sm",
+                            },
+                            {
+                                "type": "text",
+                                "text": "เพื่อติดต่อพูดคุยกับทีมพยาบาลขวัญเรือนโดยตรง",
+                                "size": "xs",
+                                "color": "#666666",
+                            }
+                        ],
+                    },
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#0066CC",
+                        "action": {
+                            "type": "message",
+                            "label": "📝 เริ่มลงทะเบียนคนไข้",
+                            "text": "ลงทะเบียน",
+                        },
+                    }
+                ],
+            },
+        },
+    }
+

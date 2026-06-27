@@ -651,6 +651,89 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
         for value in ("สมชาย", "ใจดี", "HN777", "0812345678", "ยินยอม"):
             self.assertNotIn(value, joined)
 
+    def test_registration_gating_locks_gated_intent(self):
+        from app import create_app
+        from database.patient_profile import PatientProfileReadResult
+
+        app = create_app()
+        client = app.test_client()
+        payload = {
+            "session": "projects/p/agent/sessions/U12345",
+            "queryResult": {
+                "queryText": "ความรู้เรื่องโรค",
+                "intent": {"displayName": "GetKnowledge"},
+                "parameters": {},
+            },
+        }
+
+        # Gate is active, profile has missing fields (incomplete)
+        profile = {"first_name": "", "registration_status": "incomplete"}
+        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, profile)), \
+             patch("services.patient_profile.should_prompt_registration") as should_prompt:
+            from collections import namedtuple
+            Decision = namedtuple("Decision", ["prompt", "reason", "fields"])
+            should_prompt.return_value = Decision(True, "incomplete", ("first_name",))
+            
+            res = client.post("/webhook", json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertIn("กรุณาลงทะเบียนข้อมูลผู้ป่วยก่อนใช้เมนูนี้", data.get("fulfillmentText", ""))
+
+    def test_registration_edit_commands_clears_fields(self):
+        from routes.webhook.handlers.registration import handle_patient_identity
+        from database.patient_profile import PatientProfileReadResult
+
+        existing = {
+            "first_name": "มาวิน",
+            "last_name": "อยู่เย็น",
+            "hn": "161616",
+            "phone": "0946477416",
+            "consent_granted": True,
+            "registration_status": "registered"
+        }
+        upsert_mock = Mock(return_value=True)
+
+        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, existing)), \
+             patch("database.patient_profile.upsert_patient_profile", upsert_mock), \
+             patch("services.patient_profile.invalidate_profile_cache"), \
+             patch("services.dashboard_readers.invalidate_dashboard_cache"):
+            
+            # Send edit name command
+            res, code = handle_patient_identity("U12345", {}, "แก้ไขชื่อ")
+            self.assertEqual(code, 200)
+            # The name fields in the upsert call should be cleared (empty strings)
+            last_upserted_profile = upsert_mock.call_args_list[-1][0][1]
+            self.assertEqual(last_upserted_profile.get("first_name"), "")
+            self.assertEqual(last_upserted_profile.get("last_name"), "")
+            self.assertEqual(last_upserted_profile.get("registration_status"), "incomplete")
+
+    def test_line_follow_event_triggers_manual_flex(self):
+        from app import create_app
+
+        app = create_app()
+        client = app.test_client()
+        payload = {
+            "events": [
+                {
+                    "type": "follow",
+                    "replyToken": "test_reply_token",
+                    "source": {"userId": "U12345"}
+                }
+            ]
+        }
+
+        with patch("services.line_message.reply_rich_message") as reply_mock:
+            res = client.post("/line/webhook", json=payload)
+            self.assertEqual(res.status_code, 200)
+            reply_mock.assert_called_once()
+            args = reply_mock.call_args[0]
+            self.assertEqual(args[0], "test_reply_token")
+            # First message is welcome text, second is manual Flex
+            self.assertEqual(args[1][0]["type"], "text")
+            self.assertEqual(args[1][1]["type"], "flex")
+            self.assertIn("คู่มือการใช้งานระบบ", args[1][1]["contents"]["header"]["contents"][0]["text"])
+
+
 
 class PatientRegistrationDashboardActionTests(unittest.TestCase):
 

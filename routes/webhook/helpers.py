@@ -16,6 +16,11 @@ _REGISTRATION_GATED_INTENTS = {
     "RequestAppointment",
     "GetFollowUpSummary",
     "RecommendKnowledge",
+    "ReportSymptoms",
+    "GetKnowledge",
+    "ContactNurse",
+    "FreeTextSymptom",
+    "CancelConsultation",
 }
 
 _LAST_ACTIVE_TRACKED_INTENTS = {
@@ -58,6 +63,9 @@ def _touch_activity(intent, user_id):
 def _registration_gate_response(intent, user_id, query_text):
     if intent not in _REGISTRATION_GATED_INTENTS:
         return None
+    if intent == "RequestAppointment":
+        if _appointment_during_registration_should_reroute(user_id, {}, query_text):
+            return None
     try:
         import config as app_config
         if not app_config.PATIENT_REGISTRATION_GATE_ENABLED:

@@ -38,5 +38,50 @@
     "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-8",
     "data": [{"text": "ต้องการลงทะเบียน", "userDefined": false}],
     "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-9",
+    "data": [{"text": "ข้อมูลของฉัน", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-10",
+    "data": [{"text": "ดูข้อมูล", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-11",
+    "data": [{"text": "ตรวจสอบข้อมูล", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-12",
+    "data": [{"text": "ประวัติของฉัน", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-13",
+    "data": [{"text": "แก้ไขข้อมูล", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-14",
+    "data": [{"text": "แก้ไขชื่อ", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-15",
+    "data": [{"text": "แก้ไข HN", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-16",
+    "data": [{"text": "แก้ไขเบอร์", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
+  },
+  {
+    "id": "e6724015-871c-44ec-b63a-bd8e51e008ab-17",
+    "data": [{"text": "profile", "userDefined": false}],
+    "isTemplate": false, "count": 0, "lang": "th", "updated": 0
   }
 ]

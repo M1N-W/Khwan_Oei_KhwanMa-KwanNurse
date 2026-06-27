@@ -220,7 +220,15 @@ def register_routes(app):
                 elif read_result and read_result.available and read_result.profile:
                     profile = read_result.profile
                     missing = registration_missing_fields(profile)
+                    from routes.webhook.helpers import _REGISTRATION_GATED_INTENTS, _appointment_during_registration_should_reroute
+                    should_override = False
                     if missing:
+                        if intent not in _REGISTRATION_GATED_INTENTS:
+                            should_override = True
+                        elif intent == "RequestAppointment" and _appointment_during_registration_should_reroute(user_id, params, query_text):
+                            should_override = True
+
+                    if should_override:
                         intent = "PatientIdentity"
                         first_missing = missing[0]
                         if first_missing == "first_name":
@@ -266,7 +274,20 @@ def register_routes(app):
         events = body.get("events") or []
         for event in events:
             try:
-                if event.get("type") != "message":
+                event_type = event.get("type")
+                if event_type == "follow":
+                    reply_token = event.get("replyToken")
+                    if reply_token:
+                        from services.line_message import build_user_manual_flex, build_text_message, reply_rich_message
+                        welcome_text = (
+                            "สวัสดีค่ะ ยินดีต้อนรับสู่ \"ขวัญเอ๋ยขวัญมา\" บอทดูแลผู้ป่วยหลังผ่าตัดค่ะ\n\n"
+                            "เพื่อความปลอดภัยในการดูแลสุขภาพ กรุณาลงทะเบียนข้อมูลผู้ป่วยก่อนเริ่มต้นใช้งานระบบนะคะ"
+                        )
+                        msg_text = build_text_message(welcome_text)
+                        msg_flex = build_user_manual_flex()
+                        reply_rich_message(reply_token, [msg_text, msg_flex])
+                    continue
+                if event_type != "message":
                     continue
                 msg = event.get("message") or {}
                 msg_type = msg.get("type")

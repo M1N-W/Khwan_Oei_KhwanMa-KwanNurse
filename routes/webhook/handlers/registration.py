@@ -45,6 +45,38 @@ def handle_patient_identity(user_id, params, query_text=""):
             }
             upsert_patient_profile(user_id, existing)
             invalidate_profile_cache(user_id)
+
+        # Intercept selective profile edit commands
+        norm_query = str(query_text or "").strip().replace(" ", "").lower()
+        edit_intercepted = False
+        if "แก้ไขชื่อ" in norm_query:
+            existing["first_name"] = ""
+            existing["last_name"] = ""
+            existing["registration_status"] = "incomplete"
+            edit_intercepted = True
+        elif "แก้ไขhn" in norm_query or "แก้ไขเลขhn" in norm_query:
+            existing["hn"] = ""
+            existing["registration_status"] = "incomplete"
+            edit_intercepted = True
+        elif "แก้ไขเบอร์" in norm_query or "แก้ไขโทรศัพท์" in norm_query:
+            existing["phone"] = ""
+            existing["registration_status"] = "incomplete"
+            edit_intercepted = True
+        elif "แก้ไขข้อมูล" in norm_query or "แก้ไขประวัติ" in norm_query:
+            existing["first_name"] = ""
+            existing["last_name"] = ""
+            existing["hn"] = ""
+            existing["phone"] = ""
+            existing["registration_status"] = "incomplete"
+            edit_intercepted = True
+
+        if edit_intercepted:
+            upsert_patient_profile(user_id, existing)
+            invalidate_profile_cache(user_id)
+            invalidate_dashboard_cache()
+            params = {}
+            query_text = ""
+
         params = enrich_registration_params(existing, params, query_text)
         update = prepare_registration_update(existing, params)
         merged = update.profile

@@ -45,7 +45,7 @@ SHEET_SURVEY_SCHEDULES = "SurveySchedules"  # KWN-07
 # Patient registry contract (KWN-02)
 PATIENT_CONSENT_VERSION = os.environ.get("PATIENT_CONSENT_VERSION", "v1").strip() or "v1"
 PATIENT_REGISTRATION_GATE_ENABLED = (
-    os.environ.get("PATIENT_REGISTRATION_GATE_ENABLED", "false").lower()
+    os.environ.get("PATIENT_REGISTRATION_GATE_ENABLED", "true").lower()
     in ("1", "true", "yes", "on")
 )
 
