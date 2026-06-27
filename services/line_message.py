@@ -502,4 +502,132 @@ def build_education_carousel(recommendations: list) -> dict:
     }
 
 
+def build_nurse_assigned_message(nurse_name: str, contact_link: str) -> dict:
+    """
+    Flex bubble: notify patient that their consultation was accepted by a nurse.
+    Includes altText that acts as a full fallback message with the link.
+    """
+    fallback_text = (
+        f"🏥 พยาบาล {nurse_name} รับคำขอปรึกษาของคุณแล้วค่ะ\n\n"
+        f"คุณสามารถกดแอดไลน์พยาบาลเพื่อเริ่มสนทนาได้ที่นี่เลยนะคะ: {contact_link}"
+    )
+    # Ensure fallback text does not exceed altText limits
+    alt_text = fallback_text[:399]
 
+    return {
+        "type": "flex",
+        "altText": alt_text,
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#2E7D32",
+                "paddingAll": "16px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "💚 พยาบาลรับคำขอแล้ว",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "lg",
+                    }
+                ],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": f"สวัสดีค่ะ พยาบาล {nurse_name} ได้รับคำขอปรึกษาของคุณแล้วค่ะ",
+                        "wrap": True,
+                        "size": "md",
+                        "color": "#333333",
+                    },
+                    {
+                        "type": "text",
+                        "text": "คุณสามารถกดปุ่มด้านล่างเพื่อแอดไลน์และเริ่มสนทนาได้เลยค่ะ",
+                        "wrap": True,
+                        "size": "sm",
+                        "color": "#666666",
+                    },
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#2E7D32",
+                        "action": {
+                            "type": "uri",
+                            "label": "💬 แชทกับพยาบาล",
+                            "uri": contact_link,
+                        },
+                    }
+                ],
+            },
+        },
+    }
+
+
+def build_daily_checkin_reminder() -> dict:
+    """
+    Flex message: reminder to prompt daily symptom reporting check-in.
+    """
+    return {
+        "type": "flex",
+        "altText": "🔔 ได้เวลารายงานอาการประจำวันแล้วค่ะ",
+        "contents": {
+            "type": "bubble",
+            "header": {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": "#2E7D32",
+                "paddingAll": "16px",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "🔔 รายงานอาการประจำวัน",
+                        "color": "#FFFFFF",
+                        "weight": "bold",
+                        "size": "md",
+                    }
+                ],
+            },
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "เพื่อความแม่นยำในการประเมินและป้องกันภาวะแทรกซ้อนหลังผ่าตัด โปรดกดรายงานอาการประจำวันของคุณในระบบแชทนี้ค่ะ",
+                        "wrap": True,
+                        "size": "sm",
+                        "color": "#333333",
+                    }
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#2E7D32",
+                        "action": {
+                            "type": "message",
+                            "label": "📝 รายงานอาการตอนนี้",
+                            "text": "รายงานอาการ",
+                        },
+                    }
+                ],
+            },
+        },
+    }

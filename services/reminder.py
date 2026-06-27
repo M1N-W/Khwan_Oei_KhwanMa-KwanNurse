@@ -10,6 +10,7 @@ from config import (
     NURSE_GROUP_ID,
     ReminderStatus,
     get_logger,
+    ENABLE_RICH_MESSAGES,
 )
 from database.reminders import (
     save_reminder_schedule,
@@ -97,7 +98,12 @@ def send_reminder(user_id, reminder_type):
         message = get_reminder_message(reminder_type)
         
         # Send via LINE - FIXED: Correct parameter order (message, target_id)
-        success = send_line_push(message, user_id)
+        if ENABLE_RICH_MESSAGES and reminder_type in ('day3', 'day14'):
+            from services.line_message import build_daily_checkin_reminder, push_rich_message
+            flex_msg = build_daily_checkin_reminder()
+            success = push_rich_message([flex_msg], user_id)
+        else:
+            success = send_line_push(message, user_id)
         
         if success:
             # Record in database
@@ -503,7 +509,12 @@ def _dispatch_single(reminder, claim_reminder, send_line_push, update_reminder_r
     message = get_reminder_message(reminder_type)
     send_error = None
     try:
-        success = send_line_push(message, user_id)
+        if ENABLE_RICH_MESSAGES and reminder_type in ('day3', 'day14'):
+            from services.line_message import build_daily_checkin_reminder, push_rich_message
+            flex_msg = build_daily_checkin_reminder()
+            success = push_rich_message([flex_msg], user_id)
+        else:
+            success = send_line_push(message, user_id)
     except Exception as exc:
         success = False
         send_error = str(exc)
