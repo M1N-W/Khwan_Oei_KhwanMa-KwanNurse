@@ -65,6 +65,21 @@ def handle_report_symptoms(user_id, params):
         except Exception:
             logger.exception("Failed to push proactive photography guide user=%s", user_id)
 
+    # T6 (S2-3): Proactive education push after ReportSymptoms
+    from config import ENABLE_RICH_MESSAGES
+    if ENABLE_RICH_MESSAGES and user_id:
+        try:
+            from services.patient_profile import get_or_build_profile
+            from services.education import recommend_guides
+            from services.line_message import build_education_carousel, push_rich_message
+            profile = get_or_build_profile(user_id, params)
+            recs = recommend_guides(profile, top_n=3)
+            if recs:
+                carousel = build_education_carousel(recs)
+                push_rich_message([carousel], user_id)
+        except Exception:
+            logger.exception("Failed to push proactive education user=%s", user_id)
+
     return jsonify({"fulfillmentText": result}), 200
 
 
