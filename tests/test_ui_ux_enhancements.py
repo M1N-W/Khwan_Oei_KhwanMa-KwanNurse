@@ -469,5 +469,67 @@ class TestHealthCheckDiagnostics(unittest.TestCase):
             self.assertTrue(data["diagnostics"]["config_ok"])
 
 
+class TestLINEUserIDExtraction(unittest.TestCase):
+    def test_extract_line_user_id_data_source_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "data": {
+                        "source": {
+                            "userId": "U123456"
+                        }
+                    }
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U123456")
+
+    def test_extract_line_user_id_payload_source_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "source": {
+                        "userId": "U789012"
+                    }
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U789012")
+
+    def test_extract_line_user_id_payload_root_path(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "userId": "U345678"
+                }
+            }
+        }
+        self.assertEqual(_extract_line_user_id(req), "U345678")
+
+    def test_extract_line_user_id_none_source(self):
+        from routes.webhook.handler import _extract_line_user_id
+        req = {
+            "originalDetectIntentRequest": {
+                "source": "line",
+                "payload": {
+                    "source": None
+                }
+            }
+        }
+        self.assertIsNone(_extract_line_user_id(req))
+
+    def test_extract_line_user_id_non_dict_inputs(self):
+        from routes.webhook.handler import _extract_line_user_id
+        self.assertIsNone(_extract_line_user_id(None))
+        self.assertIsNone(_extract_line_user_id([]))
+        self.assertIsNone(_extract_line_user_id("string"))
+
+
 if __name__ == "__main__":
     unittest.main()

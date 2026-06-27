@@ -15,26 +15,44 @@ from config import NURSE_GROUP_ID
 logger = get_logger(__name__)
 
 
-def _mask_user_id_for_log(user_id):
-    return scrub_user_id(user_id)
-
-
 def _extract_line_user_id(req: dict) -> str | None:
-    original_req = req.get("originalDetectIntentRequest", {})
-    if not original_req or original_req.get("source") != "line":
+    """
+    Extract the actual LINE User ID from Dialogflow's originalDetectIntentRequest
+    when available (e.g. when called via real LINE integration).
+    """
+    if not isinstance(req, dict):
         return None
-    payload = original_req.get("payload", {})
-    if not payload:
+        
+    original_req = req.get("originalDetectIntentRequest")
+    if not isinstance(original_req, dict) or original_req.get("source") != "line":
         return None
-    data = payload.get("data", {})
+    
+    payload = original_req.get("payload")
+    if not isinstance(payload, dict):
+        return None
+        
+    # Path 1: payload.data.source.userId
+    data = payload.get("data")
     if isinstance(data, dict):
-        user_id = data.get("source", {}).get("userId")
-        if user_id:
+        source = data.get("source")
+        if isinstance(source, dict):
+            user_id = source.get("userId")
+            if isinstance(user_id, str):
+                return user_id
+                
+    # Path 2: payload.source.userId
+    source = payload.get("source")
+    if isinstance(source, dict):
+        user_id = source.get("userId")
+        if isinstance(user_id, str):
             return user_id
-    user_id = payload.get("source", {}).get("userId")
-    if user_id:
+            
+    # Path 3: payload.userId
+    user_id = payload.get("userId")
+    if isinstance(user_id, str):
         return user_id
-    return payload.get("userId")
+        
+    return None
 
 
 def register_routes(app):
