@@ -141,6 +141,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "th": "ขอโทษค่ะ ไม่สามารถบันทึกข้อมูลคนไข้ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
         "en": "Sorry, I couldn't save the patient identity right now. Please try again.",
     },
+    "identity.cancelled": {
+        "th": "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ พิมพ์ “ลงทะเบียน” ได้เลยค่ะ",
+        "en": "❌ Registration cancelled. Type “Register” whenever you want to start again.",
+    },
     "identity.storage_unavailable": {
         "th": "ขอโทษค่ะ ระบบบันทึกข้อมูลขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง",
         "en": "Sorry, patient registration storage is temporarily unavailable. Please try again.",
