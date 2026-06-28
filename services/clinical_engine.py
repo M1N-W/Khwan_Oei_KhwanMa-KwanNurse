@@ -148,27 +148,27 @@ def evaluate_symptom_risk(inputs: SymptomClinicalInput) -> SymptomClinicalOutput
     if risk_score >= 5:
         risk_label = "🚨 อันตราย - ต้องพบแพทย์ทันที!"
         emoji = "🚨"
-        action = "กรุณาติดต่อพยาบาลหรือมาโรงพยาบาลทันที!"
+        action = "กรุณาติดต่อพยาบาลหรือเดินทางมาโรงพยาบาลทันทีค่ะ!"
         color = "🔴"
     elif risk_score >= 3:
         risk_label = "⚠️ เสี่ยงสูง"
         emoji = "⚠️"
-        action = "กรุณากดปุ่ม 'ปรึกษาพยาบาล' หรือโทรติดต่อทันที"
+        action = "กรุณากดปุ่ม 'ปรึกษาพยาบาล' หรือโทรติดต่อทีมพยาบาลทันทีค่ะ"
         color = "🟠"
     elif risk_score >= 2:
         risk_label = "🟡 เสี่ยงปานกลาง"
         emoji = "🟡"
-        action = "เฝ้าระวังอาการใกล้ชิด 24 ชม. ถ้าอาการแย่กรุณาติดต่อ"
+        action = "แนะนำให้เฝ้าระวังอาการอย่างใกล้ชิด 24 ชม. หากอาการแย่ลงกรุณาติดต่อทีมพยาบาลทันทีค่ะ"
         color = "🟡"
     elif risk_score == 1:
         risk_label = "🟢 เสี่ยงต่ำ (เฝ้าระวัง)"
         emoji = "🟢"
-        action = "โดยรวมปกติดี แต่ต้องสังเกตอาการต่อไป"
+        action = "โดยรวมปกติดีค่ะ แต่แนะนำให้สังเกตอาการอย่างต่อเนื่องนะคะ"
         color = "🟢"
     else:
         risk_label = "✅ ปกติดี"
         emoji = "✅"
-        action = "แผลหายดี ยอดเยี่ยมมาก! กรุณารายงานอาการต่อเนื่อง"
+        action = "แผลหายดีและแห้งดี ยอดเยี่ยมมากค่ะ! กรุณารายงานอาการอย่างต่อเนื่องนะคะ"
         color = "🟢"
     
     # Build message
@@ -179,7 +179,7 @@ def evaluate_symptom_risk(inputs: SymptomClinicalInput) -> SymptomClinicalOutput
         message += f"  {detail}\n"
     message += f"\n{color} ระดับความเสี่ยง: {risk_label}\n"
     message += f"(คะแนนรวม: {risk_score})\n\n"
-    message += f"💡 คำแนะนำ:\n{action}"
+    message += f"💡 คำแนะนำ:\n{action}\n\nด้วยความห่วงใยจากทีมพยาบาลค่ะ"
 
     return SymptomClinicalOutput(
         risk_score=risk_score,
@@ -393,6 +393,7 @@ def evaluate_personal_risk(inputs: PersonalClinicalInput) -> PersonalClinicalOut
     message += "💡 คำแนะนำ:\n"
     for adv in advice:
         message += f"  {adv}\n"
+    message += "\nด้วยความห่วงใยจากทีมพยาบาลค่ะ"
 
     return PersonalClinicalOutput(
         risk_score=risk_score,

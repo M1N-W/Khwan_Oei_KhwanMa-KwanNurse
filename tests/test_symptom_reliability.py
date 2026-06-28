@@ -56,7 +56,7 @@ class SymptomAssessmentOutcomeTests(unittest.TestCase):
         self.assertTrue(outcome.notification_required)
         self.assertTrue(outcome.notification_succeeded)
         self.assertIsNone(outcome.failed_alert_persisted)
-        self.assertIn("กรุณากดปุ่ม 'ปรึกษาพยาบาล' หรือโทรติดต่อทันที", outcome.message)
+        self.assertIn("กรุณากดปุ่ม 'ปรึกษาพยาบาล' หรือโทรติดต่อทีมพยาบาลทันทีค่ะ", outcome.message)
         self.assertNotIn("ไม่สามารถบันทึก", outcome.message)
         self.assertNotIn("ไม่สามารถยืนยัน", outcome.message)
         save.assert_called_once()
