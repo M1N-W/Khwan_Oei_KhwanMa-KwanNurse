@@ -162,6 +162,55 @@ class LlmProviderTests(unittest.TestCase):
             from services import llm as llm_mod
             self.assertIsNone(llm_mod.complete_json("s", "u"))
 
+    def test_route_model(self):
+        from services.llm import route_model
+        # Test complex intents
+        self.assertEqual(route_model("ContactNurse"), "gemini-3-flash-preview")
+        self.assertEqual(route_model("reportsymptoms"), "gemini-3-flash-preview")
+        self.assertEqual(route_model("Teleconsult  "), "gemini-3-flash-preview")
+        # Test simple intents
+        self.assertEqual(route_model("GetKnowledge"), "gemini-3.1-flash-lite")
+        self.assertEqual(route_model("smalltalk"), "gemini-3.1-flash-lite")
+        # Test fallback
+        self.assertEqual(route_model("UnknownIntent"), "gemini-2.5-flash")
+        self.assertEqual(route_model(None), "gemini-2.5-flash")
+
+    def test_key_failover_on_429(self):
+        import requests
+        with patch("services.llm.LLM_PROVIDER", "gemini"), \
+             patch("services.llm.GEMINI_API_KEYS", ["key1", "key2"]), \
+             patch("services.llm.requests.post") as mock_post:
+            
+            # Key 1 fails with 429, Key 2 succeeds
+            response_429 = _FakeResponse(429)
+            resp_ok = _FakeResponse(200, _gemini_ok_payload("success from key 2"))
+            mock_post.side_effect = [
+                requests.exceptions.HTTPError(response=response_429),
+                resp_ok
+            ]
+            
+            from services import llm as llm_mod
+            # Clear cooldowns first to avoid pre-existing cooldown states
+            llm_mod._reset_state_for_tests()
+            result = llm_mod.complete("sys", "user")
+            self.assertEqual(result, "success from key 2")
+            self.assertEqual(mock_post.call_count, 2)
+
+    def test_ultimate_fallback_when_all_keys_fail(self):
+        import requests
+        with patch("services.llm.LLM_PROVIDER", "gemini"), \
+             patch("services.llm.GEMINI_API_KEYS", ["key1", "key2"]), \
+             patch("services.llm.requests.post") as mock_post:
+            
+            response_429 = _FakeResponse(429)
+            mock_post.side_effect = requests.exceptions.HTTPError(response=response_429)
+            
+            from services import llm as llm_mod
+            llm_mod._reset_state_for_tests()
+            result = llm_mod.complete("sys", "user")
+            self.assertIn("ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว", result)
+
+
 
 # ===========================================================================
 # Free-text NLP triage
