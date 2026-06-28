@@ -201,9 +201,21 @@ NURSE_RESPONSE_TIMEOUT_MINUTES = 30
 # education recommendations.
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "none").strip().lower()
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY_1 = os.environ.get("GEMINI_API_KEY_1") or os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY_2 = os.environ.get("GEMINI_API_KEY_2", "")
+GEMINI_API_KEY_3 = os.environ.get("GEMINI_API_KEY_3", "")
+GEMINI_API_KEYS = [k for k in (GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KEY_3) if k]
+
+GEMINI_API_KEY = GEMINI_API_KEY_1
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_DEFAULT_MODEL = "gemini-2.0-flash"
+GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
+if LLM_PROVIDER == "gemini" and not GEMINI_API_KEYS:
+    import warnings
+    warnings.warn(
+        "LLM_PROVIDER is set to 'gemini' but no Gemini API keys are configured in environment.",
+        RuntimeWarning,
+        stacklevel=1
+    )
 LLM_MODEL = os.environ.get("LLM_MODEL", "").strip()
 
 # Request budget: keep small so webhook p95 stays under SLO even when LLM
