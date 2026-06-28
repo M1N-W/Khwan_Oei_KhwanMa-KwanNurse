@@ -26,6 +26,7 @@ import requests
 from config import (
     LLM_PROVIDER,
     GEMINI_API_KEY,
+    GEMINI_API_KEYS,
     GEMINI_API_URL,
     GEMINI_DEFAULT_MODEL,
     LLM_MODEL,
@@ -73,10 +74,14 @@ _state = {
 }
 
 
+_key_cooldowns = {}
+_cooldown_lock = threading.Lock()
+
+
 def is_enabled():
     """True when a provider is configured and has a valid key."""
     if LLM_PROVIDER == "gemini":
-        return bool(GEMINI_API_KEY)
+        return bool(GEMINI_API_KEYS) or bool(GEMINI_API_KEY)
     return False
 
 
@@ -86,6 +91,83 @@ def _resolve_model():
     if LLM_PROVIDER == "gemini":
         return GEMINI_DEFAULT_MODEL
     return ""
+
+
+def route_model(intent: str = None) -> str:
+    if not intent:
+        return "gemini-2.5-flash"
+    
+    intent_lower = str(intent).strip().lower()
+    
+    complex_intents = {
+        "contactnurse", "reportsymptoms", "assessrisk", 
+        "assesspersonalrisk", "teleconsult", "emergencychoice", 
+        "afterhourschoice", "freetextsymptom"
+    }
+    simple_intents = {
+        "getknowledge", "default welcome intent", "smalltalk", 
+        "requestappointment", "cancelconsultation"
+    }
+    
+    if intent_lower in complex_intents:
+        return "gemini-3-flash-preview"
+    elif intent_lower in simple_intents:
+        return "gemini-3.1-flash-lite"
+        
+    return "gemini-2.5-flash"
+
+
+def _execute_with_key_fallback(api_call_fn, model_name):
+    import random
+    
+    # Retrieve pool of keys, fallback to GEMINI_API_KEY if config is empty (for tests patching)
+    keys_pool = GEMINI_API_KEYS
+    if not keys_pool and GEMINI_API_KEY:
+        keys_pool = [GEMINI_API_KEY]
+        
+    if not keys_pool:
+        keys_pool = ["mock-key"]
+        
+    now = time.time()
+    with _cooldown_lock:
+        available_keys = [k for k in keys_pool if _key_cooldowns.get(k, 0.0) <= now]
+        if not available_keys:
+            available_keys = list(keys_pool)
+            _key_cooldowns.clear()
+            
+    keys_to_try = list(available_keys)
+    random.shuffle(keys_to_try)
+    
+    for k in keys_pool:
+        if k not in keys_to_try:
+            keys_to_try.append(k)
+            
+    last_exc = None
+    for api_key in keys_to_try:
+        try:
+            return api_call_fn(api_key, model_name)
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 429:
+                logger.warning("Gemini 429 rate limit hit for key ...%s. Placing key on cooldown.", api_key[-6:])
+                with _cooldown_lock:
+                    _key_cooldowns[api_key] = time.time() + 60.0
+                _metric("llm.key_fallback_429")
+                last_exc = e
+                continue
+            logger.warning("Gemini HTTP error %s for key ...%s. Retrying next key.", e.response.status_code if e.response else e, api_key[-6:])
+            last_exc = e
+            continue
+        except requests.exceptions.RequestException as e:
+            logger.warning("Gemini connection error for key ...%s: %s. Retrying next key.", api_key[-6:], _redact_api_key(e))
+            last_exc = e
+            continue
+        except Exception as e:
+            logger.warning("Gemini unexpected error for key ...%s: %s. Retrying next key.", api_key[-6:], _redact_api_key(e))
+            last_exc = e
+            continue
+            
+    if last_exc:
+        raise last_exc
 
 
 def _reset_daily_counter_if_needed():
@@ -140,10 +222,9 @@ def _try_consume_vision_quota():
 # ---------------------------------------------------------------------------
 # Gemini adapter
 # ---------------------------------------------------------------------------
-def _call_gemini(system, user, max_tokens, want_json):
+def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
     """Low-level Gemini REST call. Returns text or raises."""
-    model = _resolve_model()
-    url = f"{GEMINI_API_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     parts = []
     if system:
@@ -183,7 +264,7 @@ def _call_gemini(system, user, max_tokens, want_json):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def complete(system, user, max_tokens=None, want_json=False):
+def complete(system, user, max_tokens=None, want_json=False, intent=None):
     """
     Run a single LLM completion.
 
@@ -192,6 +273,7 @@ def complete(system, user, max_tokens=None, want_json=False):
         user: user prompt (will be PII-scrubbed before leaving the process)
         max_tokens: override LLM_MAX_OUTPUT_TOKENS
         want_json: hint the provider to return JSON-mode output
+        intent: the Dialogflow intent string to route the target model
 
     Returns:
         str | None: response text, or None if disabled, circuit-open,
@@ -213,43 +295,45 @@ def complete(system, user, max_tokens=None, want_json=False):
     scrubbed_user = scrub_pii(user) or ""
     scrubbed_system = scrub_pii(system) if system else None
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+    model_name = route_model(intent)
 
     start = time.time()
     try:
         if LLM_PROVIDER == "gemini":
-            text = _call_gemini(scrubbed_system, scrubbed_user, tokens, want_json)
+            api_call = lambda k, m: _call_gemini(scrubbed_system, scrubbed_user, tokens, want_json, k, m)
+            text = _execute_with_key_fallback(api_call, model_name)
         else:
             return None
         elapsed_ms = int((time.time() - start) * 1000)
-        logger.info("LLM ok provider=%s elapsed=%dms chars=%d",
-                    LLM_PROVIDER, elapsed_ms, len(text))
+        logger.info("LLM ok provider=%s model=%s elapsed=%dms chars=%d",
+                    LLM_PROVIDER, model_name, elapsed_ms, len(text))
         _register_success()
         _metric("llm.call_success")
         return text
-    except requests.exceptions.Timeout:
-        logger.warning("LLM timeout after %.1fs", LLM_TIMEOUT_SECONDS)
+    except requests.exceptions.Timeout as e:
+        logger.warning("LLM timeout: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.call_timeout")
-        return None
+        return "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
     except requests.exceptions.RequestException as e:
         logger.warning("LLM network error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.call_network_error")
-        return None
-    except Exception:
-        logger.exception("LLM unexpected error")
+        return "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+    except Exception as e:
+        logger.exception("LLM unexpected error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.call_error")
-        return None
+        return "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
 
 
-def complete_json(system, user, max_tokens=None):
+def complete_json(system, user, max_tokens=None, intent=None):
     """
     Convenience wrapper: call `complete(want_json=True)` and parse JSON.
     Returns dict/list or None on any failure (including invalid JSON).
     """
-    raw = complete(system, user, max_tokens=max_tokens, want_json=True)
-    if not raw:
+    raw = complete(system, user, max_tokens=max_tokens, want_json=True, intent=intent)
+    if not raw or raw.startswith("🚨"):
         return None
     # Some providers wrap JSON in markdown fences despite the JSON hint.
     cleaned = raw.strip()
@@ -270,13 +354,12 @@ def complete_json(system, user, max_tokens=None):
 # ---------------------------------------------------------------------------
 # Vision (Gemini multimodal) — Sprint 2 S2-2
 # ---------------------------------------------------------------------------
-def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens):
+def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, api_key, model_name):
     """
     Low-level Gemini Vision REST call (multimodal: text + inline image).
     Returns text response or raises.
     """
-    model = LLM_VISION_MODEL or _resolve_model()
-    url = f"{GEMINI_API_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     parts = []
     if system:
@@ -319,7 +402,7 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens):
     return "".join(texts).strip()
 
 
-def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", max_tokens=None):
+def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", max_tokens=None, intent=None):
     """
     Run a single multimodal LLM completion expected to return JSON.
 
@@ -329,6 +412,7 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
         image_bytes: raw image bytes (jpeg/png from LINE Content API)
         mime_type: MIME type of the image (default 'image/jpeg')
         max_tokens: override LLM_MAX_OUTPUT_TOKENS
+        intent: the Dialogflow intent string to route the target model
 
     Returns:
         dict / list parsed from response, or None if disabled / circuit-open /
@@ -353,22 +437,24 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     scrubbed_system = scrub_pii(system) if system else None
     scrubbed_user = scrub_pii(user_text) if user_text else ""
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+    model_name = route_model(intent)
 
     start = time.time()
     try:
         if LLM_PROVIDER == "gemini":
-            raw = _call_gemini_vision(scrubbed_system, scrubbed_user, image_bytes, mime_type, tokens)
+            api_call = lambda k, m: _call_gemini_vision(scrubbed_system, scrubbed_user, image_bytes, mime_type, tokens, k, m)
+            raw = _execute_with_key_fallback(api_call, model_name)
         else:
             return None
         elapsed_ms = int((time.time() - start) * 1000)
         logger.info(
-            "LLM vision ok provider=%s elapsed=%dms image_kb=%d chars=%d",
-            LLM_PROVIDER, elapsed_ms, len(image_bytes) // 1024, len(raw),
+            "LLM vision ok provider=%s model=%s elapsed=%dms image_kb=%d chars=%d",
+            LLM_PROVIDER, model_name, elapsed_ms, len(image_bytes) // 1024, len(raw),
         )
         _register_success()
         _metric("llm.vision_call_success")
-    except requests.exceptions.Timeout:
-        logger.warning("LLM vision timeout after %.1fs", LLM_VISION_TIMEOUT_SECONDS)
+    except requests.exceptions.Timeout as e:
+        logger.warning("LLM vision timeout: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.vision_call_timeout")
         return None
@@ -377,8 +463,8 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
         _register_failure()
         _metric("llm.vision_call_network_error")
         return None
-    except Exception:
-        logger.exception("LLM vision unexpected error")
+    except Exception as e:
+        logger.warning("LLM vision unexpected error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.vision_call_error")
         return None
@@ -423,10 +509,9 @@ _TRANSCRIBE_PROMPT = (
 )
 
 
-def _call_gemini_audio(audio_bytes, mime_type, max_tokens):
+def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
     """Low-level Gemini multimodal call for audio → text transcription."""
-    model = LLM_VISION_MODEL or _resolve_model()
-    url = f"{GEMINI_API_URL}/{model}:generateContent?key={GEMINI_API_KEY}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
     parts = [
@@ -458,7 +543,7 @@ def _call_gemini_audio(audio_bytes, mime_type, max_tokens):
     return "".join(texts).strip()
 
 
-def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None):
+def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None, intent=None):
     """
     Transcribe a voice message to text via Gemini multimodal.
 
@@ -467,6 +552,7 @@ def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None):
         mime_type: e.g. ``audio/mp4`` (LINE default), ``audio/aac``,
             ``audio/wav``. Falls back to ``audio/mp4`` when unset.
         max_tokens: upper bound on transcription length (token budget).
+        intent: the Dialogflow intent string to route the target model
 
     Returns:
         Transcribed text string, or ``None`` if disabled / circuit-open /
@@ -493,23 +579,25 @@ def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None):
         return None
 
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+    model_name = route_model(intent)
 
     start = time.time()
     try:
         if LLM_PROVIDER == "gemini":
-            raw = _call_gemini_audio(audio_bytes, mime_type, tokens)
+            api_call = lambda k, m: _call_gemini_audio(audio_bytes, mime_type, tokens, k, m)
+            raw = _execute_with_key_fallback(api_call, model_name)
         else:
             return None
         elapsed_ms = int((time.time() - start) * 1000)
         logger.info(
-            "LLM audio ok provider=%s elapsed=%dms audio_kb=%d chars=%d",
-            LLM_PROVIDER, elapsed_ms, len(audio_bytes) // 1024, len(raw),
+            "LLM audio ok provider=%s model=%s elapsed=%dms audio_kb=%d chars=%d",
+            LLM_PROVIDER, model_name, elapsed_ms, len(audio_bytes) // 1024, len(raw),
         )
         _register_success()
         _metric("llm.audio_call_success")
         return raw or None
-    except requests.exceptions.Timeout:
-        logger.warning("LLM audio timeout after %.1fs", LLM_VISION_TIMEOUT_SECONDS)
+    except requests.exceptions.Timeout as e:
+        logger.warning("LLM audio timeout: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.audio_call_timeout")
         return None
@@ -518,8 +606,8 @@ def transcribe_audio(audio_bytes, mime_type="audio/mp4", *, max_tokens=None):
         _register_failure()
         _metric("llm.audio_call_network_error")
         return None
-    except Exception:
-        logger.exception("LLM audio unexpected error")
+    except Exception as e:
+        logger.warning("LLM audio unexpected error: %s", _redact_api_key(e))
         _register_failure()
         _metric("llm.audio_call_error")
         return None

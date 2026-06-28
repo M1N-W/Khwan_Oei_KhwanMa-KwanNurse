@@ -174,7 +174,7 @@ def evaluate_symptom_risk(inputs: SymptomClinicalInput) -> SymptomClinicalOutput
     # Build message
     message = f"{emoji} ผลประเมินอาการ\n"
     message += "=" * 30 + "\n\n"
-    message += "📋 รายละเอียด:\n"
+    message += "📋 รายละเอียด\n"
     for detail in risk_details:
         message += f"  {detail}\n"
     message += f"\n{color} ระดับความเสี่ยง: {risk_label}\n"
@@ -376,14 +376,14 @@ def evaluate_personal_risk(inputs: PersonalClinicalInput) -> PersonalClinicalOut
     
     message = f"{emoji} ผลประเมินความเสี่ยงส่วนบุคคล\n"
     message += "=" * 35 + "\n\n"
-    message += "👤 ข้อมูลพื้นฐาน:\n"
+    message += "👤 ข้อมูลพื้นฐาน\n"
     message += f"  • อายุ: {age_val if age_val is not None else '-'} ปี\n"
     message += f"  • น้ำหนัก: {weight_val if weight_val is not None else '-'} กก.\n"
     message += f"  • ส่วนสูง: {height_cm if height_cm is not None else '-'} ซม.\n"
     message += f"  • BMI: {bmi:.1f}\n"
     message += f"  • โรคประจำตัว: {diseases_str}\n\n"
     
-    message += "📊 ปัจจัยความเสี่ยง:\n"
+    message += "📊 ปัจจัยความเสี่ยง\n"
     for factor in risk_factors:
         message += f"  {factor}\n"
     

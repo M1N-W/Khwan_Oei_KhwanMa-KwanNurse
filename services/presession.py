@@ -138,7 +138,7 @@ def build_pre_consult_briefing(user_id, issue_type, description=""):
             parts.append(briefing["summary"])
         questions = briefing.get("questions") or []
         if questions:
-            parts.append("คำถามที่ควรถาม:")
+            parts.append("คำถามที่ควรถาม")
             for i, q in enumerate(questions, 1):
                 parts.append(f"  {i}. {q}")
         return "\n".join(parts)

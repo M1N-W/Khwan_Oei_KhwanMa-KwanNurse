@@ -32,7 +32,7 @@ def handle_get_followup_summary(user_id):
                 "📋 ยังไม่มีข้อมูลการติดตามค่ะ\n\n"
                 "หลังจากที่คุณจำหน่ายจากโรงพยาบาล\n"
                 "ระบบจะเริ่มติดตามอาการของคุณอัตโนมัติ\n\n"
-                "💡 ระบบจะส่งการเตือนในวันที่:\n"
+                "💡 ระบบจะส่งการเตือนในวันที่\n"
                 "   • วันที่ 3 หลังจำหน่าย\n"
                 "   • วันที่ 7 (สัปดาห์แรก)\n"
                 "   • วันที่ 14 (สัปดาห์ที่ 2)\n"
@@ -75,7 +75,7 @@ def handle_get_followup_summary(user_id):
                 status_display = status_map.get(status, status)
                 
                 message += (
-                    f"🔔 การติดตามล่าสุด:\n"
+                    f"🔔 การติดตามล่าสุด\n"
                     f"   📅 {type_display}\n"
                     f"   สถานะ: {status_display}\n"
                 )
