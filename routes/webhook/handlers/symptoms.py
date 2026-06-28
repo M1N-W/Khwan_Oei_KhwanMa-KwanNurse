@@ -156,20 +156,21 @@ def handle_assess_risk(user_id, params):
     height = params.get('height')
     disease = params.get('disease') or params.get('diseases')
     
-    # Validate required parameters
-    missing = []
     if age is None or str(age).strip() == "":
-        missing.append("อายุ")
+        ask = "กรุณาระบุ อายุ ของคนไข้ด้วยค่ะ (เช่น 45)"
+        return jsonify(_make_dialogflow_response(ask)), 200
     if weight is None or str(weight).strip() == "":
-        missing.append("น้ำหนัก (กิโลกรัม)")
+        ask = "กรุณาระบุ น้ำหนัก (กิโลกรัม) ของคนไข้ด้วยค่ะ (เช่น 65)"
+        return jsonify(_make_dialogflow_response(ask)), 200
     if height is None or str(height).strip() == "":
-        missing.append("ส่วนสูง (เซนติเมตร)")
+        ask = "กรุณาระบุ ส่วนสูง (เซนติเมตร) ของคนไข้ด้วยค่ะ (เช่น 170)"
+        return jsonify(_make_dialogflow_response(ask)), 200
     if not disease:
-        missing.append("โรคประจำตัว (หรือพิมพ์ 'ไม่มี')")
-    
-    if missing:
-        ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยค่ะ"
-        return jsonify({"fulfillmentText": ask}), 200
+        quick_replies = [
+            quick_reply_item("🟢 ไม่มีโรคประจำตัว", "ไม่มี"),
+        ]
+        ask = "กรุณาระบุ โรคประจำตัว (หรือพิมพ์/เลือก 'ไม่มี') ด้วยค่ะ"
+        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
     
     # Calculate risk
     result = calculate_personal_risk(user_id, age, weight, height, disease)
@@ -200,31 +201,35 @@ def handle_request_appointment(user_id, params):
     missing = []
     
     if not preferred_date:
-        missing.append("วันที่นัด (เช่น 25 มกราคม หรือ 2026-01-25)")
+        ask = "กรุณาระบุ วันที่นัดหมาย ด้วยค่ะ (เช่น 25 มิถุนายน หรือ 2026-06-25)"
+        return jsonify(_make_dialogflow_response(ask)), 200
     else:
         # Check if date is in the past
         today_local = datetime.now(tz=LOCAL_TZ).date()
         if preferred_date < today_local:
-            return jsonify({
-                "fulfillmentText": "⚠️ วันที่ที่เลือกเป็นอดีตแล้ว กรุณาเลือกวันที่ในอนาคตค่ะ"
-            }), 200
+            return jsonify(_make_dialogflow_response("⚠️ วันที่ที่เลือกเป็นอดีตแล้ว กรุณาเลือกวันที่ในอนาคตค่ะ")), 200
     
     if not preferred_time:
-        missing.append("เวลานัด (เช่น 09:00 หรือ 'เช้า'/'บ่าย')")
+        quick_replies = [
+            quick_reply_item("🟢 ช่วงเช้า (09:00 - 12:00)", "เช้า"),
+            quick_reply_item("🔵 ช่วงบ่าย (13:00 - 16:00)", "บ่าย"),
+        ]
+        ask = "กรุณาระบุ เวลาที่ต้องการนัดหมาย ด้วยค่ะ"
+        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
     
     if not reason:
-        missing.append("เหตุผลการนัด (เช่น เปลี่ยนผ้าพันแผล, ตรวจแผล)")
+        quick_replies = [
+            quick_reply_item("🟢 ตรวจแผลหลังผ่าตัด", "ตรวจแผลหลังผ่าตัด"),
+            quick_reply_item("🟡 เปลี่ยนผ้าพันแผล", "เปลี่ยนผ้าพันแผล"),
+            quick_reply_item("🔵 ปรึกษาอาการทั่วไป", "ปรึกษาอาการทั่วไป"),
+        ]
+        ask = "กรุณาระบุ เหตุผลการนัดหมาย ด้วยค่ะ"
+        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
     
     # Validate phone if provided
     phone_norm = normalize_phone_number(phone_raw) if phone_raw else None
     if phone_norm and not is_valid_thai_mobile(phone_norm):
-        return jsonify({
-            "fulfillmentText": "⚠️ เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข 10 หลัก (เช่น 0812345678)"
-        }), 200
-    
-    if missing:
-        ask = "กรุณาระบุ " + " และ ".join(missing) + " ด้วยค่ะ"
-        return jsonify({"fulfillmentText": ask}), 200
+        return jsonify(_make_dialogflow_response("⚠️ เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข 10 หลัก (เช่น 0812345678)")), 200
     
     # Create appointment
     pd_str = preferred_date.isoformat()

@@ -55,6 +55,20 @@ def _extract_line_user_id(req: dict) -> str | None:
     return None
 
 
+def _get_clear_all_contexts(session: str | None) -> list[dict]:
+    """Return a list of output contexts to clear all active state/slot-filling dialog contexts."""
+    if not session:
+        return []
+    contexts_to_clear = [
+        "registering",
+        "reportsymptoms_dialog_context",
+        "assessrisk_dialog_context",
+        "assesspersonalrisk_dialog_context",
+        "requestappointment_dialog_context",
+    ]
+    return [{"name": f"{session}/contexts/{name}", "lifespanCount": 0} for name in contexts_to_clear]
+
+
 def register_routes(app):
     """Register all webhook routes with Flask app"""
     
@@ -186,7 +200,10 @@ def register_routes(app):
                     read_result = None
 
                 # Reset/Cancel registration flow if user says cancel while registration is incomplete
-                if cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน"):
+                if cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน", "ยกเลิกนัด", "ยกเลิกนัดหมาย"):
+                    session = req.get("session")
+                    clear_contexts = _get_clear_all_contexts(session)
+                    registration_cancelled = False
                     if read_result and read_result.available and read_result.profile:
                         from services.patient_profile import is_registration_complete
                         if not is_registration_complete(read_result.profile):
@@ -198,11 +215,15 @@ def register_routes(app):
                                     "consent_granted": False, "consent_version": "", "consent_at": ""
                                 })
                                 invalidate_profile_cache(user_id)
-                                return jsonify({
-                                    "fulfillmentText": "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
-                                }), 200
+                                registration_cancelled = True
                             except Exception:
                                 pass
+                    if registration_cancelled:
+                        msg = "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
+                    else:
+                        msg = "❌ ยกเลิกการทำรายการเรียบร้อยแล้วค่ะ มีอะไรให้ฉันช่วยเหลือเพิ่มเติมไหมคะ?"
+                    from routes.webhook.helpers import _make_dialogflow_response
+                    return jsonify(_make_dialogflow_response(msg, output_contexts=clear_contexts)), 200
 
                 # AI Mode intercept (only for registered patients)
                 if read_result and read_result.available and read_result.profile:

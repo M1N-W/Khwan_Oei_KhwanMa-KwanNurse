@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -326,3 +327,51 @@ class TestUIUXImprovements(unittest.TestCase):
             data = response.get_json()
             self.assertIn("ออกจากโหมดคุยกับ AI เรียบร้อยแล้วค่ะ", data["fulfillmentText"])
             mock_upsert.assert_called_with("U_TEST_AI", {"ai_mode": False})
+
+    @patch("config.ENABLE_RICH_MESSAGES", True)
+    def test_progressive_slot_filling_and_escape_hatch(self):
+        # 1. Test RequestAppointment progressive prompt for time
+        with app.app_context():
+            from routes.webhook.handlers.symptoms import handle_request_appointment
+            response = handle_request_appointment("U_TEST", {
+                "date": "2026-06-30",
+                "time": "",
+                "reason": ""
+            })
+            data = json.loads(response[0].data)
+            self.assertIn("เวลาที่ต้องการนัดหมาย", data["fulfillmentText"])
+            items = data["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
+            self.assertEqual(len(items), 2)
+            self.assertEqual(items[0]["action"]["text"], "เช้า")
+
+        # 2. Test AssessRisk progressive prompt for diseases
+        with app.app_context():
+            from routes.webhook.handlers.symptoms import handle_assess_risk
+            response = handle_assess_risk("U_TEST", {
+                "age": 45,
+                "weight": 70,
+                "height": 175,
+                "diseases": ""
+            })
+            data = json.loads(response[0].data)
+            self.assertIn("โรคประจำตัว", data["fulfillmentText"])
+            items = data["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["action"]["text"], "ไม่มี")
+
+        # 3. Test escape hatch "ยกเลิก"
+        with app.app_context():
+            response = app.test_client().post("/webhook", json={
+                "queryResult": {
+                    "queryText": "ยกเลิก",
+                    "intent": {"displayName": "Default Fallback Intent"}
+                },
+                "session": "projects/dummy/agent/sessions/U_TEST_ESCAPE"
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertIn("ยกเลิกการทำรายการเรียบร้อยแล้วค่ะ", data["fulfillmentText"])
+            contexts = data["outputContexts"]
+            # Verify contexts are cleared
+            self.assertEqual(contexts[0]["lifespanCount"], 0)
+
