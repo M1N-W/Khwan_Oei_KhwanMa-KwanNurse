@@ -219,6 +219,7 @@ def _row_to_dict(headers: list[str], row: list[str]) -> dict[str, Any]:
         "first_name": first_name or None,
         "last_name": last_name or None,
         "hn": hn or None,
+        "citizen_id": (rec.get("Citizen_ID") or "").strip() or None,
         "phone": phone or None,
         "masked_phone": _mask_phone(phone),
         "registration_status": status,

@@ -27,6 +27,12 @@ class UXAndRobustnessTest(unittest.TestCase):
         self.assertFalse(is_valid_thai_citizen_id(None))
         self.assertFalse(is_valid_thai_citizen_id(""))
 
+    def test_citizen_id_mapping_in_row_to_dict(self):
+        from database.patient_profile import _row_to_dict, HEADERS
+        row = ["U1", "", "", "", "", "", "2026-01-01", "สมชาย", "ใจดี", "HN001", "0812345678", "incomplete", "", "", "", "", "", "1234567890121"]
+        profile = _row_to_dict(HEADERS, row)
+        self.assertEqual(profile.get("citizen_id"), "1234567890121")
+
     def test_thai_colloquial_time_parsing(self):
         # Morning hours
         self.assertEqual(parse_thai_colloquial_time("เจ็ดโมงเช้า"), "07:00")
