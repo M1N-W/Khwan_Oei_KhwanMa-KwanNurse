@@ -66,7 +66,7 @@ def get_category_menu():
         name = info['name_th']
         menu_items.append(f"{i}. {icon} {name}")
     
-    menu = "📋 เลือกเรื่องที่ต้องการปรึกษา:\n\n" + "\n".join(menu_items)
+    menu = "📋 เลือกเรื่องที่ต้องการปรึกษา\n\n" + "\n".join(menu_items)
     menu += "\n\nพิมพ์หมายเลข (1-5) เพื่อเลือก"
     
     return menu
@@ -270,7 +270,7 @@ def handle_emergency(user_id, description):
         message = (
             "🚨 รับเรื่องฉุกเฉินแล้วค่ะ\n\n"
             "📞 กำลังติดต่อพยาบาลด่วน...\n\n"
-            "💬 หรือกดเพื่อติดต่อพยาบาลขวัญเรือนโดยตรง:\n"
+            "💬 หรือกดเพื่อติดต่อพยาบาลขวัญเรือนโดยตรง\n"
             f"{NURSE_CONTACT_LINK}\n\n"
             "⚠️ ถ้าอาการรุนแรงมาก\n"
             "โปรดโทร 1669 ทันทีค่ะ\n\n"
