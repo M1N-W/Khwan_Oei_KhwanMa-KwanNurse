@@ -392,3 +392,37 @@ def get_user_active_session(user_id):
     except Exception as e:
         logger.exception(f"Error getting active session: {e}")
         return None
+
+
+def get_dynamic_queue_position(session_id: str) -> int:
+    """
+    Calculate dynamic queue position for a session by counting WAITING sessions ahead of it.
+    """
+    try:
+        sheet = get_worksheet(SHEET_TELECONSULT_QUEUE)
+        if not sheet:
+            return 1
+        all_values = sheet.get_all_values()
+        if not all_values or len(all_values) <= 1:
+            return 1
+        headers = all_values[0]
+        
+        status_idx = headers.index('Status') if 'Status' in headers else -1
+        session_id_idx = headers.index('Session_ID') if 'Session_ID' in headers else -1
+        
+        if status_idx == -1 or session_id_idx == -1:
+            return 1
+            
+        waiting_sessions = []
+        for row in all_values[1:]:
+            if len(row) > max(status_idx, session_id_idx):
+                if row[status_idx] == QueueStatus.WAITING:
+                    waiting_sessions.append(row[session_id_idx])
+                    
+        if session_id in waiting_sessions:
+            return waiting_sessions.index(session_id) + 1
+        return 1
+    except Exception as e:
+        logger.exception(f"Error calculating dynamic queue position: {e}")
+        return 1
+

@@ -178,68 +178,237 @@ def handle_assess_risk(user_id, params):
 
 
 def handle_request_appointment(user_id, params):
-    """Handle RequestAppointment intent"""
-    preferred_date_raw = (params.get('date') or 
-                         params.get('preferred_date') or 
-                         params.get('date-original'))
-    preferred_time_raw = params.get('time') or params.get('preferred_time')
-    timeofday_raw = params.get('timeofday') or params.get('time_of_day')
-    reason_raw = params.get('reason') or params.get('symptom') or params.get('description')
-    name_raw = params.get('name')
-    phone_raw_param = params.get('phone-number') or params.get('phone')
+    """Handle RequestAppointment intent sequentially"""
+    from flask import has_request_context, request as flask_req
+    session = None
+    ctx_params = {}
+    query_text = ""
     
-    from services.patient_profile import _coerce_string
-    name = _coerce_string(name_raw) or None
-    phone_raw = _coerce_string(phone_raw_param) or None
-    reason = _coerce_string(reason_raw) or ""
+    if has_request_context():
+        req_json = flask_req.get_json(silent=True, force=True) or {}
+        session = req_json.get("session")
+        query_text = req_json.get('queryResult', {}).get('queryText', '')
+        
+        # Extract previous parameters from requestappointment_dialog_context
+        contexts = req_json.get('queryResult', {}).get('outputContexts', [])
+        for ctx in contexts:
+            name_str = ctx.get('name', '')
+            if name_str.endswith("/contexts/requestappointment_dialog_context"):
+                ctx_params = ctx.get('parameters', {}) or {}
+                break
+
+    # Merge context parameters and fresh intent params
+    merged_params = dict(ctx_params)
+    merged_params.update(params or {})
+
+    # Backward compatibility: extract from date/time/reason if present
+    preferred_date_raw = (merged_params.get('date') or 
+                         merged_params.get('preferred_date') or 
+                         merged_params.get('date-original'))
+    preferred_time_raw = merged_params.get('time') or merged_params.get('preferred_time')
+    timeofday_raw = merged_params.get('timeofday') or merged_params.get('time_of_day')
+    reason_raw = merged_params.get('reason') or merged_params.get('symptom') or merged_params.get('description')
+
+    if preferred_date_raw:
+        from utils.parsers import parse_date_iso
+        pd = parse_date_iso(preferred_date_raw)
+        if pd:
+            merged_params["apt_day"] = str(pd.day)
+            merged_params["apt_month"] = str(pd.month)
+            merged_params["apt_year"] = str(pd.year)
+
+    from utils.parsers import parse_thai_colloquial_time, resolve_time_from_params
+    pt = resolve_time_from_params(preferred_time_raw, timeofday_raw)
+    if pt:
+        merged_params["preferred_time"] = pt
+
+    if reason_raw:
+        if isinstance(reason_raw, dict):
+            for k in ("symptom", "value", "name", "original"):
+                if k in reason_raw and isinstance(reason_raw[k], str):
+                    reason_raw = reason_raw[k]
+                    break
+        if isinstance(reason_raw, str):
+            merged_params["reason"] = reason_raw
+
+    # 1. Day Collection
+    if not merged_params.get("apt_day"):
+        cleaned_num = "".join(ch for ch in query_text if ch.isdigit())
+        if cleaned_num:
+            val = int(cleaned_num)
+            if 1 <= val <= 31:
+                merged_params["apt_day"] = str(val)
+                
+    output_contexts = None
+    if session:
+        output_contexts = [{
+            "name": f"{session}/contexts/requestappointment_dialog_context",
+            "lifespanCount": 5,
+            "parameters": merged_params
+        }]
+
+    if not merged_params.get("apt_day"):
+        ask = "กรุณาพิมพ์วันที่ที่ต้องการนัดหมาย (ตัวเลข 1-31) ค่ะ (เช่น 28)"
+        return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+
+    # 2. Month Collection
+    TH_MONTHS = {
+        "มกราคม": 1, "ม.ค.": 1, "มกรา": 1,
+        "กุมภาพันธ์": 2, "ก.พ.": 2, "กุมภา": 2,
+        "มีนาคม": 3, "มี.ค.": 3, "มีนา": 3,
+        "เมษายน": 4, "เม.ย.": 4, "เมษา": 4,
+        "พฤษภาคม": 5, "พ.ค.": 5, "พฤษภา": 5,
+        "มิถุนายน": 6, "มิ.ย.": 6, "มิถุนา": 6,
+        "กรกฎาคม": 7, "ก.ค.": 7, "กรกฎา": 7,
+        "สิงหาคม": 8, "ส.ค.": 8, "สิงหา": 8,
+        "กันยายน": 9, "ก.ย.": 9, "กันยา": 9,
+        "ตุลาคม": 10, "ต.ค.": 10, "ตุลา": 10,
+        "พฤศจิกายน": 11, "พ.ย.": 11, "พฤศจิกา": 11,
+        "ธันวาคม": 12, "ธ.ค.": 12, "ธันวา": 12
+    }
     
-    # Parse date and time
-    preferred_date = parse_date_iso(preferred_date_raw)
-    preferred_time = resolve_time_from_params(preferred_time_raw, timeofday_raw)
+    if not merged_params.get("apt_month"):
+        norm_text = query_text.strip().replace(" ", "")
+        month_val = None
+        for k, v in TH_MONTHS.items():
+            if k in norm_text:
+                month_val = v
+                break
+        if month_val:
+            merged_params["apt_month"] = str(month_val)
+
+    if not merged_params.get("apt_month"):
+        ask = "กรุณาระบุเดือนที่ต้องการนัดหมายค่ะ (เช่น พฤศจิกายน หรือ พ.ย.)"
+        return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+
+    # 3. Year Collection
+    if not merged_params.get("apt_year"):
+        cleaned_year = "".join(ch for ch in query_text if ch.isdigit())
+        if len(cleaned_year) >= 2:
+            val = int(cleaned_year)
+            year_ce = None
+            if val > 2400:
+                year_ce = val - 543
+            elif 2000 <= val < 2100:
+                year_ce = val
+            elif 60 <= val <= 99:
+                year_ce = (2500 + val) - 543
+            elif 20 <= val <= 59:
+                year_ce = 2000 + val
+                
+            if year_ce:
+                merged_params["apt_year"] = str(year_ce)
+
+    if not merged_params.get("apt_year"):
+        ask = "กรุณาระบุ ปี พ.ศ. ของการนัดหมายค่ะ (เช่น 2569)"
+        return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+
+    # Validateconstructed date correctness
+    try:
+        import datetime as dt_module
+        preferred_date = dt_module.date(
+            int(merged_params["apt_year"]),
+            int(merged_params["apt_month"]),
+            int(merged_params["apt_day"])
+        )
+    except (ValueError, TypeError):
+        # Invalid date like Feb 30, clear parameters and prompt again
+        for k in ("apt_day", "apt_month", "apt_year"):
+            merged_params.pop(k, None)
+        ask = "⚠️ วันที่ระบุไม่ถูกต้องตามปฏิทิน กรุณาระบุ วันที่ นัดหมายใหม่อีกครั้งค่ะ (ตัวเลข 1-31)"
+        return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+
+    # 4. Time Collection
+    from utils.parsers import parse_thai_colloquial_time, resolve_time_from_params
     
-    # Validate required parameters
-    missing = []
-    
-    if not preferred_date:
-        ask = "กรุณาระบุ วันที่นัดหมาย ด้วยค่ะ (เช่น 25 มิถุนายน หรือ 2026-06-25)"
-        return jsonify(_make_dialogflow_response(ask)), 200
-    else:
-        # Check if date is in the past
-        today_local = datetime.now(tz=LOCAL_TZ).date()
-        if preferred_date < today_local:
-            return jsonify(_make_dialogflow_response("⚠️ วันที่ที่เลือกเป็นอดีตแล้ว กรุณาเลือกวันที่ในอนาคตค่ะ")), 200
-    
-    if not preferred_time:
+    if not merged_params.get("preferred_time"):
+        if query_text == "ระบุเวลาเอง":
+            merged_params["waiting_for_custom_time"] = "true"
+            ask = "กรุณาพิมพ์เวลาที่ต้องการนัดหมายได้เลยค่ะ (เช่น 14:30 หรือ บ่ายสองโมงครึ่ง)"
+            return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+            
+        if merged_params.get("waiting_for_custom_time") == "true":
+            parsed_t = parse_thai_colloquial_time(query_text)
+            if parsed_t:
+                merged_params["preferred_time"] = parsed_t
+                merged_params.pop("waiting_for_custom_time", None)
+            else:
+                ask = "⚠️ ไม่สามารถเข้าใจเวลาที่ระบุได้ กรุณาพิมพ์เวลาใหม่อีกครั้งค่ะ (เช่น 14:30 หรือ บ่ายสองโมงครึ่ง)"
+                return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+        else:
+            # Check if user typed or sent time parameter directly
+            parsed_t = parse_thai_colloquial_time(query_text)
+            if not parsed_t:
+                parsed_t = resolve_time_from_params(params.get('time'), params.get('timeofday'))
+            if parsed_t:
+                merged_params["preferred_time"] = parsed_t
+
+    if not merged_params.get("preferred_time"):
         quick_replies = [
             quick_reply_item("🟢 ช่วงเช้า (09:00 - 12:00)", "เช้า"),
             quick_reply_item("🔵 ช่วงบ่าย (13:00 - 16:00)", "บ่าย"),
+            quick_reply_item("🕒 ระบุเวลาเอง", "ระบุเวลาเอง"),
         ]
         ask = "กรุณาระบุ เวลาที่ต้องการนัดหมาย ด้วยค่ะ"
-        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
-    
-    if not reason:
+        return jsonify(_make_dialogflow_response(ask, quick_replies, output_contexts=output_contexts)), 200
+
+    # 5. Reason Collection
+    if not merged_params.get("reason"):
+        from services.patient_profile import is_registration_trigger_text
+        if query_text and not is_registration_trigger_text(query_text) and query_text != "ระบุเวลาเอง":
+            merged_params["reason"] = query_text
+
+    if not merged_params.get("reason"):
         quick_replies = [
             quick_reply_item("🟢 ตรวจแผลหลังผ่าตัด", "ตรวจแผลหลังผ่าตัด"),
             quick_reply_item("🟡 เปลี่ยนผ้าพันแผล", "เปลี่ยนผ้าพันแผล"),
             quick_reply_item("🔵 ปรึกษาอาการทั่วไป", "ปรึกษาอาการทั่วไป"),
         ]
         ask = "กรุณาระบุ เหตุผลการนัดหมาย ด้วยค่ะ"
-        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+        return jsonify(_make_dialogflow_response(ask, quick_replies, output_contexts=output_contexts)), 200
+
+    # Date Validation (Future check)
+    today_local = datetime.now(tz=LOCAL_TZ).date()
+    if preferred_date < today_local:
+        for k in ("apt_day", "apt_month", "apt_year"):
+            merged_params.pop(k, None)
+        ask = "⚠️ วันที่ที่เลือกเป็นอดีตแล้ว กรุณาเลือกวันที่ในอนาคตค่ะ (เริ่มที่การระบุวันที่ 1-31)"
+        return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
+
+    # Final Execution
+    from services.patient_profile import get_or_build_profile, _coerce_string
+    profile = get_or_build_profile(user_id)
     
-    # Validate phone if provided
-    phone_norm = normalize_phone_number(phone_raw) if phone_raw else None
-    if phone_norm and not is_valid_thai_mobile(phone_norm):
-        return jsonify(_make_dialogflow_response("⚠️ เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข 10 หลัก (เช่น 0812345678)")), 200
-    
-    # Create appointment
-    pd_str = preferred_date.isoformat()
-    pt_str = preferred_time
+    name_param = merged_params.get('name') or (params and params.get('name'))
+    if isinstance(name_param, dict) and "name" in name_param:
+        name_param = name_param["name"]
+    name = _coerce_string(name_param)
+    if not name:
+        name = ((profile.get('first_name') or "") + " " + (profile.get('last_name') or "")).strip()
+    if not name:
+        name = "คนไข้"
+        
+    phone_param = merged_params.get('phone-number') or merged_params.get('phone') or (params and (params.get('phone-number') or params.get('phone')))
+    phone_norm = normalize_phone_number(phone_param) if phone_param else None
+    if not phone_norm:
+        phone_norm = profile.get('phone') or ""
+        
+    preferred_time = merged_params["preferred_time"]
+    reason = merged_params["reason"]
     
     success, message = create_appointment(
-        user_id, name, phone_norm, pd_str, pt_str, reason
+        user_id, name, phone_norm, preferred_date.isoformat(), preferred_time, reason
     )
     
-    return jsonify({"fulfillmentText": message}), 200
+    # Clear appointment context upon completion
+    clear_contexts = None
+    if session:
+        clear_contexts = [{
+            "name": f"{session}/contexts/requestappointment_dialog_context",
+            "lifespanCount": 0
+        }]
+        
+    return jsonify(_make_dialogflow_response(message, output_contexts=clear_contexts)), 200
 
 
 def handle_free_text_symptom(user_id, params, query_text):

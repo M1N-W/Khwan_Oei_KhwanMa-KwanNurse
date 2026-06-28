@@ -69,6 +69,7 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
                 "first_name": "สมหญิง",
                 "last_name": "ดี",
                 "hn": "HN001",
+                "citizen_id": "1234567890121",
                 "phone": "0812345678",
                 "consent_granted": True,
             })
@@ -76,13 +77,13 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
         self.assertTrue(ok)
         header_update = captured["updates"][0]
         row_update = captured["updates"][1]
-        self.assertEqual(header_update[0], "A1:R1")
+        self.assertEqual(header_update[0], "A1:S1")
         headers = header_update[1][0]
         self.assertEqual(headers[:10], pp_db.HEADERS[:10])
         self.assertEqual(headers[10], "Future_Field")
         for header in pp_db.HEADERS[10:]:
             self.assertIn(header, headers)
-        self.assertEqual(row_update[0], "A2:R2")
+        self.assertEqual(row_update[0], "A2:S2")
         row = row_update[1][0]
         self.assertEqual(row[headers.index("Phone")], "0812345678")
         self.assertEqual(row[headers.index("Registration_Status")], "registered")
@@ -195,7 +196,7 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
             [
                 "U1", "", "", "", "", "", "2026-01-01 08:00:00",
                 "สมชาย", "ใจดี", "HN001", "0812345678",
-                "incomplete", "", "", "", "",
+                "incomplete", "", "", "", "", "", "1234567890121",
             ],
         ]
         captured = {}
@@ -238,7 +239,7 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
                     [
                         "U1", "", "", "", "", "", "2026-01-01",
                         "สมชาย", "ใจดี", "HN001", "0812345678",
-                        "registered", "2026-01-01", "old", "2026-01-01", "",
+                        "registered", "2026-01-01", "old", "2026-01-01", "", "", "1234567890121",
                     ],
                 ]
 
@@ -257,7 +258,7 @@ class PatientRegistrationSheetContractTests(unittest.TestCase):
                     [
                         "U1", "", "", "", "", "", "2026-01-01",
                         "สมชาย", "ใจดี", "HN001", "0812345678",
-                        "registered", "2026-01-01", "v1", "2026-01-01", "",
+                        "registered", "2026-01-01", "v1", "2026-01-01", "", "", "1234567890121",
                     ],
                 ]
 
@@ -282,6 +283,7 @@ class PatientRegistrationServiceTests(unittest.TestCase):
                 "first_name": "สมชาย",
                 "last_name": "ใจดี",
                 "hn": "hn001",
+                "citizen_id": "1234567890121",
                 "phone": "021234567",
             },
         )
@@ -301,6 +303,7 @@ class PatientRegistrationServiceTests(unittest.TestCase):
                 "first_name": "สมชาย",
                 "last_name": "ใจดี",
                 "hn": "HN001",
+                "citizen_id": "1234567890121",
                 "phone": "+66812345678",
                 "consent": "ยินยอม",
             },
@@ -413,6 +416,7 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
                 "first_name": "สมชาย",
                 "last_name": "ใจดี",
                 "hn": "HN001",
+                "citizen_id": "1234567890121",
                 "phone": "081-234-5678",
             }, "")
 
@@ -457,6 +461,7 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
                        "first_name": "สมชาย",
                        "last_name": "ใจดี",
                        "hn": "HN001",
+                       "citizen_id": "1234567890121",
                    })):
             response, status = handle_patient_identity("U1", {}, "")
 
@@ -519,6 +524,7 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
             (True, PatientProfileReadResult(True, {
                 "first_name": "สมชาย", "last_name": "ใจดี", "hn": "HN001",
                 "phone": "0812345678", "consent_version": "v1", "consent_at": "2026-01-01",
+                "citizen_id": "1234567890121",
             })),
             (True, PatientProfileReadResult(False, None)),
         ]

@@ -86,7 +86,7 @@ class PatientIdentityWebhookTests(unittest.TestCase):
             )
 
         self.assertEqual(status, 200)
-        self.assertIn("เบอร์โทรศัพท์", response.get_json()["fulfillmentText"])
+        self.assertIn("บัตรประจำตัวประชาชน", response.get_json()["fulfillmentText"])
         self.assertEqual(captured["user_id"], "U1")
         self.assertEqual(captured["profile"]["age"], 61)
         self.assertEqual(captured["profile"]["first_name"], "สมชาย")

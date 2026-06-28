@@ -44,7 +44,7 @@ logger = get_logger(__name__)
 CACHE_KEY_PREFIX = "profile:v1"
 CACHE_TTL_SECONDS = 60  # short — profile rarely changes mid-conversation
 
-REGISTRATION_FIELD_ORDER = ("first_name", "last_name", "hn", "phone", "consent")
+REGISTRATION_FIELD_ORDER = ("name", "hn", "citizen_id", "phone", "consent")
 LAST_ACTIVE_CACHE_PREFIX = "profile:last-active:v1"
 LAST_ACTIVE_THROTTLE_SECONDS = 6 * 3600
 
@@ -164,12 +164,29 @@ def extract_explicit_consent(params: Optional[dict[str, Any]]) -> Optional[bool]
     return None
 
 
+def is_valid_thai_citizen_id(cid: Any) -> bool:
+    cleaned = "".join(ch for ch in str(cid) if ch.isdigit())
+    if len(cleaned) != 13:
+        return False
+    try:
+        digits = [int(ch) for ch in cleaned]
+        total = sum(digits[i] * (13 - i) for i in range(12))
+        chk = (11 - (total % 11)) % 10
+        return chk == digits[12]
+    except Exception:
+        return False
+
+
 def registration_missing_fields(profile: Optional[dict[str, Any]]) -> list[str]:
     profile = profile or {}
     missing: list[str] = []
-    for key in ("first_name", "last_name", "hn"):
-        if not (profile.get(key) or "").strip():
-            missing.append(key)
+    if not (profile.get("first_name") or "").strip() or not (profile.get("last_name") or "").strip():
+        missing.append("name")
+    if not (profile.get("hn") or "").strip():
+        missing.append("hn")
+    cid = (profile.get("citizen_id") or "").strip()
+    if not cid or not is_valid_thai_citizen_id(cid):
+        missing.append("citizen_id")
     phone = profile.get("phone") or ""
     if not (phone and is_valid_thai_mobile(str(phone))):
         missing.append("phone")
@@ -206,6 +223,20 @@ def prepare_registration_update(
             invalid.append("phone")
         elif phone:
             merged["phone"] = phone
+
+    if params and any(k in params for k in ("citizen_id", "citizen-id", "national_id", "national-id")):
+        raw_cid = (
+            params.get("citizen_id")
+            or params.get("citizen-id")
+            or params.get("national_id")
+            or params.get("national-id")
+        )
+        if raw_cid:
+            cleaned_cid = "".join(ch for ch in str(raw_cid) if ch.isdigit())
+            if not is_valid_thai_citizen_id(cleaned_cid):
+                invalid.append("citizen_id")
+            else:
+                merged["citizen_id"] = cleaned_cid
 
     consent = extract_explicit_consent(params)
     consent_declined = consent is False
@@ -409,12 +440,9 @@ def enrich_registration_params(
     first = (db_state.get("first_name") or "").strip()
     last = (db_state.get("last_name") or "").strip()
     hn = (db_state.get("hn") or "").strip()
+    citizen_id = (db_state.get("citizen_id") or "").strip()
 
-    if first and last and not hn and _looks_like_hn(text):
-        enriched.setdefault("hn", text.strip().upper())
-        return enriched
-
-    if not first:
+    if not first or not last:
         given, family = _split_person_name(text)
         if given:
             enriched.setdefault("first_name", given)
@@ -422,12 +450,16 @@ def enrich_registration_params(
             enriched.setdefault("last_name", family)
         return enriched
 
-    if not last:
-        given, family = _split_person_name(text)
-        if given and family and given == first:
-            enriched.setdefault("last_name", family)
-        else:
-            enriched.setdefault("last_name", text)
+    if not hn and _looks_like_hn(text):
+        enriched.setdefault("hn", text.strip().upper())
+        return enriched
+
+    if not citizen_id:
+        cid_clean = "".join(ch for ch in text if ch.isdigit())
+        if len(cid_clean) == 13:
+            enriched.setdefault("citizen_id", cid_clean)
+            return enriched
+
     return enriched
 
 
@@ -442,6 +474,7 @@ def clear_registration_identity_fields(user_id: str) -> bool:
         "first_name": "",
         "last_name": "",
         "hn": "",
+        "citizen_id": "",
         "phone": "",
     })
     if ok:
@@ -469,6 +502,12 @@ def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str
         or params.get("hospital_number")
         or params.get("hospital_no")
     )
+    citizen_id = _coerce_string(
+        params.get("citizen_id")
+        or params.get("citizen-id")
+        or params.get("national_id")
+        or params.get("national-id")
+    )
     out: dict[str, str] = {}
     first = _clean_text(first_name, 80)
     last = _clean_text(last_name, 80)
@@ -481,12 +520,15 @@ def normalize_identity_fields(params: Optional[dict[str, Any]]) -> dict[str, str
                 last = family
 
     hn_norm = _clean_text(hn, 40).upper()
+    cid_norm = "".join(ch for ch in str(citizen_id) if ch.isdigit())
     if first:
         out["first_name"] = first
     if last:
         out["last_name"] = last
     if hn_norm:
         out["hn"] = hn_norm
+    if cid_norm:
+        out["citizen_id"] = cid_norm
     return out
 
 
@@ -791,6 +833,13 @@ def build_profile_flex_summary(profile: dict) -> dict:
         flex_text, flex_separator, flex_bubble, build_flex_message, flex_button,
     )
 
+def build_profile_flex_summary(profile: dict) -> dict:
+    """
+    Build a Flex bubble that summarises a patient's registration status.
+    Replicated to match the premium card design from image_09929a.png precisely.
+    """
+    from services.line_message import build_flex_message  # deferred to avoid circular import
+
     # Safe field extraction
     first_name = profile.get("first_name") or ""
     last_name = profile.get("last_name") or ""
@@ -799,8 +848,17 @@ def build_profile_flex_summary(profile: dict) -> dict:
     phone_raw = profile.get("phone") or ""
     phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
     status = profile.get("registration_status") or "incomplete"
-    status_th = "ลงทะเบียนแล้ว" if status == "registered" else "ยังลงทะเบียนไม่ครบ"
     
+    citizen_id_raw = profile.get("citizen_id") or ""
+    if citizen_id_raw:
+        digits = "".join(ch for ch in str(citizen_id_raw) if ch.isdigit())
+        if len(digits) == 13:
+            citizen_id_display = f"{digits[0]}-{digits[1:5]}-XXXXX-XX-{digits[-1]}"
+        else:
+            citizen_id_display = digits
+    else:
+        citizen_id_display = "—"
+        
     consent_version = profile.get("consent_version") or ""
     consent_at = profile.get("consent_at") or ""
     
@@ -811,28 +869,278 @@ def build_profile_flex_summary(profile: dict) -> dict:
     else:
         consent_text = "ยังไม่ระบุ"
 
-    status_emoji = "✅" if status == "registered" else "⏳"
-
-    body_items = [
-        flex_text(f"{status_emoji} สถานะ: {status_th}", weight="bold", size="lg"),
-        flex_separator(),
-        flex_text(f"👤 ชื่อ: {full_name}"),
-        flex_text(f"🏥 HN: {hn}"),
-        flex_text(f"📞 เบอร์: {phone_display}"),
-        flex_text(f"📋 ความยินยอม: {consent_text}", size="sm", color="#888888"),
-    ]
-
-    footer_items = [
-        flex_button("✏️ แก้ไขชื่อ-นามสกุล", action_type="message", action_text="แก้ไขชื่อ", style="secondary"),
-        flex_button("✏️ แก้ไขเลข HN", action_type="message", action_text="แก้ไข HN", style="secondary"),
-        flex_button("✏️ แก้ไขเบอร์โทรศัพท์", action_type="message", action_text="แก้ไขเบอร์โทร", style="secondary"),
-        flex_button("✏️ แก้ไขข้อมูลทั้งหมด", action_type="message", action_text="แก้ไขข้อมูล", style="secondary"),
-    ]
-
-    bubble = flex_bubble(
-        body_components=body_items,
-        header_text="📋 ข้อมูลการลงทะเบียน",
-        header_background_color="#0066CC",
-        footer_components=footer_items,
-    )
+    bubble = {
+        "type": "bubble",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#466b96",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "📋 ข้อมูลการลงทะเบียน",
+                    "color": "#FFFFFF",
+                    "weight": "bold",
+                    "size": "md"
+                }
+            ]
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "backgroundColor": "#E6F4EA" if status == "registered" else "#FEF7E0",
+                            "cornerRadius": "20px",
+                            "paddingAll": "4px",
+                            "paddingStart": "10px",
+                            "paddingEnd": "10px",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "✅ ลงทะเบียนแล้ว" if status == "registered" else "⏳ ยังลงทะเบียนไม่ครบ",
+                                    "color": "#137333" if status == "registered" else "#B06000",
+                                    "size": "xs",
+                                    "weight": "bold"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "separator",
+                    "margin": "md"
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "md",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "👤",
+                            "flex": 0,
+                            "size": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "Patient Name",
+                                    "size": "xs",
+                                    "color": "#aaaaaa"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": full_name,
+                                    "size": "sm",
+                                    "weight": "bold",
+                                    "color": "#111111"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "md",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "🏥",
+                            "flex": 0,
+                            "size": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "HN",
+                                    "size": "xs",
+                                    "color": "#aaaaaa"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": hn,
+                                    "size": "sm",
+                                    "weight": "bold",
+                                    "color": "#111111"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "md",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "🆔",
+                            "flex": 0,
+                            "size": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "Citizen ID",
+                                    "size": "xs",
+                                    "color": "#aaaaaa"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": citizen_id_display,
+                                    "size": "sm",
+                                    "weight": "bold",
+                                    "color": "#111111"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "md",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "📞",
+                            "flex": 0,
+                            "size": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "Phone",
+                                    "size": "xs",
+                                    "color": "#aaaaaa"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": phone_display,
+                                    "size": "sm",
+                                    "weight": "bold",
+                                    "color": "#111111"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "md",
+                    "alignItems": "center",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "👍",
+                            "flex": 0,
+                            "size": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "Consent",
+                                    "size": "xs",
+                                    "color": "#aaaaaa"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": consent_text,
+                                    "size": "sm",
+                                    "weight": "bold",
+                                    "color": "#111111"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "✏️ แก้ไขชื่อ-นามสกุล",
+                        "text": "แก้ไขชื่อ"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "✏️ แก้ไขเลข HN",
+                        "text": "แก้ไข HN"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "✏️ แก้ไขเลขบัตรประชาชน",
+                        "text": "แก้ไขเลขบัตรประชาชน"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "✏️ แก้ไขเบอร์โทรศัพท์",
+                        "text": "แก้ไขเบอร์โทร"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "message",
+                        "label": "✏️ แก้ไขข้อมูลทั้งหมด",
+                        "text": "แก้ไขข้อมูล"
+                    }
+                }
+            ]
+        }
+    }
     return build_flex_message("สรุปข้อมูลการลงทะเบียนของคุณ", bubble)

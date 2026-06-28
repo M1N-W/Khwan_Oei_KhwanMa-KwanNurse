@@ -94,8 +94,8 @@ class TeleconsultServiceTests(unittest.TestCase):
             result = start_teleconsult('user-1', 'wound', 'desc')
 
         self.assertFalse(result['success'])
-        self.assertIn('กำลังดำเนินการอยู่แล้ว', result['message'])
-        self.assertIn('ตำแหน่งในคิว: 2', result['message'])
+        self.assertIn('ค้างอยู่ในระบบแล้ว', result['message'])
+        self.assertIn('ลำดับคิวของคุณ', result['message'])
 
     def test_start_teleconsult_routes_after_hours(self):
         with patch('services.teleconsult.get_user_active_session', return_value=None), \

@@ -150,7 +150,7 @@ class PatientProfileSheetTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertNotIn("appended", captured)
         # Sheet row 3 = data row 2 (1-indexed; row 1 is headers)
-        self.assertEqual(captured["range"], "A3:Q3")
+        self.assertEqual(captured["range"], "A3:R3")
         # Surgery_Type col (index 3) updated
         self.assertEqual(captured["values"][0][3], "knee_replacement")
 

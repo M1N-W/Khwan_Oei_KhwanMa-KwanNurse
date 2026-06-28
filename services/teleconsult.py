@@ -72,6 +72,15 @@ def get_category_menu():
     return menu
 
 
+_CATEGORY_TH = {
+    'emergency': 'ฉุกเฉิน',
+    'medication': 'ปรึกษาเรื่องยา',
+    'wound': 'แผลผ่าตัด',
+    'appointment': 'นัดหมาย/เอกสาร',
+    'other': 'อื่นๆ'
+}
+
+
 def parse_category_choice(choice_text):
     """
     Parse user's category choice
@@ -82,21 +91,30 @@ def parse_category_choice(choice_text):
     Returns:
         str: Category key or None
     """
+    if choice_text is None:
+        return None
     try:
-        # Try as number (only pure digit strings)
-        stripped = choice_text.strip()
-        if stripped.isdigit():
-            choice_num = int(stripped)
+        s = str(choice_text).strip()
+        if "." in s:
+            try:
+                val = float(s)
+                if val.is_integer():
+                    s = str(int(val))
+            except ValueError:
+                pass
+        
+        if s.isdigit():
+            choice_num = int(s)
             categories = list(ISSUE_CATEGORIES.keys())
             if 1 <= choice_num <= len(categories):
                 return categories[choice_num - 1]
         
         # Try as text matching
-        choice_lower = choice_text.lower().strip()
+        choice_lower = s.lower()
         for key, info in ISSUE_CATEGORIES.items():
             if (key in choice_lower or 
-                info['name_th'] in choice_text or
-                info['icon'] in choice_text):
+                info['name_th'] in s or
+                info['icon'] in s):
                 return key
         
         return None
@@ -124,15 +142,24 @@ def start_teleconsult(user_id, issue_type, description=""):
         # Check if user already has active session
         existing_session = get_user_active_session(user_id)
         if existing_session:
-            queue_pos = existing_session.get('Queue_Position', '?')
+            session_id = existing_session.get('Session_ID')
+            active_issue_type = existing_session.get('Issue_Type')
+            translated_topic = _CATEGORY_TH.get(active_issue_type, active_issue_type)
+            
+            if active_issue_type == 'emergency':
+                queue_text = "🚨 ขณะนี้ได้รับการประสานงานเร่งด่วนแบบไม่ต้องรอคิวค่ะ"
+            else:
+                from database.teleconsult import get_dynamic_queue_position
+                queue_pos = get_dynamic_queue_position(session_id)
+                queue_text = f"📊 ลำดับคิวของคุณ: {queue_pos}"
+                
             return {
                 'success': False,
                 'message': (
-                    f"⚠️ คุณมีคำขอปรึกษาที่กำลังดำเนินการอยู่แล้วค่ะ\n\n"
-                    f"📊 ตำแหน่งในคิว: {queue_pos}\n"
-                    f"📋 ประเภท: {existing_session.get('Issue_Type')}\n\n"
-                    f"กรุณารอพยาบาลติดต่อกลับนะคะ\n"
-                    f"หรือพิมพ์ 'ยกเลิก' เพื่อยกเลิกคำขอเดิม"
+                    f"⚠️ คุณมีคำขอปรึกษาค้างอยู่ในระบบแล้วค่ะ\n"
+                    f"📋 เรื่อง: {translated_topic}\n"
+                    f"{queue_text}\n"
+                    f"กรุณารอสักครู่ ทีมพยาบาลกำลังเตรียมพร้อมให้บริการค่ะ"
                 )
             }
         

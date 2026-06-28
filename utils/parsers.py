@@ -8,6 +8,8 @@ import json
 from datetime import datetime
 from config import get_logger, TIME_OF_DAY_MAP
 
+from typing import Optional
+
 logger = get_logger(__name__)
 
 
@@ -91,16 +93,91 @@ def parse_time_hhmm(s):
     return None
 
 
+def parse_thai_colloquial_time(s: str) -> Optional[str]:
+    """
+    Parse informal Thai times into standard HH:MM.
+    e.g. "บ่ายสองโมง" -> "14:00", "บ่าย 2 ครึ่ง" -> "14:30", "สิบโมงเช้า" -> "10:00", "14.30 น." -> "14:30"
+    """
+    if not s:
+        return None
+    try:
+        s = str(s).strip().replace(" ", "")
+        
+        # 1. Try to extract HH:MM or HH.MM via regex first
+        m = re.search(r'(\d{1,2})[:.](\d{2})', s)
+        if m:
+            h = int(m.group(1)) % 24
+            m2 = int(m.group(2)) % 60
+            return f"{h:02d}:{m2:02d}"
+            
+        # 2. Match Noon / Midnight
+        if s in ("เที่ยง", "เที่ยงตรง", "12.00น", "12.00น."):
+            return "12:00"
+        if s == "เที่ยงคืน":
+            return "00:00"
+            
+        minutes = "30" if "ครึ่ง" in s else "00"
+        
+        # 3. Night hours (ทุ่ม)
+        if "ทุ่ม" in s:
+            mapping = {"หนึ่ง": 19, "1": 19, "สอง": 20, "2": 20, "สาม": 21, "3": 21, "สี่": 22, "4": 22, "ห้า": 23, "5": 23}
+            for k, v in mapping.items():
+                if k in s:
+                    return f"{v:02d}:{minutes}"
+            return f"19:{minutes}"
+            
+        # 4. Afternoon hours (บ่าย / โมงเย็น)
+        if "บ่าย" in s or "โมงเย็น" in s:
+            if "โมงเย็น" in s:
+                mapping = {"สี่": 16, "4": 16, "ห้า": 17, "5": 17, "หก": 18, "6": 18}
+                for k, v in mapping.items():
+                    if k in s:
+                        return f"{v:02d}:{minutes}"
+            if "บ่าย" in s:
+                if "โมง" in s and "สอง" not in s and "สาม" not in s and "สี่" not in s and "1" not in s and "2" not in s and "3" not in s and "4" not in s:
+                    return f"13:{minutes}"
+                mapping = {"หนึ่ง": 13, "1": 13, "สอง": 14, "2": 14, "สาม": 15, "3": 15, "สี่": 16, "4": 16}
+                for k, v in mapping.items():
+                    if k in s:
+                        return f"{v:02d}:{minutes}"
+                return f"13:{minutes}"
+                
+        # 5. Morning hours (โมงเช้า / โมง)
+        if "โมง" in s or "เช้า" in s:
+            mapping = {
+                "เจ็ด": 7, "7": 7,
+                "แปด": 8, "8": 8,
+                "เก้า": 9, "9": 9,
+                "สิบเอ็ด": 11, "11": 11,
+                "สิบ": 10, "10": 10,
+            }
+            for k in ("สิบเอ็ด", "11", "เจ็ด", "7", "แปด", "8", "เก้า", "9", "สิบ", "10"):
+                if k in s:
+                    return f"{mapping[k]:02d}:{minutes}"
+            if "โมงเช้า" in s:
+                return f"07:{minutes}"
+                
+    except Exception:
+        logger.exception("Error parsing colloquial Thai time: %s", s)
+    return None
+
+
 def resolve_time_from_params(sys_time_param, timeofday_param):
     """
     Resolve time from system time or time-of-day parameter
-    Priority: explicit time > time-of-day mapping
+    Priority: explicit time > time-of-day mapping > colloquial time
     Returns: 'HH:MM' string or None
     """
     # Try explicit time first
     t = parse_time_hhmm(sys_time_param) if sys_time_param else None
     if t:
         return t
+        
+    for param in (sys_time_param, timeofday_param):
+        if param and isinstance(param, str):
+            t_col = parse_thai_colloquial_time(param)
+            if t_col:
+                return t_col
     
     # Try time-of-day mapping
     if not timeofday_param:

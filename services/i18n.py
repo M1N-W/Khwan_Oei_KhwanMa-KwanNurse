@@ -133,9 +133,17 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "th": "กรุณาลงทะเบียนข้อมูลผู้ป่วยก่อนใช้เมนูนี้ โดยพิมพ์หรือเลือก “ลงทะเบียน” ค่ะ",
         "en": "Please register patient information before using this menu. Type or select “Register”.",
     },
+    "identity.ask_citizen_id": {
+        "th": "ขอทราบเลขบัตรประจำตัวประชาชน 13 หลัก ของคนไข้เพื่อใช้ยืนยันสิทธิและบันทึกข้อมูลค่ะ (เช่น 1234567890123)",
+        "en": "Please tell me the patient's 13-digit Thai citizen ID number (e.g. 1234567890123).",
+    },
+    "identity.invalid_citizen_id": {
+        "th": "เลขบัตรประจำตัวประชาชนไม่ถูกต้องตามรูปแบบ (ต้องมี 13 หลักและตรวจสอบความถูกต้องตามโครงสร้าง) กรุณาระบุใหม่อีกครั้งโดยไม่ต้องใส่ขีดคั่นหรือเว้นวรรคค่ะ (เช่น 1234567890123)",
+        "en": "That citizen ID is invalid. Please send a valid 13-digit citizen ID.",
+    },
     "identity.confirm": {
-        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nโทร: {phone}",
-        "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nPhone: {phone}",
+        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nบัตรประชาชน: {citizen_id}\nโทร: {phone}\n\n💡 ทริค: คุณสามารถพิมพ์คำว่า 'ข้อมูล' เพื่อเรียกดูบัตรคนไข้ของคุณได้ตลอดเวลาค่ะ",
+        "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nCitizen ID: {citizen_id}\nPhone: {phone}\n\n💡 Hint: You can type 'ข้อมูล' to recall your profile card at any time.",
     },
     "identity.save_error": {
         "th": "ขอโทษค่ะ ไม่สามารถบันทึกข้อมูลคนไข้ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",

@@ -65,8 +65,18 @@ class TestRegistrationUXHelpers(unittest.TestCase):
         contents = msg["contents"]
         self.assertEqual(contents["type"], "bubble")
         
-        # Verify body contents
-        body_text_list = [c["text"] for c in contents["body"]["contents"] if c.get("text")]
+        # Verify body contents recursively to handle nested premium layout
+        def find_texts(item):
+            if isinstance(item, dict):
+                if item.get("type") == "text" and "text" in item:
+                    yield item["text"]
+                for val in item.values():
+                    yield from find_texts(val)
+            elif isinstance(item, list):
+                for sub in item:
+                    yield from find_texts(sub)
+
+        body_text_list = list(find_texts(contents["body"]))
         
         # HN is shown as-is
         self.assertTrue(any("HN12345" in text for text in body_text_list))

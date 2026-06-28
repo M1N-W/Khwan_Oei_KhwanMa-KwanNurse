@@ -128,8 +128,8 @@ class TestUIUXImprovements(unittest.TestCase):
         }
         flex = build_profile_flex_summary(profile)
         body_box = flex["contents"]["body"]
-        self.assertEqual(body_box["contents"][0]["text"], "✅ สถานะ: ลงทะเบียนแล้ว")
-        self.assertEqual(body_box["contents"][5]["text"], "📋 ความยินยอม: ยินยอมแล้ว ✅")
+        self.assertEqual(body_box["contents"][0]["contents"][0]["contents"][0]["text"], "✅ ลงทะเบียนแล้ว")
+        self.assertEqual(body_box["contents"][6]["contents"][1]["contents"][1]["text"], "ยินยอมแล้ว ✅")
 
         # 2. Incomplete and not consented
         profile_incomplete = {
@@ -143,8 +143,8 @@ class TestUIUXImprovements(unittest.TestCase):
         }
         flex_incomplete = build_profile_flex_summary(profile_incomplete)
         body_box_inc = flex_incomplete["contents"]["body"]
-        self.assertEqual(body_box_inc["contents"][0]["text"], "⏳ สถานะ: ยังลงทะเบียนไม่ครบ")
-        self.assertEqual(body_box_inc["contents"][5]["text"], "📋 ความยินยอม: ยังไม่ระบุ")
+        self.assertEqual(body_box_inc["contents"][0]["contents"][0]["contents"][0]["text"], "⏳ ยังลงทะเบียนไม่ครบ")
+        self.assertEqual(body_box_inc["contents"][6]["contents"][1]["contents"][1]["text"], "ยังไม่ระบุ")
 
     def test_flex_bubble_spacing(self):
         bubble = flex_bubble(
@@ -170,7 +170,8 @@ class TestUIUXImprovements(unittest.TestCase):
         existing = {
             "first_name": "มาวิน",
             "last_name": "อยู่เย็น",
-            "hn": "123456"
+            "hn": "123456",
+            "citizen_id": "1234567890121"
         }
         params = {
             "phone": "0946477416",
@@ -276,6 +277,7 @@ class TestUIUXImprovements(unittest.TestCase):
             "first_name": "มาวิน",
             "last_name": "อยู่เย็น",
             "hn": "123456",
+            "citizen_id": "1234567890121",
             "phone": "0946477416",
             "registration_status": "registered",
             "consent_version": PATIENT_CONSENT_VERSION,
@@ -341,7 +343,7 @@ class TestUIUXImprovements(unittest.TestCase):
             data = json.loads(response[0].data)
             self.assertIn("เวลาที่ต้องการนัดหมาย", data["fulfillmentText"])
             items = data["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
-            self.assertEqual(len(items), 2)
+            self.assertEqual(len(items), 3)
             self.assertEqual(items[0]["action"]["text"], "เช้า")
 
         # 2. Test AssessRisk progressive prompt for diseases

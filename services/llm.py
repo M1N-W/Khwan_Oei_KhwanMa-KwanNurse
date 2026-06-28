@@ -327,28 +327,47 @@ def complete(system, user, max_tokens=None, want_json=False, intent=None):
         return "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
 
 
+def _parse_json_robust(raw: str):
+    if not raw:
+        return None
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if "\n" in cleaned:
+            first_line, rest = cleaned.split("\n", 1)
+            if first_line.lower().strip() in ("json", ""):
+                cleaned = rest
+    cleaned = cleaned.strip()
+    
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+        
+    import re as _re
+    m = _re.search(r'(\{.*\}|\[.*\])', cleaned, _re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
 def complete_json(system, user, max_tokens=None, intent=None):
     """
     Convenience wrapper: call `complete(want_json=True)` and parse JSON.
     Returns dict/list or None on any failure (including invalid JSON).
     """
-    raw = complete(system, user, max_tokens=max_tokens, want_json=True, intent=intent)
-    if not raw or raw.startswith("🚨"):
-        return None
-    # Some providers wrap JSON in markdown fences despite the JSON hint.
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        # strip possible language tag on first line
-        if "\n" in cleaned:
-            first_line, rest = cleaned.split("\n", 1)
-            if first_line.lower().strip() in ("json", ""):
-                cleaned = rest
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        logger.warning("LLM JSON parse failed: %s | raw=%r", e, raw[:200])
-        return None
+    for attempt in range(3):
+        raw = complete(system, user, max_tokens=max_tokens, want_json=True, intent=intent)
+        if not raw or raw.startswith("🚨"):
+            continue
+        parsed = _parse_json_robust(raw)
+        if parsed is not None:
+            return parsed
+        logger.warning("complete_json: attempt %d JSON parse failed. raw=%r", attempt + 1, raw[:200])
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -439,50 +458,41 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
     model_name = route_model(intent)
 
-    start = time.time()
-    try:
-        if LLM_PROVIDER == "gemini":
-            api_call = lambda k, m: _call_gemini_vision(scrubbed_system, scrubbed_user, image_bytes, mime_type, tokens, k, m)
-            raw = _execute_with_key_fallback(api_call, model_name)
-        else:
-            return None
-        elapsed_ms = int((time.time() - start) * 1000)
-        logger.info(
-            "LLM vision ok provider=%s model=%s elapsed=%dms image_kb=%d chars=%d",
-            LLM_PROVIDER, model_name, elapsed_ms, len(image_bytes) // 1024, len(raw),
-        )
-        _register_success()
-        _metric("llm.vision_call_success")
-    except requests.exceptions.Timeout as e:
-        logger.warning("LLM vision timeout: %s", _redact_api_key(e))
-        _register_failure()
-        _metric("llm.vision_call_timeout")
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.warning("LLM vision network error: %s", _redact_api_key(e))
-        _register_failure()
-        _metric("llm.vision_call_network_error")
-        return None
-    except Exception as e:
-        logger.warning("LLM vision unexpected error: %s", _redact_api_key(e))
-        _register_failure()
-        _metric("llm.vision_call_error")
-        return None
-
-    # Parse JSON (some providers wrap in fences despite responseMimeType hint)
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        if "\n" in cleaned:
-            first_line, rest = cleaned.split("\n", 1)
-            if first_line.lower().strip() in ("json", ""):
-                cleaned = rest
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        logger.warning("LLM vision JSON parse failed: %s | raw=%r", e, raw[:200])
-        _metric("llm.vision_call_parse_error")
-        return None
+    for attempt in range(3):
+        start = time.time()
+        try:
+            if LLM_PROVIDER == "gemini":
+                api_call = lambda k, m: _call_gemini_vision(scrubbed_system, scrubbed_user, image_bytes, mime_type, tokens, k, m)
+                raw = _execute_with_key_fallback(api_call, model_name)
+            else:
+                return None
+            elapsed_ms = int((time.time() - start) * 1000)
+            parsed = _parse_json_robust(raw)
+            if parsed is not None:
+                logger.info(
+                    "LLM vision ok provider=%s model=%s elapsed=%dms image_kb=%d chars=%d attempt=%d",
+                    LLM_PROVIDER, model_name, elapsed_ms, len(image_bytes) // 1024, len(raw), attempt + 1,
+                )
+                _register_success()
+                _metric("llm.vision_call_success")
+                return parsed
+            else:
+                logger.warning("LLM vision JSON parse failed: raw=%r", raw[:200])
+                _metric("llm.vision_call_parse_error")
+        except requests.exceptions.Timeout as e:
+            logger.warning("LLM vision timeout: %s", _redact_api_key(e))
+            _register_failure()
+            _metric("llm.vision_call_timeout")
+        except requests.exceptions.RequestException as e:
+            logger.warning("LLM vision network error: %s", _redact_api_key(e))
+            _register_failure()
+            _metric("llm.vision_call_network_error")
+        except Exception as e:
+            logger.warning("LLM vision unexpected error: %s", _redact_api_key(e))
+            _register_failure()
+            _metric("llm.vision_call_error")
+            
+    return None
 
 
 # ---------------------------------------------------------------------------

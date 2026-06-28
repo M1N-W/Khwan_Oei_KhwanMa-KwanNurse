@@ -30,7 +30,7 @@ HEADERS = [
     "User_ID", "Age", "Sex", "Surgery_Type", "Surgery_Date", "Diseases",
     "Updated_At", "First_Name", "Last_Name", "HN", "Phone",
     "Registration_Status", "Registered_At", "Consent_Version", "Consent_At",
-    "Last_Active_At", "AI_Mode",
+    "Last_Active_At", "AI_Mode", "Citizen_ID",
 ]
 
 _FIELD_TO_HEADER = {
@@ -42,6 +42,7 @@ _FIELD_TO_HEADER = {
     "first_name": "First_Name",
     "last_name": "Last_Name",
     "hn": "HN",
+    "citizen_id": "Citizen_ID",
     "phone": "Phone",
     "last_active_at": "Last_Active_At",
     "ai_mode": "AI_Mode",
@@ -74,11 +75,25 @@ def _coerce_phone(value: Any) -> str:
     return ""
 
 
+def _is_valid_citizen_id(cid: Any) -> bool:
+    cleaned = "".join(ch for ch in str(cid) if ch.isdigit())
+    if len(cleaned) != 13:
+        return False
+    try:
+        digits = [int(ch) for ch in cleaned]
+        total = sum(digits[i] * (13 - i) for i in range(12))
+        chk = (11 - (total % 11)) % 10
+        return chk == digits[12]
+    except Exception:
+        return False
+
+
 def _registration_status(rec: dict[str, Any]) -> str:
     required = (
         (rec.get("First_Name") or "").strip(),
         (rec.get("Last_Name") or "").strip(),
         (rec.get("HN") or "").strip(),
+        _is_valid_citizen_id(rec.get("Citizen_ID")),
         _coerce_phone(rec.get("Phone")),
         (rec.get("Consent_Version") or "").strip() == PATIENT_CONSENT_VERSION,
         bool((rec.get("Consent_At") or "").strip()),

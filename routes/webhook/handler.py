@@ -69,6 +69,27 @@ def _get_clear_all_contexts(session: str | None) -> list[dict]:
     return [{"name": f"{session}/contexts/{name}", "lifespanCount": 0} for name in contexts_to_clear]
 
 
+def _has_active_context(req: dict, context_name: str) -> bool:
+    """Check if context_name is active (lifespanCount > 0) in Dialogflow request."""
+    contexts = req.get('queryResult', {}).get('outputContexts', [])
+    for ctx in contexts:
+        name = ctx.get('name', '')
+        if name.endswith(f"/contexts/{context_name}"):
+            if ctx.get('lifespanCount', 0) > 0:
+                return True
+    return False
+
+
+def _extract_context_parameters(req: dict, context_name: str) -> dict:
+    """Extract parameters from Dialogflow context."""
+    contexts = req.get('queryResult', {}).get('outputContexts', [])
+    for ctx in contexts:
+        name = ctx.get('name', '')
+        if name.endswith(f"/contexts/{context_name}"):
+            return ctx.get('parameters', {}) or {}
+    return {}
+
+
 def register_routes(app):
     """Register all webhook routes with Flask app"""
     
@@ -187,6 +208,32 @@ def register_routes(app):
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
             
+            # Context-based Intent Interception (Component 4)
+            if intent == 'GetKnowledge':
+                if _has_active_context(req, 'requestappointment_dialog_context'):
+                    ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
+                    new_params = dict(ctx_params)
+                    new_params.update(params)
+                    new_params['reason'] = query_text
+                    params = new_params
+                    intent = 'RequestAppointment'
+                    logger.info("GetKnowledge hijacked and rerouted to RequestAppointment reason=%s", query_text)
+                elif _has_active_context(req, 'reportsymptoms_dialog_context'):
+                    ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
+                    new_params = dict(ctx_params)
+                    new_params.update(params)
+                    if not new_params.get('pain_score'):
+                        new_params['pain_score'] = query_text
+                    elif not new_params.get('wound_status'):
+                        new_params['wound_status'] = query_text
+                    elif not new_params.get('fever_check'):
+                        new_params['fever_check'] = query_text
+                    elif not new_params.get('mobility_status'):
+                        new_params['mobility_status'] = query_text
+                    params = new_params
+                    intent = 'ReportSymptoms'
+                    logger.info("GetKnowledge hijacked and rerouted to ReportSymptoms param=%s", query_text)
+            
             # Deterministic router & State Machine: bypass Dialogflow ML misclassification
             if isinstance(query_text, str):
                 cleaned_query = query_text.strip().lower()
@@ -262,12 +309,12 @@ def register_routes(app):
                     if should_override:
                         intent = "PatientIdentity"
                         first_missing = missing[0]
-                        if first_missing == "first_name":
+                        if first_missing == "name":
                             params = {"first_name": query_text}
-                        elif first_missing == "last_name":
-                            params = {"last_name": query_text}
                         elif first_missing == "hn":
                             params = {"hn": query_text}
+                        elif first_missing == "citizen_id":
+                            params = {"citizen_id": query_text}
                         elif first_missing == "phone":
                             params = {"phone": query_text}
                         elif first_missing == "consent":

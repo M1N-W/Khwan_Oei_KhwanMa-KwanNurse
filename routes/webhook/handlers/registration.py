@@ -58,6 +58,10 @@ def handle_patient_identity(user_id, params, query_text=""):
             existing["hn"] = ""
             existing["registration_status"] = "incomplete"
             edit_intercepted = True
+        elif "แก้ไขบัตรประชาชน" in norm_query or "แก้ไขเลขบัตร" in norm_query:
+            existing["citizen_id"] = ""
+            existing["registration_status"] = "incomplete"
+            edit_intercepted = True
         elif "แก้ไขเบอร์" in norm_query or "แก้ไขโทรศัพท์" in norm_query:
             existing["phone"] = ""
             existing["registration_status"] = "incomplete"
@@ -66,6 +70,7 @@ def handle_patient_identity(user_id, params, query_text=""):
             existing["first_name"] = ""
             existing["last_name"] = ""
             existing["hn"] = ""
+            existing["citizen_id"] = ""
             existing["phone"] = ""
             existing["registration_status"] = "incomplete"
             edit_intercepted = True
@@ -99,6 +104,7 @@ def handle_patient_identity(user_id, params, query_text=""):
         first_name = merged.get("first_name") or ""
         last_name = merged.get("last_name") or ""
         hn = merged.get("hn") or ""
+        citizen_id = merged.get("citizen_id") or ""
         phone = merged.get("phone") or ""
 
         # Gather remaining missing fields for quick replies
@@ -117,12 +123,14 @@ def handle_patient_identity(user_id, params, query_text=""):
                         "lifespanCount": 5
                     }]
 
-        if not first_name:
+        if not first_name or not last_name:
             return jsonify(_make_dialogflow_response(t("identity.ask_first_name", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
-        if not last_name:
-            return jsonify(_make_dialogflow_response(t("identity.ask_last_name", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if not hn:
             return jsonify(_make_dialogflow_response(t("identity.ask_hn", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
+        if "citizen_id" in update.invalid_fields:
+            return jsonify(_make_dialogflow_response(t("identity.invalid_citizen_id", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
+        if not citizen_id:
+            return jsonify(_make_dialogflow_response(t("identity.ask_citizen_id", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if "phone" in update.invalid_fields:
             return jsonify(_make_dialogflow_response(t("identity.invalid_phone", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
         if not phone:
@@ -133,12 +141,17 @@ def handle_patient_identity(user_id, params, query_text=""):
             return jsonify(_make_dialogflow_response(t("identity.ask_consent", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
 
         # All registered successfully
+        cid_masked = ""
+        if citizen_id:
+            cid_masked = f"{citizen_id[0]}-{citizen_id[1:5]}-XXXXX-XX-{citizen_id[-1]}"
+            
         confirm_text = t(
             "identity.confirm",
             lang,
             first_name=first_name,
             last_name=last_name,
             hn=hn,
+            citizen_id=cid_masked,
             phone=mask_phone_number(phone),
         )
         flex_summary = build_profile_flex_summary(merged)
