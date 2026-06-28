@@ -117,7 +117,7 @@ def evaluate_symptom_risk(inputs: SymptomClinicalInput) -> SymptomClinicalOutput
     # and must be escalated immediately to Critical (+3), not just Moderate (+1).
     mobility_text = str(inputs.mobility or "").lower()
     _sudden_keywords = ["กะทันหัน", "ทันที", "เพิ่งเดินไม่ได้", "suddenly", "suddenly unable", "abruptly"]
-    _mobility_lost_keywords = ["ไม่ได้", "ติดเตียง", "ไม่เดิน", "cannot", "bedridden"]
+    _mobility_lost_keywords = ["ไม่ได้", "ติดเตียง", "ไม่เดิน", "cannot", "bedridden", "พยุง"]
     if any(k in mobility_text for k in _sudden_keywords) and any(k in mobility_text for k in _mobility_lost_keywords):
         risk_score += 3
         risk_details.append("🔴 สูญเสียการเคลื่อนไหวอย่างกะทันหัน - ต้องประเมิน DVT/ข้อหลุดทันที!")

@@ -44,6 +44,19 @@ class TestUIUXImprovements(unittest.TestCase):
             # Check that calculate_symptom_risk was called with pain mapped to 9
             mock_calc.assert_called_once_with("U_TEST", 9, "แผลแห้งดี", "ไม่มีไข้", "เดินได้ปกติ", neuro=None)
 
+        # 3. Test mobility "ต้องพยุง" maps to moderate risk (+1)
+        from services.clinical_engine import evaluate_symptom_risk, SymptomClinicalInput
+        inputs = SymptomClinicalInput(
+            pain=0,
+            wound="แผลแห้งดี",
+            fever="ไม่มีไข้",
+            mobility="ต้องพยุง",
+            neuro=None
+        )
+        res = evaluate_symptom_risk(inputs)
+        self.assertEqual(res.risk_score, 1) # Moderate risk
+        self.assertIn("เคลื่อนไหวลำบาก", "".join(res.risk_details))
+
     @patch("config.ENABLE_RICH_MESSAGES", True)
     @patch("routes.webhook.handlers.fallback.is_office_hours")
     def test_contact_nurse_quick_replies_office_hours(self, mock_office_hours):
