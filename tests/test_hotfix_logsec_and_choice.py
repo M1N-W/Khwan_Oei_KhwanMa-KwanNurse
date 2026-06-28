@@ -88,7 +88,10 @@ class ApiKeyRedactionTests(unittest.TestCase):
              patch.object(llm.logger, "warning") as mock_warn:
             result = llm.complete("sys", "user")
 
-        self.assertIsNone(result)
+        self.assertEqual(
+            result,
+            "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+        )
         # Find the network-error log line
         net_calls = [
             c for c in mock_warn.call_args_list

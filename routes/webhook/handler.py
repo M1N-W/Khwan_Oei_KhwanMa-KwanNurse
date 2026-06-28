@@ -231,7 +231,7 @@ def register_routes(app):
                     from services.patient_profile import registration_missing_fields
                     missing = registration_missing_fields(profile)
                     if not missing:
-                        ai_response = handle_ai_mode_intercept(user_id, profile, query_text)
+                        ai_response = handle_ai_mode_intercept(user_id, profile, query_text, intent=intent)
                         if ai_response is not None:
                             return ai_response
 
@@ -541,7 +541,7 @@ def handle_line_image_event(event):
             logger.exception("Failed to push wound alert user=%s", user_id)
 
 
-def handle_ai_mode_intercept(user_id: str, profile: dict, query_text: str):
+def handle_ai_mode_intercept(user_id: str, profile: dict, query_text: str, intent: str = None):
     """Intercept incoming user text and handle AI consultation mode if active or triggered."""
     if not isinstance(query_text, str):
         return None
@@ -600,7 +600,7 @@ def handle_ai_mode_intercept(user_id: str, profile: dict, query_text: str):
             "ตอบสั้น กระชับ เข้าใจง่าย หลีกเลี่ยงศัพท์แพทย์ที่ยากเกินไป."
         )
         
-        reply_text = complete(_AI_MODE_SYSTEM_PROMPT, query_text)
+        reply_text = complete(_AI_MODE_SYSTEM_PROMPT, query_text, intent=intent)
         if not reply_text:
             reply_text = (
                 "🤖 ขณะนี้ AI มีผู้ใช้งานจำนวนมากและไม่สามารถตอบคำถามได้ชั่วคราว\n"

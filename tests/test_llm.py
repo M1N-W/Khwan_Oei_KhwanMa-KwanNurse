@@ -139,8 +139,14 @@ class LlmProviderTests(unittest.TestCase):
              patch("services.llm.requests.post") as mock_post:
             mock_post.side_effect = requests.exceptions.Timeout()
             from services import llm as llm_mod
-            self.assertIsNone(llm_mod.complete("s", "u"))
-            self.assertIsNone(llm_mod.complete("s", "u"))
+            self.assertEqual(
+                llm_mod.complete("s", "u"),
+                "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+            )
+            self.assertEqual(
+                llm_mod.complete("s", "u"),
+                "🚨 ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว หากท่านมีอาการผิดปกติหรือต้องการความช่วยเหลือด่วน กรุณาพิมพ์ 'คุยกับพยาบาล' เพื่อติดต่อพยาบาลโดยตรง หรือหากเป็นกรณีฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+            )
             # circuit should be open now; a third call must skip HTTP entirely
             mock_post.reset_mock()
             mock_post.side_effect = None
