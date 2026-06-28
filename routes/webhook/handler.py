@@ -209,30 +209,38 @@ def register_routes(app):
             query_text = req.get('queryResult', {}).get('queryText', '')
             
             # Context-based Intent Interception (Component 4)
-            if intent == 'GetKnowledge':
+            is_cancel_or_nurse = False
+            if isinstance(query_text, str):
+                is_cancel_or_nurse = query_text.strip().lower() in (
+                    "ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน", 
+                    "ยกเลิกนัด", "ยกเลิกนัดหมาย", "ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล"
+                )
+
+            if not is_cancel_or_nurse:
                 if _has_active_context(req, 'requestappointment_dialog_context'):
-                    ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
-                    new_params = dict(ctx_params)
-                    new_params.update(params)
-                    new_params['reason'] = query_text
-                    params = new_params
-                    intent = 'RequestAppointment'
-                    logger.info("GetKnowledge hijacked and rerouted to RequestAppointment reason=%s", query_text)
+                    if intent != 'RequestAppointment':
+                        ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
+                        new_params = dict(ctx_params)
+                        new_params.update(params)
+                        params = new_params
+                        intent = 'RequestAppointment'
+                        logger.info("Intent hijacked and rerouted to RequestAppointment: query=%s", query_text)
                 elif _has_active_context(req, 'reportsymptoms_dialog_context'):
-                    ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
-                    new_params = dict(ctx_params)
-                    new_params.update(params)
-                    if not new_params.get('pain_score'):
-                        new_params['pain_score'] = query_text
-                    elif not new_params.get('wound_status'):
-                        new_params['wound_status'] = query_text
-                    elif not new_params.get('fever_check'):
-                        new_params['fever_check'] = query_text
-                    elif not new_params.get('mobility_status'):
-                        new_params['mobility_status'] = query_text
-                    params = new_params
-                    intent = 'ReportSymptoms'
-                    logger.info("GetKnowledge hijacked and rerouted to ReportSymptoms param=%s", query_text)
+                    if intent != 'ReportSymptoms':
+                        ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
+                        new_params = dict(ctx_params)
+                        new_params.update(params)
+                        if not new_params.get('pain_score'):
+                            new_params['pain_score'] = query_text
+                        elif not new_params.get('wound_status'):
+                            new_params['wound_status'] = query_text
+                        elif not new_params.get('fever_check'):
+                            new_params['fever_check'] = query_text
+                        elif not new_params.get('mobility_status'):
+                            new_params['mobility_status'] = query_text
+                        params = new_params
+                        intent = 'ReportSymptoms'
+                        logger.info("Intent hijacked and rerouted to ReportSymptoms: query=%s", query_text)
             
             # Deterministic router & State Machine: bypass Dialogflow ML misclassification
             if isinstance(query_text, str):

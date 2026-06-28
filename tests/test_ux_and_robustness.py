@@ -33,6 +33,26 @@ class UXAndRobustnessTest(unittest.TestCase):
         profile = _row_to_dict(HEADERS, row)
         self.assertEqual(profile.get("citizen_id"), "1234567890121")
 
+    def test_intent_hijacking_interception_afterhourschoice(self):
+        from routes.webhook.handler import _has_active_context, _extract_context_parameters
+        req_json = {
+            "queryResult": {
+                "intent": {"displayName": "AfterHoursChoice"},
+                "queryText": "ระบุเวลาเอง",
+                "parameters": {},
+                "outputContexts": [
+                    {
+                        "name": "projects/mock/agent/sessions/s1/contexts/requestappointment_dialog_context",
+                        "lifespanCount": 5,
+                        "parameters": {"apt_day": "7", "apt_month": "11"}
+                    }
+                ]
+            }
+        }
+        # Verify our helpers identify context
+        self.assertTrue(_has_active_context(req_json, "requestappointment_dialog_context"))
+        self.assertEqual(_extract_context_parameters(req_json, "requestappointment_dialog_context").get("apt_day"), "7")
+
     def test_thai_colloquial_time_parsing(self):
         # Morning hours
         self.assertEqual(parse_thai_colloquial_time("เจ็ดโมงเช้า"), "07:00")

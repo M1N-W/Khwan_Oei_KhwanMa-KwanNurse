@@ -224,6 +224,8 @@ def _try_consume_vision_quota():
 # ---------------------------------------------------------------------------
 def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
     """Low-level Gemini REST call. Returns text or raises."""
+    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
+        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     parts = []
@@ -295,6 +297,8 @@ def complete(system, user, max_tokens=None, want_json=False, intent=None):
     scrubbed_user = scrub_pii(user) or ""
     scrubbed_system = scrub_pii(system) if system else None
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+    if want_json and tokens < 300:
+        tokens = 500
     model_name = route_model(intent)
 
     start = time.time()
@@ -378,6 +382,8 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
     Low-level Gemini Vision REST call (multimodal: text + inline image).
     Returns text response or raises.
     """
+    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
+        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     parts = []
@@ -456,6 +462,8 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     scrubbed_system = scrub_pii(system) if system else None
     scrubbed_user = scrub_pii(user_text) if user_text else ""
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
+    if tokens < 300:
+        tokens = 500
     model_name = route_model(intent)
 
     for attempt in range(3):
@@ -521,6 +529,8 @@ _TRANSCRIBE_PROMPT = (
 
 def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
     """Low-level Gemini multimodal call for audio → text transcription."""
+    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
+        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
