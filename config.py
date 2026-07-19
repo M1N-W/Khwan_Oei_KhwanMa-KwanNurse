@@ -296,6 +296,10 @@ def validate_runtime_config():
         missing.append("CHANNEL_ACCESS_TOKEN")
     if not NURSE_GROUP_ID:
         missing.append("NURSE_GROUP_ID")
+    if not LINE_CHANNEL_SECRET:
+        missing.append("LINE_CHANNEL_SECRET")
+    if not DIALOGFLOW_WEBHOOK_TOKEN:
+        missing.append("DIALOGFLOW_WEBHOOK_TOKEN")
     if not SPREADSHEET_NAME:
         missing.append("SPREADSHEET_NAME")
 
@@ -304,6 +308,9 @@ def validate_runtime_config():
     creds_env = bool(GSPREAD_CREDENTIALS) or bool(os.environ.get("GOOGLE_CREDS_B64"))
     if not creds_file_exists and not creds_env:
         missing.append("credentials.json or GSPREAD_CREDENTIALS/GOOGLE_CREDS_B64")
+
+    if LLM_PROVIDER == "gemini" and not GEMINI_API_KEYS:
+        missing.append("GEMINI_API_KEY (when LLM_PROVIDER=gemini)")
 
     if missing:
         logger.error(

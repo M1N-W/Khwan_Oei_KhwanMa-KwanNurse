@@ -1,20 +1,13 @@
 {
-  "id": "e6724015-871c-44ec-b63a-bd8e51e008ac",
-  "name": "PatientIdentity_Fallback",
+  "id": "e6f3479b-6c0f-4e6b-9c47-2f0f3fbd1f7c",
+  "name": "RequestWoundImage",
   "auto": true,
-  "contexts": [
-    "registering"
-  ],
+  "contexts": [],
   "responses": [
     {
       "resetContexts": false,
       "action": "",
-      "affectedContexts": [
-        {
-          "name": "registering",
-          "lifespan": 0
-        }
-      ],
+      "affectedContexts": [],
       "parameters": [],
       "messages": [
         {
@@ -31,7 +24,7 @@
   "priority": 500000,
   "webhookUsed": true,
   "webhookForSlotFilling": false,
-  "fallbackIntent": true,
+  "fallbackIntent": false,
   "events": [],
   "conditionalResponses": [],
   "condition": "",

@@ -168,8 +168,8 @@ class AfterHoursChoiceRoutingTests(unittest.TestCase):
         with patch.object(teleconsult, "is_office_hours", return_value=True), \
              patch.object(teleconsult, "parse_category_choice", return_value=None):
             result = teleconsult.handle_after_hours_choice("U-x", "99")
-        # Legacy "please type 1 or 2" message
-        self.assertIn("กรุณาพิมพ์หมายเลข 1 หรือ 2", result["message"])
+        self.assertIn("กรุณาเลือกหมายเลขจากเมนู", result["message"])
+        self.assertIn("5. ❓ อื่นๆ", result["message"])
 
 
 # -----------------------------------------------------------------------------

@@ -529,11 +529,30 @@ def cancel_consultation(user_id):
         
         session_id = session.get('Session_ID')
         
-        # Update session status
-        update_session_status(session_id, SessionStatus.CANCELLED, notes='Cancelled by user')
-        
-        # Remove from queue
-        remove_from_queue(session_id)
+        # Older rows and unit fixtures may omit Status; such rows are queue-backed.
+        status = session.get('Status') or SessionStatus.QUEUED
+        status_updated = update_session_status(
+            session_id,
+            SessionStatus.CANCELLED,
+            notes='Cancelled by user',
+        )
+        if not status_updated:
+            logger.error("Failed to mark consultation cancelled session=%s user=%s", session_id, user_id)
+            return {
+                'success': False,
+                'message': "ไม่สามารถยกเลิกคำขอได้ในขณะนี้ กรุณาลองใหม่อีกครั้งค่ะ",
+            }
+
+        # Only queued sessions are required to have a waiting queue row.
+        queue_removed = True
+        if status == SessionStatus.QUEUED:
+            queue_removed = remove_from_queue(session_id)
+            if not queue_removed:
+                logger.error("Session cancelled but queue row was not removed session=%s", session_id)
+                return {
+                    'success': False,
+                    'message': "ยกเลิกสถานะคำขอแล้ว แต่ยังนำออกจากคิวไม่สำเร็จค่ะ ทีมงานกำลังตรวจสอบให้ค่ะ",
+                }
         
         logger.info(f"Cancelled session {session_id} for user {user_id}")
         

@@ -216,19 +216,20 @@ def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level
     """
     patient_label = _get_patient_prefix_label(user_id)
     message = (
-        f"🚨 รายงานอาการเร่งด่วน!\n"
-        f"───────────────\n"
-        f"👤 ผู้ป่วย: {patient_label}\n"
+        "🚨 รายงานอาการเร่งด่วน\n"
+        "────────\n"
+        f"👤 {patient_label}\n"
         f"⚠️ ความเสี่ยง: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
-        f"📋 อาการ:\n"
-        f"  • ความปวด: {pain}/10\n"
-        f"  • แผล: {wound}\n"
-        f"  • ไข้: {fever}\n"
-        f"  • เคลื่อนไหว: {mobility}\n\n"
-        f"⚡ กรุณาตรวจสอบทันที!\n"
-        f"📊 ดูข้อมูล: {WORKSHEET_LINK}"
+        "📋 อาการ\n"
+        f"• ปวด: {pain}/10\n"
+        f"• แผล: {wound}\n"
+        f"• ไข้: {fever}\n"
+        f"• เคลื่อนไหว: {mobility}\n\n"
+        "⚡ กรุณาตรวจสอบทันที"
     )
+    if WORKSHEET_LINK:
+        message += f"\n📎 ข้อมูล: {WORKSHEET_LINK}"
     return message
 
 

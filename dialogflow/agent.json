@@ -7,9 +7,32 @@
   "displayName": "Khwan-Oei-KhwanMa",
   "disableInteractionLogs": false,
   "disableStackdriverLogs": true,
+  "googleAssistant": {
+    "googleAssistantCompatible": false,
+    "project": "",
+    "welcomeIntentSignInRequired": false,
+    "startIntents": [],
+    "systemIntents": [],
+    "endIntentIds": [],
+    "oAuthLinking": {
+      "required": false,
+      "providerId": "",
+      "authorizationUrl": "",
+      "tokenUrl": "",
+      "scopes": "",
+      "privacyPolicyUrl": "",
+      "grantType": "AUTH_CODE_GRANT"
+    },
+    "voiceType": "VOICE_TYPE_UNSPECIFIED",
+    "capabilities": [],
+    "env": "",
+    "protocolVersion": "PROTOCOL_VERSION_UNSPECIFIED",
+    "autoPreviewEnabled": false,
+    "isDeviceAgent": false
+  },
   "defaultTimezone": "Asia/Bangkok",
   "webhook": {
-    "url": "https://khwan-oei-khwanma.onrender.com/webhook",
+    "url": "",
     "username": "",
     "headers": {},
     "available": true,
@@ -25,7 +48,7 @@
   "secondaryKey": "31f52f9fcabd4a6e9f752d397b971b35",
   "analyzeQueryTextSentiment": false,
   "enabledKnowledgeBaseNames": [],
-  "knowledgeServiceConfidenceAdjustment": 0.0,
+  "knowledgeServiceConfidenceAdjustment": -0.4,
   "dialogBuilderMode": false,
   "baseActionPackagesUrl": "",
   "enableSpellCorrection": false

@@ -183,7 +183,7 @@ def _format_alert(user_id, analysis, reports):
     )
 
     lines = [
-        "⚠️ Early Warning: ตรวจพบแนวโน้มน่ากังวล",
+        "⚠️ Early-Warning: ตรวจพบแนวโน้มน่ากังวล",
         "───────────────",
         f"👤 ผู้ป่วย: {patient_label}",
         f"📈 คะแนนสูงสุดในช่วง: {analysis['max_score']}",

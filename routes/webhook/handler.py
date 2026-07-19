@@ -55,6 +55,18 @@ def _extract_line_user_id(req: dict) -> str | None:
     return None
 
 
+def _has_active_teleconsult_session(user_id: str) -> bool:
+    """Check persisted consultation state for fallback recovery only."""
+    if not user_id:
+        return False
+    try:
+        from database.teleconsult import get_user_active_session
+        return bool(get_user_active_session(user_id))
+    except Exception:
+        logger.exception("Failed to inspect active teleconsult state user=%s", scrub_user_id(user_id))
+        return False
+
+
 def _get_clear_all_contexts(session: str | None) -> list[dict]:
     """Return a list of output contexts to clear all active state/slot-filling dialog contexts."""
     if not session:
@@ -65,8 +77,68 @@ def _get_clear_all_contexts(session: str | None) -> list[dict]:
         "assessrisk_dialog_context",
         "assesspersonalrisk_dialog_context",
         "requestappointment_dialog_context",
+        "teleconsult_category_context",
     ]
     return [{"name": f"{session}/contexts/{name}", "lifespanCount": 0} for name in contexts_to_clear]
+
+
+def _handle_line_text_event(event: dict) -> None:
+    """Handle text when LINE is configured directly without Dialogflow."""
+    if not isinstance(event, dict):
+        return
+    source = event.get("source") or {}
+    user_id = source.get("userId") or "unknown"
+    reply_token = event.get("replyToken") or ""
+    text = str((event.get("message") or {}).get("text") or "").strip()
+    if not text or not reply_token:
+        return
+
+    normalized = text.casefold().replace(" ", "")
+    if normalized in {"ส่งรูปแผล", "ส่งภาพแผล", "ถ่ายรูปแผล"}:
+        from services.notification import reply_line_message
+        reply_line_message(
+            reply_token,
+            "📷 กรุณาส่งรูปแผลในแชตนี้ได้เลยนะคะ ระบบจะรับรูปไปวิเคราะห์เบื้องต้นค่ะ",
+        )
+        return
+
+    # Direct LINE mode has no Dialogflow session/context. Registration is
+    # therefore routed by the persisted profile state instead of intent ML.
+    registration_command = normalized in {"ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"}
+    if registration_command:
+        result = _dispatch_intent("PatientIdentity", user_id, {}, text)
+        _reply_line_from_dialogflow_result(reply_token, result)
+        return
+
+    try:
+        from database.patient_profile import read_patient_profile_result
+        from services.patient_profile import registration_missing_fields
+        profile_result = read_patient_profile_result(user_id)
+        if profile_result.available and profile_result.profile and registration_missing_fields(profile_result.profile):
+            result = _dispatch_intent("PatientIdentity", user_id, {}, text)
+            _reply_line_from_dialogflow_result(reply_token, result)
+    except Exception:
+        logger.exception("Direct LINE text routing failed user=%s", scrub_user_id(user_id))
+
+
+def _reply_line_from_dialogflow_result(reply_token: str, result) -> None:
+    """Convert a Flask/Dialogflow handler result into a LINE reply."""
+    if not reply_token:
+        return
+    response = result[0] if isinstance(result, tuple) else result
+    payload = response.get_json(silent=True) if hasattr(response, "get_json") else {}
+    payload = payload or {}
+    line_messages = []
+    for item in payload.get("fulfillmentMessages") or []:
+        if item.get("platform") == "LINE":
+            line_payload = (item.get("payload") or {}).get("line")
+            if line_payload:
+                line_messages.append(line_payload)
+    from services.notification import reply_line_message, reply_line_message_objects
+    if line_messages:
+        reply_line_message_objects(reply_token, line_messages)
+    else:
+        reply_line_message(reply_token, payload.get("fulfillmentText") or "ขออภัยค่ะ กรุณาลองใหม่อีกครั้ง")
 
 
 def _has_active_context(req: dict, context_name: str) -> bool:
@@ -132,6 +204,7 @@ def register_routes(app):
         """Health check endpoint for monitoring services with full configuration status (v5.0)"""
         from config import validate_runtime_config
         config_status = validate_runtime_config()
+        from services.llm import is_enabled, _resolve_model
         
         return jsonify({
             "status": "ok" if config_status["ok"] else "warning",
@@ -149,7 +222,10 @@ def register_routes(app):
                 "config_ok": config_status["ok"],
                 "missing_items": config_status["missing"],
                 "can_notify_line": config_status["can_notify"],
-                "can_persist_sheets": config_status["can_persist"]
+                "can_persist_sheets": config_status["can_persist"],
+                "llm_provider": os.environ.get("LLM_PROVIDER", "none"),
+                "llm_enabled": bool(is_enabled()),
+                "llm_model": _resolve_model() or None,
             },
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat()
         }), 200
@@ -242,16 +318,16 @@ def register_routes(app):
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
 
-            # --- TEMP DEBUG (remove after diagnosing RequestAppointment loop) ---
+            # Safe routing diagnostics: log intent and parameter names, never values.
             output_contexts = req.get('queryResult', {}).get('outputContexts') or []
             logger.info(
-                "RAW_INTENT_DEBUG: matched=%s query=%r params=%s active_contexts=%s",
+                "RAW_INTENT_DEBUG: matched=%s query_len=%d param_keys=%s active_contexts=%s",
                 req.get('queryResult', {}).get('intent', {}).get('displayName'),
-                query_text,
-                req.get('queryResult', {}).get('parameters'),
+                len(query_text) if isinstance(query_text, str) else 0,
+                sorted((req.get('queryResult', {}).get('parameters') or {}).keys()),
                 [c.get('name') for c in output_contexts if isinstance(c, dict)],
             )
-            # --- END TEMP DEBUG ---
+            # --- END SAFE ROUTING DEBUG ---
 
             # Context-based Intent Interception (Component 4)
             is_cancel_or_nurse = False
@@ -275,7 +351,10 @@ def register_routes(app):
                                 new_params[k] = v
                         params = new_params
                         intent = 'RequestAppointment'
-                        logger.info("Intent hijacked and rerouted to RequestAppointment: query=%s", query_text)
+                        logger.info(
+                            "Intent hijacked and rerouted to RequestAppointment: query_len=%d",
+                            len(query_text) if isinstance(query_text, str) else 0,
+                        )
                 elif _has_active_context(req, 'reportsymptoms_dialog_context'):
                     if intent != 'ReportSymptoms':
                         ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
@@ -291,7 +370,10 @@ def register_routes(app):
                             new_params['mobility_status'] = query_text
                         params = new_params
                         intent = 'ReportSymptoms'
-                        logger.info("Intent hijacked and rerouted to ReportSymptoms: query=%s", query_text)
+                        logger.info(
+                            "Intent hijacked and rerouted to ReportSymptoms: query_len=%d",
+                            len(query_text) if isinstance(query_text, str) else 0,
+                        )
             
             # Deterministic router & State Machine: bypass Dialogflow ML misclassification
             if isinstance(query_text, str):
@@ -344,8 +426,14 @@ def register_routes(app):
                     from routes.webhook.helpers import _make_dialogflow_response
                     return jsonify(_make_dialogflow_response(msg, output_contexts=clear_contexts)), 200
 
+                # The wound-photo command contains "แผล", which is also a
+                # knowledge topic. Resolve it before AI/knowledge interception.
+                if cleaned_query in ("ส่งรูปแผล", "ส่งภาพแผล", "ถ่ายรูปแผล"):
+                    intent = "RequestWoundImage"
+                    params = {}
+
                 # AI Mode intercept (only for registered patients)
-                if read_result and read_result.available and read_result.profile:
+                if intent != "RequestWoundImage" and read_result and read_result.available and read_result.profile:
                     profile = read_result.profile
                     from services.patient_profile import registration_missing_fields
                     missing = registration_missing_fields(profile)
@@ -366,6 +454,20 @@ def register_routes(app):
                 elif cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา"):
                     intent = "CancelConsultation"
                 elif cleaned_query in ("แจ้งเรื่องฉุกเฉิน", "รอเวลาทำการ"):
+                    intent = "AfterHoursChoice"
+                elif (
+                    not is_cancel_or_nurse
+                    and cleaned_query in {"1", "2", "3", "4", "5"}
+                    and (
+                        _has_active_context(req, "teleconsult_category_context")
+                        or (
+                            intent == "Default Fallback Intent"
+                            and _has_active_teleconsult_session(user_id)
+                        )
+                    )
+                ):
+                    # Dialogflow has no reliable context filter for bare menu digits.
+                    # Keep the active consultation menu deterministic at the webhook boundary.
                     intent = "AfterHoursChoice"
                 elif read_result and read_result.available and read_result.profile:
                     profile = read_result.profile
@@ -447,6 +549,8 @@ def register_routes(app):
                 elif msg_type == "audio":
                     from services.voice import handle_voice_event
                     handle_voice_event(event)
+                elif msg_type == "text":
+                    _handle_line_text_event(event)
             except Exception:
                 logger.exception("Error processing LINE event: %s", event.get("type"))
                 reply_token = event.get("replyToken")
@@ -492,8 +596,8 @@ def _dispatch_intent(intent, user_id, params, query_text):
         from routes.webhook.helpers import _appointment_during_registration_should_reroute
         if _appointment_during_registration_should_reroute(user_id, params, query_text):
             logger.info(
-                "Rerouting RequestAppointment -> PatientIdentity (query=%r user=%s)",
-                query_text,
+                "Rerouting RequestAppointment -> PatientIdentity (query_len=%d user=%s)",
+                len(query_text) if isinstance(query_text, str) else 0,
                 _mask_user_id_for_log(user_id),
             )
             from routes.webhook.handlers.registration import handle_patient_identity
@@ -517,6 +621,12 @@ def _dispatch_intent(intent, user_id, params, query_text):
         response = handle_free_text_symptom(user_id, params, query_text)
     elif intent == 'RecommendKnowledge':
         response = handle_recommend_knowledge(user_id, params)
+    elif intent == 'RequestWoundImage':
+        from routes.webhook.helpers import _make_dialogflow_response
+        response = jsonify(_make_dialogflow_response(
+            "📷 พร้อมแล้วค่ะ กรุณาส่งรูปแผลในแชตนี้ได้เลยนะคะ\n"
+            "ระบบจะรับรูปและส่งให้ AI วิเคราะห์เบื้องต้นค่ะ"
+        )), 200
     elif intent in (
         'UpdatePatientIdentity',
         'PatientIdentity',
@@ -527,10 +637,10 @@ def _dispatch_intent(intent, user_id, params, query_text):
         from routes.webhook.helpers import _registration_intent_looks_like_knowledge
         if _registration_intent_looks_like_knowledge(intent, params, query_text):
             logger.info(
-                "Rerouting %s -> GetKnowledge (query=%r first_name=%r)",
+                "Rerouting %s -> GetKnowledge (query_len=%d param_keys=%s)",
                 intent,
-                query_text,
-                (params or {}).get("first_name"),
+                len(query_text) if isinstance(query_text, str) else 0,
+                sorted((params or {}).keys()),
             )
             response = handle_get_knowledge(user_id, params, query_text)
             _touch_activity("GetKnowledge", user_id)

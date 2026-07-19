@@ -461,6 +461,8 @@ class TestHealthCheckDiagnostics(unittest.TestCase):
         client = app.test_client()
         with patch("config.LINE_CHANNEL_ACCESS_TOKEN", "mock_token"), \
              patch("config.NURSE_GROUP_ID", "mock_group"), \
+             patch("config.LINE_CHANNEL_SECRET", "mock_line_secret"), \
+             patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_dialogflow_token"), \
              patch("config.GSPREAD_CREDENTIALS", "mock_creds"):
             response = client.get("/")
             data = json.loads(response.data)
@@ -714,7 +716,7 @@ class TestParameterCoercion(unittest.TestCase):
                         "displayName": "RequestAppointment"
                     },
                     "parameters": {
-                        "date": "2026-06-28T16:00:00+07:00",
+                        "date": "2099-06-28T16:00:00+07:00",
                         "time": "16:00:00",
                         "name": {
                             "name": "มาวิน"
@@ -730,7 +732,7 @@ class TestParameterCoercion(unittest.TestCase):
             response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
             self.assertEqual(response.status_code, 200)
             mock_create.assert_called_once_with(
-                "U_TEST", "มาวิน", "0812345678", "2026-06-28", "16:00", "ตรวจแผล"
+                "U_TEST", "มาวิน", "0812345678", "2099-06-28", "16:00", "ตรวจแผล"
             )
 
     @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")

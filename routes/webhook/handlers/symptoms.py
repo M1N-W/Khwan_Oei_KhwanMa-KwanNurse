@@ -257,13 +257,16 @@ def handle_request_appointment(user_id, params):
             if 1 <= val <= 31:
                 merged_params["apt_day"] = str(val)
                 
-    output_contexts = None
-    if session:
-        output_contexts = [{
+    def appointment_context():
+        if not session:
+            return None
+        return [{
             "name": f"{session}/contexts/requestappointment_dialog_context",
             "lifespanCount": 5,
-            "parameters": merged_params
+            "parameters": dict(merged_params),
         }]
+
+    output_contexts = appointment_context()
 
     if not merged_params.get("apt_day"):
         ask = "กรุณาพิมพ์วันที่ที่ต้องการนัดหมาย (ตัวเลข 1-31) ค่ะ (เช่น 28)"
@@ -294,6 +297,7 @@ def handle_request_appointment(user_id, params):
                 break
         if month_val:
             merged_params["apt_month"] = str(month_val)
+        output_contexts = appointment_context()
 
     if not merged_params.get("apt_month"):
         ask = "กรุณาระบุเดือนที่ต้องการนัดหมายค่ะ (เช่น พฤศจิกายน หรือ พ.ย.)"
@@ -316,6 +320,7 @@ def handle_request_appointment(user_id, params):
                 
             if year_ce:
                 merged_params["apt_year"] = str(year_ce)
+        output_contexts = appointment_context()
 
     if not merged_params.get("apt_year"):
         ask = "กรุณาระบุ ปี พ.ศ. ของการนัดหมายค่ะ (เช่น 2569)"
@@ -343,6 +348,7 @@ def handle_request_appointment(user_id, params):
         if query_text == "ระบุเวลาเอง":
             merged_params["waiting_for_custom_time"] = "true"
             ask = "กรุณาพิมพ์เวลาที่ต้องการนัดหมายได้เลยค่ะ (เช่น 14:30 หรือ บ่ายสองโมงครึ่ง)"
+            output_contexts = appointment_context()
             return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
             
         if merged_params.get("waiting_for_custom_time") == "true":
@@ -350,6 +356,7 @@ def handle_request_appointment(user_id, params):
             if parsed_t:
                 merged_params["preferred_time"] = parsed_t
                 merged_params.pop("waiting_for_custom_time", None)
+                output_contexts = appointment_context()
             else:
                 ask = "⚠️ ไม่สามารถเข้าใจเวลาที่ระบุได้ กรุณาพิมพ์เวลาใหม่อีกครั้งค่ะ (เช่น 14:30 หรือ บ่ายสองโมงครึ่ง)"
                 return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
@@ -360,6 +367,7 @@ def handle_request_appointment(user_id, params):
                 parsed_t = resolve_time_from_params(params.get('time'), params.get('timeofday'))
             if parsed_t:
                 merged_params["preferred_time"] = parsed_t
+                output_contexts = appointment_context()
 
     if not merged_params.get("preferred_time"):
         quick_replies = [
@@ -375,6 +383,7 @@ def handle_request_appointment(user_id, params):
         from services.patient_profile import is_registration_trigger_text
         if query_text and not is_registration_trigger_text(query_text) and query_text != "ระบุเวลาเอง":
             merged_params["reason"] = query_text
+        output_contexts = appointment_context()
 
     if not merged_params.get("reason"):
         quick_replies = [

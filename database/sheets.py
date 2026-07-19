@@ -3,6 +3,7 @@
 Google Sheets Database Module
 Handles all interactions with Google Sheets
 """
+import base64
 import gspread
 import json
 import os
@@ -79,8 +80,10 @@ def get_sheet_client():
     _reset_sheet_cache()
 
     try:
-        creds_env = GSPREAD_CREDENTIALS
+        creds_env = GSPREAD_CREDENTIALS or os.environ.get("GOOGLE_CREDS_B64")
         if creds_env:
+            if os.environ.get("GOOGLE_CREDS_B64") and not GSPREAD_CREDENTIALS:
+                creds_env = base64.b64decode(creds_env).decode("utf-8")
             creds_json = json.loads(creds_env)
             if hasattr(gspread, "service_account_from_dict"):
                 cache.sheet_client = gspread.service_account_from_dict(creds_json)

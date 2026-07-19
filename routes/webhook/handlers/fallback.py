@@ -4,7 +4,7 @@ Intent handlers for fallback, unknown intents, teleconsult flow, and knowledge s
 """
 import os
 from datetime import datetime
-from flask import jsonify
+from flask import has_request_context, jsonify, request
 from config import get_logger, LOCAL_TZ, OFFICE_HOURS, DEBUG
 from database.education_logs import save_education_view
 from routes.webhook.helpers import _make_dialogflow_response
@@ -27,6 +27,24 @@ from services.teleconsult import (
 )
 
 logger = get_logger(__name__)
+
+
+def _teleconsult_category_context(lifespan_count=5):
+    """Return the short-lived context used to route bare category digits."""
+    if not has_request_context():
+        return None
+    payload = request.get_json(silent=True, force=True) or {}
+    session = payload.get("session")
+    if not session:
+        return None
+    return [{
+        "name": f"{session}/contexts/teleconsult_category_context",
+        "lifespanCount": lifespan_count,
+    }]
+
+
+def _clear_teleconsult_category_context():
+    return _teleconsult_category_context(lifespan_count=0)
 
 # Reverse map: display_name -> canonical key (used for EducationLog audit).
 _TOPIC_DISPLAY_TO_KEY = {
@@ -146,8 +164,10 @@ def handle_get_knowledge(user_id, params, query_text=""):
             pass
 
         logger.info(
-            "Knowledge request: %s (param=%r query=%r)",
-            topic_name, topic_str, query_text,
+            "Knowledge request: %s (param_len=%d query_len=%d)",
+            topic_name,
+            len(topic_str) if isinstance(topic_str, str) else 0,
+            len(query_text) if isinstance(query_text, str) else 0,
         )
         try:
             canonical = _TOPIC_DISPLAY_TO_KEY.get(topic_name, topic_name)
@@ -205,8 +225,8 @@ def handle_contact_nurse(user_id, params, query_text):
             result = start_teleconsult(user_id, issue_type, description)
             if result.get('awaiting_choice'):
                 after_hours_replies = [
-                    quick_reply_item("🚨 1. ฉุกเฉิน", "1"),
-                    quick_reply_item("📝 2. ไม่เร่งด่วน", "2"),
+                    quick_reply_item("⏳ รอเวลาทำการ", "รอเวลาทำการ"),
+                    quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
                 ]
                 return jsonify(_make_dialogflow_response(result['message'], quick_replies=after_hours_replies)), 200
             return jsonify({"fulfillmentText": result['message']}), 200
@@ -223,15 +243,27 @@ def handle_contact_nurse(user_id, params, query_text):
             if not is_office_hours():
                 now = datetime.now(tz=LOCAL_TZ)
                 current_time = now.strftime("%H:%M")
+                after_hours_replies = [
+                    quick_reply_item("⏳ รอเวลาทำการ", "รอเวลาทำการ"),
+                    quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
+                ]
                 menu = (
                     f"⏰ ขณะนี้นอกเวลาทำการ ({current_time} น.)\n"
                     f"เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
                     f"{menu}\n\n"
                     f"💡 หากเป็นเรื่องฉุกเฉิน เลือกหมายเลข 1 | ไม่เร่งด่วน เลือก 2-5"
                 )
-                return jsonify(_make_dialogflow_response(menu, quick_replies=categories_quick_replies)), 200
+                return jsonify(_make_dialogflow_response(
+                    menu,
+                    quick_replies=after_hours_replies,
+                    output_contexts=_teleconsult_category_context(),
+                )), 200
 
-            return jsonify(_make_dialogflow_response(menu, quick_replies=categories_quick_replies)), 200
+            return jsonify(_make_dialogflow_response(
+                menu,
+                quick_replies=categories_quick_replies,
+                output_contexts=_teleconsult_category_context(),
+            )), 200
         
     except Exception as e:
         logger.exception(f"Error in ContactNurse: {e}")
@@ -278,6 +310,12 @@ def handle_after_hours_choice(user_id, query_text):
             quick_reply_item("🚨 1. ฉุกเฉิน", "1"),
             quick_reply_item("📝 2. ไม่เร่งด่วน", "2"),
         ]
-        return jsonify(_make_dialogflow_response(result['message'], quick_replies=after_hours_replies)), 200
-    return jsonify({"fulfillmentText": result['message']}), 200
-
+        return jsonify(_make_dialogflow_response(
+            result['message'],
+            quick_replies=after_hours_replies,
+            output_contexts=_clear_teleconsult_category_context(),
+        )), 200
+    return jsonify(_make_dialogflow_response(
+        result['message'],
+        output_contexts=_clear_teleconsult_category_context(),
+    )), 200

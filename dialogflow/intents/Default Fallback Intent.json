@@ -1,20 +1,13 @@
 {
-  "id": "e6724015-871c-44ec-b63a-bd8e51e008ac",
-  "name": "PatientIdentity_Fallback",
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "Default Fallback Intent",
   "auto": true,
-  "contexts": [
-    "registering"
-  ],
+  "contexts": [],
   "responses": [
     {
       "resetContexts": false,
-      "action": "",
-      "affectedContexts": [
-        {
-          "name": "registering",
-          "lifespan": 0
-        }
-      ],
+      "action": "input.unknown",
+      "affectedContexts": [],
       "parameters": [],
       "messages": [
         {
@@ -22,6 +15,9 @@
           "title": "",
           "textToSpeech": "",
           "lang": "th",
+          "speech": [
+            "ขอโทษค่ะ ไม่เข้าใจคำสั่งนี้ กรุณาลองใหม่อีกครั้งค่ะ"
+          ],
           "condition": ""
         }
       ],
