@@ -164,22 +164,45 @@ def analyze_symptom_trend(reports):
 
 def _format_alert(user_id, analysis, reports):
     """Build the Thai alert message for the nurse group."""
+    from services.notification import _get_patient_prefix_label
+    from config import WORKSHEET_LINK
+
+    patient_label = _get_patient_prefix_label(user_id)
+
+    # แปลง technical flags เป็นภาษาไทยที่อ่านง่าย
+    _FLAG_LABELS = {
+        "rising_risk":            "⬆️ คะแนนความเสี่ยงเพิ่มขึ้นต่อเนื่อง",
+        "persistent_fever":       "🌡️ มีไข้ต่อเนื่องหลายวัน",
+        "worsening_wound":        "🩹 แผลมีอาการแย่ลง",
+        "silence_after_high_risk": "🔇 ไม่รายงานอาการหลังจากมีความเสี่ยงสูง",
+        "repeated_high_risk":     "🔁 มีรายงานความเสี่ยงสูงซ้ำหลายครั้ง",
+    }
+    flag_lines = "\n".join(
+        f"  • {_FLAG_LABELS.get(f, f)}"
+        for f in analysis["flags"]
+    )
+
     lines = [
-        "⚠️ Early-Warning: ตรวจพบแนวโน้มน่ากังวล",
-        f"👤 ผู้ป่วย: {user_id}",
-        f"🔎 Flags: {', '.join(analysis['flags'])}",
+        "⚠️ Early Warning: ตรวจพบแนวโน้มน่ากังวล",
+        "───────────────",
+        f"👤 ผู้ป่วย: {patient_label}",
         f"📈 คะแนนสูงสุดในช่วง: {analysis['max_score']}",
-        "รายละเอียด:",
+        "",
+        "🔎 สัญญาณที่ตรวจพบ:",
+        flag_lines,
     ]
     for d in analysis["details"]:
-        lines.append(f"  • {d}")
+        lines.append(f"  ↳ {d}")
     if reports:
         latest = reports[0]
         ts = latest.get("timestamp")
         ts_str = ts.strftime("%d/%m %H:%M") if ts else "-"
-        lines.append(f"🕐 รายงานล่าสุด: {ts_str} ({latest.get('risk_level', '-')})")
-    lines.append("แนะนำ: ติดต่อผู้ป่วยเพื่อประเมินซ้ำ")
+        lines.append(f"\n🕐 รายงานล่าสุด: {ts_str} ({latest.get('risk_level', '-')})")
+    lines.append("\n💡 แนะนำ: ติดต่อผู้ป่วยเพื่อประเมินซ้ำ")
+    if WORKSHEET_LINK:
+        lines.append(f"📊 ดูข้อมูล: {WORKSHEET_LINK}")
     return "\n".join(lines)
+
 
 
 # ---------------------------------------------------------------------------

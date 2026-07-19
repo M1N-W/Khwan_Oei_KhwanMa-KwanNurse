@@ -227,9 +227,9 @@ def handle_contact_nurse(user_id, params, query_text):
                     f"⏰ ขณะนี้นอกเวลาทำการ ({current_time} น.)\n"
                     f"เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
                     f"{menu}\n\n"
-                    f"💡 หากเป็นเรื่องฉุกเฉิน เลือกหมายเลข 1"
+                    f"💡 หากเป็นเรื่องฉุกเฉิน เลือกหมายเลข 1 | ไม่เร่งด่วน เลือก 2-5"
                 )
-                return jsonify(_make_dialogflow_response(menu, quick_replies=_AFTER_HOURS_QUICK_REPLIES)), 200
+                return jsonify(_make_dialogflow_response(menu, quick_replies=categories_quick_replies)), 200
 
             return jsonify(_make_dialogflow_response(menu, quick_replies=categories_quick_replies)), 200
         

@@ -217,9 +217,8 @@ def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level
     patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"🚨 รายงานอาการเร่งด่วน!\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"───────────────\n"
         f"👤 ผู้ป่วย: {patient_label}\n"
-        f"🆔 User ID: {user_id}\n"
         f"⚠️ ความเสี่ยง: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         f"📋 อาการ:\n"
@@ -241,9 +240,8 @@ def build_risk_notification(user_id, age, bmi, diseases_str, risk_level, risk_sc
     patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"🆕 ผู้ป่วยกลุ่มเสี่ยงสูง!\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"───────────────\n"
         f"👤 ผู้ป่วย: {patient_label}\n"
-        f"🆔 User ID: {user_id}\n"
         f"⚠️ ระดับ: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         f"📋 ข้อมูล:\n"
@@ -435,9 +433,8 @@ def build_wound_alert_message(
     patient_label = _get_patient_prefix_label(user_id)
     return (
         "📸 ภาพแผลผู้ป่วยใหม่!\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
+        "───────────────\n"
         f"👤 ผู้ป่วย: {patient_label}\n"
-        f"🆔 User ID: {user_id}\n"
         f"{severity_emoji} ความรุนแรง: {severity_label}\n"
         f"🎯 ความมั่นใจ AI: {confidence_pct}%\n\n"
         "📋 ข้อสังเกต:\n"
@@ -493,9 +490,8 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     patient_label = _get_patient_prefix_label(user_id)
     message = (
         f"📅 การนัดหมายใหม่!\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"───────────────\n"
         f"👤 ผู้ป่วย: {patient_label}\n"
-        f"🆔 User ID: {user_id}\n"
     )
     
     if name:

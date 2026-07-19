@@ -193,29 +193,47 @@ def handle_request_appointment(user_id, params):
         contexts = req_json.get('queryResult', {}).get('outputContexts', [])
         for ctx in contexts:
             name_str = ctx.get('name', '')
-            if name_str.endswith("/contexts/requestappointment_dialog_context"):
+            if "requestappointment_dialog_context" in name_str:
                 ctx_params = ctx.get('parameters', {}) or {}
                 break
 
-    # Merge context parameters and fresh intent params
+    # --- Smart merge (Bug #3 fix) ---
+    # Context params represent what the user has ALREADY provided slot-by-slot.
+    # Fresh Dialogflow params may include a full @sys.date even when the user only
+    # answered one part (e.g. typed "กันยายน" → Dialogflow infers date="2026-09-01").
+    # Strategy:
+    #   1. Start with context as authoritative base.
+    #   2. Fill in missing slots from fresh params — but NEVER overwrite a slot
+    #      that context already holds.
     merged_params = dict(ctx_params)
-    merged_params.update(params or {})
+    for k, v in (params or {}).items():
+        if k not in merged_params or not merged_params.get(k):
+            merged_params[k] = v
 
-    # Backward compatibility: extract from date/time/reason if present
-    preferred_date_raw = (merged_params.get('date') or 
-                         merged_params.get('preferred_date') or 
-                         merged_params.get('date-original'))
+    # Backward compatibility: if user gave a full date upfront (no slots collected
+    # yet), expand @sys.date into apt_day / apt_month / apt_year.
+    # If ANY slot is already in context, skip this block — we are mid-collection
+    # and must not let @sys.date overwrite what was already confirmed.
+    _slots_already_started = any([
+        ctx_params.get("apt_day"),
+        ctx_params.get("apt_month"),
+        ctx_params.get("apt_year"),
+    ])
+    preferred_date_raw = (merged_params.get('date') or
+                          merged_params.get('preferred_date') or
+                          merged_params.get('date-original'))
     preferred_time_raw = merged_params.get('time') or merged_params.get('preferred_time')
     timeofday_raw = merged_params.get('timeofday') or merged_params.get('time_of_day')
     reason_raw = merged_params.get('reason') or merged_params.get('symptom') or merged_params.get('description')
 
-    if preferred_date_raw:
+    if preferred_date_raw and not _slots_already_started:
+        # Fresh turn: user provided a full date string → decompose it.
         from utils.parsers import parse_date_iso
         pd = parse_date_iso(preferred_date_raw)
         if pd:
-            merged_params["apt_day"] = str(pd.day)
+            merged_params["apt_day"]   = str(pd.day)
             merged_params["apt_month"] = str(pd.month)
-            merged_params["apt_year"] = str(pd.year)
+            merged_params["apt_year"]  = str(pd.year)
 
     from utils.parsers import parse_thai_colloquial_time, resolve_time_from_params
     pt = resolve_time_from_params(preferred_time_raw, timeofday_raw)

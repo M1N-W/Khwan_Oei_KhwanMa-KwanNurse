@@ -452,15 +452,53 @@ def handle_after_hours_choice(user_id, choice_text):
             }
 
         else:
-            # ตอบไม่ตรง ให้แสดง menu ซ้ำ
+            # Bug #1 fix: ถ้านอกเวลาทำการและตัวเลข 3-5 ถูกเลือก
+            # ให้ parse เป็น category แล้วบันทึกเป็นคำขอไม่เร่งด่วน
+            # (เหมือนเลือกหมายเลข 2 แต่ระบุ category ชัดเจนกว่า)
+            if not is_office_hours():
+                category = parse_category_choice(stripped)
+                if category:
+                    logger.info(
+                        "AfterHoursChoice outside office hours — "
+                        "non-urgent category %r=%s for %s",
+                        stripped, category, user_id,
+                    )
+                    # สร้าง session ถ้ายังไม่มี แล้วแจ้งพยาบาล
+                    result = start_teleconsult(user_id, category, '')
+                    if result.get('success') and not result.get('awaiting_choice'):
+                        active_session = get_user_active_session(user_id)
+                        if active_session:
+                            from services.notification import _get_patient_prefix_label
+                            patient_label = _get_patient_prefix_label(user_id)
+                            nurse_alert = (
+                                f"📋 มีคำขอนอกเวลาทำการ (ไม่เร่งด่วน)\n\n"
+                                f"👤 ผู้ป่วย: {patient_label}\n"
+                                f"📂 ประเภท: {active_session.get('Issue_Type', '-')}\n\n"
+                                f"⏰ กรุณาติดต่อกลับในวันทำการถัดไปค่ะ"
+                            )
+                            send_line_push(nurse_alert, NURSE_GROUP_ID)
+                    return {
+                        'success': True,
+                        'message': (
+                            "✅ บันทึกคำขอของคุณเรียบร้อยแล้วค่ะ\n\n"
+                            "📋 ทีมพยาบาลจะติดต่อกลับในวันทำการถัดไป\n"
+                            f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
+                            "หากมีอาการฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+                        )
+                    }
+            # ตอบค่าไม่ตรงหรืออยู่ในเวลาทำการ ให้แสดง menu ซ้ำ
             return {
                 'success': True,
                 'message': (
-                    "กรุณาพิมพ์หมายเลข 1 หรือ 2 ค่ะ\n\n"
+                    "กรุณาเลือกหมายเลขจากเมนูค่ะ\n\n"
                     "1. 🚨 ฉุกเฉิน\n"
-                    "2. 📝 ไม่เร่งด่วน"
+                    "2. 💊 ถามเรื่องยา\n"
+                    "3. 🩹 แผลผ่าตัด\n"
+                    "4. 📋 นัดหมาย/เอกสาร\n"
+                    "5. ❓ อื่นๆ"
                 )
             }
+
 
     except Exception as e:
         logger.exception(f"Error handling after-hours choice: {e}")

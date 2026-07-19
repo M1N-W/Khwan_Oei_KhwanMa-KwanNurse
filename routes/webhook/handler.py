@@ -74,7 +74,7 @@ def _has_active_context(req: dict, context_name: str) -> bool:
     contexts = req.get('queryResult', {}).get('outputContexts', [])
     for ctx in contexts:
         name = ctx.get('name', '')
-        if name.endswith(f"/contexts/{context_name}"):
+        if context_name in name:
             if ctx.get('lifespanCount', 0) > 0:
                 return True
     return False
@@ -85,13 +85,47 @@ def _extract_context_parameters(req: dict, context_name: str) -> dict:
     contexts = req.get('queryResult', {}).get('outputContexts', [])
     for ctx in contexts:
         name = ctx.get('name', '')
-        if name.endswith(f"/contexts/{context_name}"):
+        if context_name in name:
             return ctx.get('parameters', {}) or {}
     return {}
 
 
 def register_routes(app):
     """Register all webhook routes with Flask app"""
+
+    @app.errorhandler(Exception)
+    def handle_global_exception(e):
+        """Global error handler to prevent silent crashes and return fallback text to user."""
+        from werkzeug.exceptions import HTTPException
+        if isinstance(e, HTTPException):
+            return e
+            
+        logger.exception("Global exception caught: %s", e)
+        
+        from flask import request
+        try:
+            if request.path == '/webhook':
+                from routes.webhook.helpers import _make_dialogflow_response
+                fallback_msg = "⚠️ ขออภัยค่ะ ขณะนี้ระบบขัดข้องชั่วคราว ทีมงานกำลังเร่งแก้ไข กรุณาลองใหม่อีกครั้งในภายหลังค่ะ"
+                return jsonify(_make_dialogflow_response(fallback_msg)), 200
+            elif request.path == '/line/webhook':
+                body = request.get_json(silent=True) or {}
+                events = body.get("events") or []
+                if events:
+                    event = events[0]
+                    reply_token = event.get("replyToken")
+                    if reply_token:
+                        try:
+                            from services.notification import reply_line_message
+                            fallback_msg = "⚠️ ขออภัยค่ะ ขณะนี้ระบบขัดข้องชั่วคราว ทีมงานกำลังเร่งแก้ไข กรุณาลองใหม่อีกครั้งในภายหลังค่ะ"
+                            reply_line_message(reply_token, fallback_msg)
+                        except Exception:
+                            logger.exception("Failed to reply fallback message to LINE user during global exception handler")
+                return jsonify({"status": "error", "message": str(e)}), 200
+        except Exception as inner_ex:
+            logger.exception("Error inside global exception handler: %s", inner_ex)
+            
+        return jsonify({"status": "error", "message": "Internal Server Error"}), 500
     
     @app.route('/', methods=['GET', 'HEAD'])
     def health_check():
@@ -213,7 +247,8 @@ def register_routes(app):
             if isinstance(query_text, str):
                 is_cancel_or_nurse = query_text.strip().lower() in (
                     "ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน", 
-                    "ยกเลิกนัด", "ยกเลิกนัดหมาย", "ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล"
+                    "ยกเลิกนัด", "ยกเลิกนัดหมาย", "ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล",
+                    "ออก", "ออกจากขั้นตอน", "exit", "cancel"
                 )
 
             if not is_cancel_or_nurse:
@@ -221,7 +256,12 @@ def register_routes(app):
                     if intent != 'RequestAppointment':
                         ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
                         new_params = dict(ctx_params)
-                        new_params.update(params)
+                        # Bug #3 (interception layer): same smart-merge — context wins
+                        # over Dialogflow's fresh params to prevent @sys.date from
+                        # overwriting already-collected apt_day/month/year slots.
+                        for k, v in (params or {}).items():
+                            if k not in new_params or not new_params.get(k):
+                                new_params[k] = v
                         params = new_params
                         intent = 'RequestAppointment'
                         logger.info("Intent hijacked and rerouted to RequestAppointment: query=%s", query_text)
@@ -255,7 +295,10 @@ def register_routes(app):
                     read_result = None
 
                 # Reset/Cancel registration flow if user says cancel while registration is incomplete
-                if cleaned_query in ("ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน", "ยกเลิกนัด", "ยกเลิกนัดหมาย"):
+                if cleaned_query in (
+                    "ยกเลิก", "ยกเลิกคำขอ", "ยกเลิกปรึกษา", "ยกเลิกการลงทะเบียน", 
+                    "ยกเลิกนัด", "ยกเลิกนัดหมาย", "ออก", "ออกจากขั้นตอน", "exit", "cancel"
+                ):
                     session = req.get("session")
                     clear_contexts = _get_clear_all_contexts(session)
                     registration_cancelled = False
@@ -276,6 +319,16 @@ def register_routes(app):
                     if registration_cancelled:
                         msg = "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
                     else:
+                        # Bug #2 fix: ยกเลิก teleconsult session ด้วย ไม่ใช่แค่ clear context
+                        teleconsult_cancelled = False
+                        try:
+                            from services.teleconsult import cancel_consultation
+                            tc_result = cancel_consultation(user_id)
+                            if tc_result and tc_result.get('success'):
+                                teleconsult_cancelled = True
+                                logger.info("Teleconsult session cancelled for user %s", user_id)
+                        except Exception:
+                            logger.warning("Failed to cancel teleconsult session for user %s", user_id, exc_info=True)
                         msg = "❌ ยกเลิกการทำรายการเรียบร้อยแล้วค่ะ มีอะไรให้ฉันช่วยเหลือเพิ่มเติมไหมคะ?"
                     from routes.webhook.helpers import _make_dialogflow_response
                     return jsonify(_make_dialogflow_response(msg, output_contexts=clear_contexts)), 200
@@ -385,6 +438,14 @@ def register_routes(app):
                     handle_voice_event(event)
             except Exception:
                 logger.exception("Error processing LINE event: %s", event.get("type"))
+                reply_token = event.get("replyToken")
+                if reply_token:
+                    try:
+                        from services.notification import reply_line_message
+                        fallback_msg = "⚠️ ขออภัยค่ะ ขณะนี้ระบบขัดข้องชั่วคราว ทีมงานกำลังเร่งแก้ไข กรุณาลองใหม่อีกครั้งในภายหลังค่ะ"
+                        reply_line_message(reply_token, fallback_msg)
+                    except Exception:
+                        logger.exception("Failed to reply fallback message to LINE user during event processing crash")
         return jsonify({"status": "ok", "events_received": len(events)}), 200
 
 
