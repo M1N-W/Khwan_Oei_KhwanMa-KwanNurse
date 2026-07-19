@@ -160,6 +160,34 @@ class ConsultationCancellationTests(unittest.TestCase):
 
 
 class AppointmentStateTests(unittest.TestCase):
+    def test_active_teleconsult_record_cannot_hijack_symptom_digit(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "3",
+                "intent": {"displayName": "Default Fallback Intent"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/reportsymptoms_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {},
+                }],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._has_active_teleconsult_session", return_value=True,
+        ), patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "สภาพแผล"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("ReportSymptoms", "U1", {"pain_score": "3"}, "3")
+
     def test_month_answer_preserves_day_and_ignores_inferred_date(self):
         from app import create_app
         from routes.webhook.handlers.symptoms import handle_request_appointment
@@ -372,6 +400,75 @@ class AppointmentStateTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         dispatch.assert_called_once_with("AssessRisk", "U1", {"age": "20"}, "20")
+
+    def test_appointment_date_wins_over_misclassified_after_hours_intent(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "15",
+                "intent": {"displayName": "AfterHoursChoice"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {"apt_month": "9"},
+                }],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "เวลา"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with(
+            "RequestAppointment", "U1", {"apt_month": "9"}, "15"
+        )
+
+    def test_risk_negative_answer_is_mapped_to_disease_slot_when_intent_is_wrong(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "ไม่มีโรคประจำตัว",
+                "intent": {"displayName": "AfterHoursChoice"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/assessrisk_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {
+                        "age": "16",
+                        "weight": "167",
+                        "height": "178",
+                        "disease": "",
+                    },
+                }],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "บันทึกแล้ว"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with(
+            "AssessRisk",
+            "U1",
+            {
+                "age": "16",
+                "weight": "167",
+                "height": "178",
+                "disease": "ไม่มีโรคประจำตัว",
+            },
+            "ไม่มีโรคประจำตัว",
+        )
 
 
 class AlertFormattingTests(unittest.TestCase):

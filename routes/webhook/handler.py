@@ -68,7 +68,10 @@ def _has_active_teleconsult_session(user_id: str) -> bool:
         return False
 
 
-def _get_clear_all_contexts(session: str | None) -> list[dict]:
+def _get_clear_all_contexts(
+    session: str | None,
+    exclude: tuple[str, ...] = (),
+) -> list[dict]:
     """Return a list of output contexts to clear all active state/slot-filling dialog contexts."""
     if not session:
         return []
@@ -80,7 +83,11 @@ def _get_clear_all_contexts(session: str | None) -> list[dict]:
         "requestappointment_dialog_context",
         "teleconsult_category_context",
     ]
-    return [{"name": f"{session}/contexts/{name}", "lifespanCount": 0} for name in contexts_to_clear]
+    return [
+        {"name": f"{session}/contexts/{name}", "lifespanCount": 0}
+        for name in contexts_to_clear
+        if name not in exclude
+    ]
 
 
 def _handle_line_text_event(event: dict) -> None:
@@ -220,6 +227,39 @@ def _clear_context_from_response(response, session: str | None, context_name: st
         "lifespanCount": 0,
     })
     payload["outputContexts"] = output_contexts
+    response_obj.set_data(json.dumps(payload, ensure_ascii=False))
+    response_obj.content_type = "application/json"
+    return response
+
+
+def _clear_contexts_from_response(
+    response,
+    session: str | None,
+    context_names: tuple[str, ...] | list[str],
+):
+    """Clear competing feature contexts while preserving the handler payload."""
+    for context_name in context_names:
+        response = _clear_context_from_response(response, session, context_name)
+    return response
+
+
+def _append_context_operations_to_response(response, operations: tuple[dict, ...] | list[dict]):
+    """Append controller-owned Dialogflow context operations to any handler response."""
+    if not operations or not response:
+        return response
+    if isinstance(response, tuple) and isinstance(response[0], dict):
+        payload = dict(response[0])
+        payload["outputContexts"] = list(payload.get("outputContexts") or []) + list(operations)
+        return (payload, *response[1:])
+    if isinstance(response, dict):
+        payload = dict(response)
+        payload["outputContexts"] = list(payload.get("outputContexts") or []) + list(operations)
+        return payload
+    response_obj = response[0] if isinstance(response, tuple) else response
+    payload = response_obj.get_json(silent=True) if hasattr(response_obj, "get_json") else None
+    if not isinstance(payload, dict):
+        return response
+    payload["outputContexts"] = list(payload.get("outputContexts") or []) + list(operations)
     response_obj.set_data(json.dumps(payload, ensure_ascii=False))
     response_obj.content_type = "application/json"
     return response
@@ -389,6 +429,11 @@ def register_routes(app):
                 "ส่งรูปแผล", "ส่งภาพแผล", "ถ่ายรูปแผล",
             }
             is_top_level_command = normalized_query in top_level_commands
+            is_flow_command = normalized_query in {
+                "รายงานอาการ", "แจ้งอาการ",
+                "ประเมินความเสี่ยง", "ประเมินความเสี่ยงส่วนบุคคล",
+                "นัดหมายพยาบาล", "นัดหมาย",
+            }
 
             # Safe routing diagnostics: log intent and parameter names, never values.
             output_contexts = req.get('queryResult', {}).get('outputContexts') or []
@@ -400,6 +445,59 @@ def register_routes(app):
                 [c.get('name') for c in output_contexts if isinstance(c, dict)],
             )
             # --- END SAFE ROUTING DEBUG ---
+
+            # The state controller is authoritative when enabled.  It is
+            # intentionally evaluated before any legacy context interception
+            # so a durable teleconsult row can never claim another flow's digit.
+            from config import CONVERSATION_FLOW_ROUTER_ENABLED
+            controller_context_operations = ()
+            controller_active = CONVERSATION_FLOW_ROUTER_ENABLED
+            if controller_active:
+                from services.conversation_router import resolve_route
+                from services.conversation_state import get_conversation_state_store
+
+                event_id = (
+                    req.get("webhookEventId")
+                    or (req.get("originalDetectIntentRequest", {}).get("payload", {}) or {}).get("webhookEventId")
+                )
+                try:
+                    decision = resolve_route(
+                        user_id=user_id,
+                        channel_id="line",
+                        query_text=query_text,
+                        dialogflow_intent=intent or "Default Fallback Intent",
+                        dialogflow_params=params,
+                        session_name=req.get("session"),
+                        webhook_event_id=event_id,
+                        store=get_conversation_state_store(),
+                    )
+                except Exception:
+                    # A state-store outage must fail closed: accepting a bare
+                    # digit through the legacy router would reintroduce cross-flow routing.
+                    incr("conversation.store_unavailable")
+                    logger.exception("Conversation state store unavailable")
+                    return jsonify({
+                        "fulfillmentText": "ขออภัยค่ะ ระบบสนทนาขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งค่ะ"
+                    }), 200
+                if decision.duplicate:
+                    incr("conversation.duplicate_event")
+                    return jsonify({"fulfillmentText": ""}), 200
+                if decision.response_text is not None:
+                    incr("conversation.validation_rejected")
+                    from routes.webhook.helpers import _make_dialogflow_response
+                    return jsonify(_make_dialogflow_response(
+                        decision.response_text,
+                        output_contexts=list(decision.context_operations),
+                    )), 200
+                intent = decision.intent
+                params = decision.params
+                controller_context_operations = decision.context_operations
+                if decision.state:
+                    incr(f"conversation.route.{decision.state.flow_id}.{decision.state.step_id or 'complete'}")
+                # Do not let AI interception interpret a state-owned slot.
+                is_flow_command = bool(decision.state or intent in {
+                    "ReportSymptoms", "AssessRisk", "RequestAppointment", "AfterHoursChoice", "PatientIdentity",
+                })
 
             # Context-based Intent Interception (Component 4)
             is_cancel_or_nurse = False
@@ -419,28 +517,22 @@ def register_routes(app):
                     _has_active_context(req, 'requestappointment_dialog_context')
                     and not is_teleconsult_digit
                     and not is_top_level_command
-                    and intent in {
-                        None,
-                        'Default Fallback Intent',
-                        'FreeTextSymptom',
-                        'Default Welcome Intent',
-                    }
+                    and intent != 'RequestAppointment'
                 ):
-                    if intent != 'RequestAppointment':
-                        ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
-                        new_params = dict(ctx_params)
-                        # Bug #3 (interception layer): same smart-merge — context wins
-                        # over Dialogflow's fresh params to prevent @sys.date from
-                        # overwriting already-collected apt_day/month/year slots.
-                        for k, v in (params or {}).items():
-                            if k not in new_params or not new_params.get(k):
-                                new_params[k] = v
-                        params = new_params
-                        intent = 'RequestAppointment'
-                        logger.info(
-                            "Intent hijacked and rerouted to RequestAppointment: query_len=%d",
-                            len(query_text) if isinstance(query_text, str) else 0,
-                        )
+                    ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
+                    new_params = dict(ctx_params)
+                    # Bug #3 (interception layer): same smart-merge — context wins
+                    # over Dialogflow's fresh params to prevent @sys.date from
+                    # overwriting already-collected apt_day/month/year slots.
+                    for k, v in (params or {}).items():
+                        if k not in new_params or not new_params.get(k):
+                            new_params[k] = v
+                    params = new_params
+                    intent = 'RequestAppointment'
+                    logger.info(
+                        "Intent hijacked and rerouted to RequestAppointment: query_len=%d",
+                        len(query_text) if isinstance(query_text, str) else 0,
+                    )
                 elif (
                     not is_top_level_command
                     and intent not in {"AssessRisk", "AssessPersonalRisk"}
@@ -558,7 +650,13 @@ def register_routes(app):
                     params = {}
 
                 # AI Mode intercept (only for registered patients)
-                if intent != "RequestWoundImage" and read_result and read_result.available and read_result.profile:
+                if (
+                    intent != "RequestWoundImage"
+                    and not is_flow_command
+                    and read_result
+                    and read_result.available
+                    and read_result.profile
+                ):
                     profile = read_result.profile
                     from services.patient_profile import registration_missing_fields
                     missing = registration_missing_fields(profile)
@@ -570,6 +668,15 @@ def register_routes(app):
                 # Core keyword routing
                 if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
                     intent = "PatientIdentity"
+                elif cleaned_query in ("รายงานอาการ", "แจ้งอาการ"):
+                    intent = "ReportSymptoms"
+                    params = {}
+                elif cleaned_query in ("ประเมินความเสี่ยง", "ประเมินความเสี่ยงส่วนบุคคล"):
+                    intent = "AssessRisk"
+                    params = {}
+                elif cleaned_query in ("นัดหมายพยาบาล", "นัดหมาย"):
+                    intent = "RequestAppointment"
+                    params = {}
                 elif cleaned_query in ("ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ"):
                     intent = "GetKnowledge"
                     params = {}
@@ -581,7 +688,8 @@ def register_routes(app):
                 elif cleaned_query in ("แจ้งเรื่องฉุกเฉิน", "รอเวลาทำการ"):
                     intent = "AfterHoursChoice"
                 elif (
-                    not is_cancel_or_nurse
+                    not controller_active
+                    and not is_cancel_or_nurse
                     and cleaned_query in {"1", "2", "3", "4", "5"}
                     and (
                         _has_active_context(req, "teleconsult_category_context")
@@ -635,16 +743,31 @@ def register_routes(app):
             response = _dispatch_intent(intent, user_id, params, query_text)
             from routes.webhook.helpers import _append_patient_cancel_guidance
             response = _append_patient_cancel_guidance(response, intent)
-            if (
-                is_top_level_command
-                and normalized_query not in {"นัดหมายพยาบาล", "นัดหมาย"}
-                and _has_active_context(req, "requestappointment_dialog_context")
-            ):
-                response = _clear_context_from_response(
-                    response,
-                    req.get("session"),
-                    "requestappointment_dialog_context",
-                )
+            response = _append_context_operations_to_response(response, controller_context_operations)
+            if is_top_level_command:
+                active_context = {
+                    "ReportSymptoms": "reportsymptoms_dialog_context",
+                    "AssessRisk": "assessrisk_dialog_context",
+                    "AssessPersonalRisk": "assesspersonalrisk_dialog_context",
+                    "RequestAppointment": "requestappointment_dialog_context",
+                    "ContactNurse": "teleconsult_category_context",
+                }.get(intent)
+                if active_context:
+                    competing_contexts = tuple(
+                        name for name in (
+                            "reportsymptoms_dialog_context",
+                            "assessrisk_dialog_context",
+                            "assesspersonalrisk_dialog_context",
+                            "requestappointment_dialog_context",
+                            "teleconsult_category_context",
+                        )
+                        if name != active_context
+                    )
+                    response = _clear_contexts_from_response(
+                        response,
+                        req.get("session"),
+                        competing_contexts,
+                    )
             return response
         except Exception:
             incr(f"webhook.error.{intent_for_metric}")

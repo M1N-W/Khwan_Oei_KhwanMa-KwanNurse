@@ -29,7 +29,7 @@ def _load_service_account_info() -> dict:
     raise DialogflowBridgeError("Google service-account credentials are not configured")
 
 
-def detect_intent(user_id: str, text: str) -> dict:
+def detect_intent(user_id: str, text: str, contexts: list[dict] | None = None) -> dict:
     """Call Dialogflow ES and return its DetectIntent response as a dictionary."""
     if not user_id or not text:
         raise DialogflowBridgeError("user_id and text are required")
@@ -49,6 +49,14 @@ def detect_intent(user_id: str, text: str) -> dict:
         )
         session = AuthorizedSession(credentials)
         session_name = f"projects/{project_id}/agent/sessions/{user_id}"
+        query_params = {
+            "payload": {
+                "source": "line",
+                "userId": user_id,
+            }
+        }
+        if contexts:
+            query_params["contexts"] = contexts
         payload = {
             "queryInput": {
                 "text": {
@@ -56,12 +64,7 @@ def detect_intent(user_id: str, text: str) -> dict:
                     "languageCode": os.environ.get("DIALOGFLOW_LANGUAGE_CODE", "th"),
                 }
             },
-            "queryParams": {
-                "payload": {
-                    "source": "line",
-                    "userId": user_id,
-                }
-            },
+            "queryParams": query_params,
         }
         response = session.post(
             f"https://dialogflow.googleapis.com/v2/{session_name}:detectIntent",

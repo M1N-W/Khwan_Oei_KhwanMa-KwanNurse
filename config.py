@@ -11,6 +11,16 @@ from zoneinfo import ZoneInfo
 DEBUG = os.environ.get("DEBUG", "false").lower() in ("1", "true", "yes")
 PORT = int(os.environ.get("PORT", 5000))
 
+# Conversation routing is opt-in until the Redis-backed controller has passed
+# staging acceptance.  It must never silently degrade to process-local state
+# in production because multiple Gunicorn workers would then disagree.
+CONVERSATION_FLOW_ROUTER_ENABLED = os.environ.get(
+    "CONVERSATION_FLOW_ROUTER_ENABLED", "false"
+).lower() in ("1", "true", "yes", "on")
+CONVERSATION_STATE_REDIS_URL = os.environ.get("CONVERSATION_STATE_REDIS_URL", "").strip()
+CONVERSATION_STATE_TTL_SECONDS = int(os.environ.get("CONVERSATION_STATE_TTL_SECONDS", "900"))
+CONVERSATION_EVENT_TTL_SECONDS = int(os.environ.get("CONVERSATION_EVENT_TTL_SECONDS", "86400"))
+
 # Timezone
 LOCAL_TZ = ZoneInfo("Asia/Bangkok")
 
@@ -312,6 +322,14 @@ def validate_runtime_config():
     if LLM_PROVIDER == "gemini" and not GEMINI_API_KEYS:
         missing.append("GEMINI_API_KEY (when LLM_PROVIDER=gemini)")
 
+    conversation_router_ready = (
+        not CONVERSATION_FLOW_ROUTER_ENABLED
+        or bool(CONVERSATION_STATE_REDIS_URL)
+        or DEBUG
+    )
+    if not conversation_router_ready:
+        missing.append("CONVERSATION_STATE_REDIS_URL (when conversation router is enabled)")
+
     if missing:
         logger.error(
             "Runtime config validation: missing %d required item(s): %s",
@@ -326,4 +344,5 @@ def validate_runtime_config():
         "missing": missing,
         "can_notify": bool(LINE_CHANNEL_ACCESS_TOKEN) and bool(NURSE_GROUP_ID),
         "can_persist": creds_file_exists or creds_env,
+        "conversation_router_ready": conversation_router_ready,
     }
