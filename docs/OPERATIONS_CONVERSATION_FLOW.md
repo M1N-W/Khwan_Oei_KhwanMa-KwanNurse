@@ -8,12 +8,12 @@ The controller isolates interactive feature state from Dialogflow contexts, Goog
 
 ```text
 CONVERSATION_FLOW_ROUTER_ENABLED=true
-CONVERSATION_STATE_REDIS_URL=rediss://<user>:<password>@<host>:<port>/0
+CONVERSATION_STATE_REDIS_URL=redis://<render-internal-key-value-host>:6379
 CONVERSATION_STATE_TTL_SECONDS=900
 CONVERSATION_EVENT_TTL_SECONDS=86400
 ```
 
-`CONVERSATION_FLOW_ROUTER_ENABLED` defaults to `false`. Never set it to `true` in a non-debug environment without a TLS Redis endpoint. The application fails closed instead of using process-local state, because separate Gunicorn workers would otherwise disagree about the active feature.
+`CONVERSATION_FLOW_ROUTER_ENABLED` defaults to `false`. Never set it to `true` in a non-debug environment without a reachable Redis-compatible endpoint. For a Render Key Value instance in the same region, use its internal `redis://` URL; enable internal authentication and use the authenticated internal URL where required. Use the external TLS `rediss://` URL only when connecting from outside Render. The application fails closed instead of using process-local state, because separate Gunicorn workers would otherwise disagree about the active feature.
 
 ## Key contracts
 
@@ -22,7 +22,7 @@ CONVERSATION_EVENT_TTL_SECONDS=86400
 | `kwannurse:conversation:v1:<sha256(channel:user)>` | 900 seconds | Current flow, step, slots, generation, version. |
 | `kwannurse:webhook-event:v1:<event-id>` | 86400 seconds | LINE webhook de-duplication. |
 
-Redis must use TLS, authentication, encrypted backups, and a retention policy appropriate for transient health conversation metadata. Do not store message text or clinical values in logs.
+Use Render's private internal URL whenever the bot and Key Value instance are in the same region. Enable internal authentication for the Key Value instance before production rollout; use an external TLS URL only for off-Render access. Configure persistence/backup and a retention policy appropriate for transient health conversation metadata. Do not store message text or clinical values in logs.
 
 ## Metrics and alerts
 
