@@ -141,72 +141,40 @@ def handle_patient_identity(user_id, params, query_text=""):
             return jsonify(_make_dialogflow_response(t("identity.ask_consent", lang), build_registration_quick_replies(missing_fields), output_contexts=output_contexts)), 200
 
         # All registered successfully
+        cid_masked = ""
+        if citizen_id:
+            cid_masked = f"{citizen_id[0]}-{citizen_id[1:5]}-XXXXX-XX-{citizen_id[-1]}"
+            
+        confirm_text = t(
+            "identity.confirm",
+            lang,
+            first_name=first_name,
+            last_name=last_name,
+            hn=hn,
+            citizen_id=cid_masked,
+            phone=mask_phone_number(phone),
+        )
+        flex_summary = build_profile_flex_summary(merged)
+        
         try:
-            cid_masked = ""
-            if citizen_id:
-                citizen_id_str = str(citizen_id).strip()
-                if len(citizen_id_str) >= 13:
-                    cid_masked = f"{citizen_id_str[0]}-{citizen_id_str[1:5]}-XXXXX-XX-{citizen_id_str[-1]}"
-                else:
-                    cid_masked = citizen_id_str
-                
-            confirm_text = t(
-                "identity.confirm",
-                lang,
-                first_name=first_name,
-                last_name=last_name,
-                hn=hn,
-                citizen_id=cid_masked,
-                phone=mask_phone_number(phone) if phone else "—",
-            )
-            flex_summary = build_profile_flex_summary(merged)
+            from services.survey import schedule_milestone_surveys
+            schedule_milestone_surveys(user_id)
+        except Exception:
+            logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
             
-            try:
-                from services.survey import schedule_milestone_surveys
-                schedule_milestone_surveys(user_id)
-            except Exception:
-                logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
-                
-            # Clear registering context
-            clear_contexts = None
-            from flask import has_request_context, request as flask_req
-            if has_request_context():
-                req_json = flask_req.get_json(silent=True, force=True) or {}
-                session = req_json.get("session")
-                if session:
-                    clear_contexts = [{
-                        "name": f"{session}/contexts/registering",
-                        "lifespanCount": 0
-                    }]
+        # Clear registering context
+        clear_contexts = None
+        from flask import has_request_context, request as flask_req
+        if has_request_context():
+            req_json = flask_req.get_json(silent=True, force=True) or {}
+            session = req_json.get("session")
+            if session:
+                clear_contexts = [{
+                    "name": f"{session}/contexts/registering",
+                    "lifespanCount": 0
+                }]
 
-            return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary, output_contexts=clear_contexts)), 200
-        except Exception as e:
-            logger.exception("Error during registration completion logic for user_id=%s: %s", user_id, e)
-            fallback_text = f"✅ บันทึกข้อมูลเรียบร้อยแล้วค่ะ\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nโทร: {phone or '—'}"
-            
-            # Try to schedule milestone surveys anyway
-            try:
-                from services.survey import schedule_milestone_surveys
-                schedule_milestone_surveys(user_id)
-            except Exception:
-                pass
-                
-            # Try to clear registering context anyway
-            clear_contexts = None
-            try:
-                from flask import has_request_context, request as flask_req
-                if has_request_context():
-                    req_json = flask_req.get_json(silent=True, force=True) or {}
-                    session = req_json.get("session")
-                    if session:
-                        clear_contexts = [{
-                            "name": f"{session}/contexts/registering",
-                            "lifespanCount": 0
-                        }]
-            except Exception:
-                pass
-
-            return jsonify(_make_dialogflow_response(fallback_text, output_contexts=clear_contexts)), 200
+        return jsonify(_make_dialogflow_response(confirm_text, flex_message=flex_summary, output_contexts=clear_contexts)), 200
     except Exception:
         logger.exception("Error in PatientIdentity handler user=%s", _mask_user_id_for_log(user_id))
         return jsonify({"fulfillmentText": "ขอโทษค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"}), 200

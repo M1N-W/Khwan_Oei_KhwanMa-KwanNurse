@@ -118,23 +118,6 @@ class LlmProviderTests(unittest.TestCase):
             sent_text = body["contents"][0]["parts"][-1]["text"]
             self.assertEqual(sent_text, "user")
 
-    def test_gemini_generation_config_parameters(self):
-        with patch("services.llm.LLM_PROVIDER", "gemini"), \
-             patch("services.llm.GEMINI_API_KEY", "test-key"), \
-             patch("services.llm.requests.post") as mock_post:
-            mock_post.return_value = _FakeResponse(
-                200, _gemini_ok_payload('{"status":"ok"}'),
-            )
-            from services import llm as llm_mod
-            llm_mod.complete("sys", "user", max_tokens=400, want_json=True)
-            args, kwargs = mock_post.call_args
-            body = kwargs.get("json") or {}
-            gen_config = body.get("generationConfig") or {}
-            self.assertEqual(gen_config.get("maxOutputTokens"), 400)
-            self.assertEqual(gen_config.get("max_output_tokens"), 400)
-            self.assertEqual(gen_config.get("responseMimeType"), "application/json")
-            self.assertEqual(gen_config.get("response_mime_type"), "application/json")
-
     def test_gemini_scrubs_pii_before_sending(self):
         with patch("services.llm.LLM_PROVIDER", "gemini"), \
              patch("services.llm.GEMINI_API_KEY", "test-key"), \

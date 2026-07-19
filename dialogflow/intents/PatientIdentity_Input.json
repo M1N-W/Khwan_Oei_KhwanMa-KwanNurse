@@ -12,23 +12,17 @@
       "affectedContexts": [
         {
           "name": "registering",
-          "lifespan": 0
+          "lifespanCount": 5
         }
       ],
       "parameters": [
         {
           "id": "a98a011a-7b3c-4d2a-8b1e-6c2c8e9a0a01",
-          "name": "any_input",
           "required": false,
           "dataType": "@sys.any",
+          "name": "any_input",
           "value": "$any_input",
-          "defaultValue": "",
-          "isList": false,
-          "prompts": [],
-          "promptMessages": [],
-          "noMatchPromptMessages": [],
-          "noInputPromptMessages": [],
-          "outputDialogContexts": []
+          "isList": false
         }
       ],
       "messages": [

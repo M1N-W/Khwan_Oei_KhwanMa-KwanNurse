@@ -11,17 +11,11 @@
       "parameters": [
         {
           "id": "5e0b8f14-9c7a-4a01-9b3e-6c2c8e9a0a01",
-          "name": "topic",
           "required": false,
           "dataType": "@KnowledgeTopic",
+          "name": "topic",
           "value": "$topic",
-          "defaultValue": "",
-          "isList": false,
-          "prompts": [],
-          "promptMessages": [],
-          "noMatchPromptMessages": [],
-          "noInputPromptMessages": [],
-          "outputDialogContexts": []
+          "isList": false
         }
       ],
       "messages": [

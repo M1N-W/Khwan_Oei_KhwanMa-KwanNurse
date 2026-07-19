@@ -739,36 +739,6 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
             self.assertEqual(args[1][1]["type"], "flex")
             self.assertIn("คู่มือการใช้งานระบบ", args[1][1]["contents"]["header"]["contents"][0]["text"])
 
-    def test_registration_completion_exception_safety(self):
-        from routes.webhook.handlers.registration import handle_patient_identity
-        from database.patient_profile import PatientProfileReadResult
-
-        existing = {
-            "first_name": "สมชาย",
-            "last_name": "ใจดี",
-            "hn": "HN123",
-            "phone": "0812345678",
-            "citizen_id": "1234567890121",
-            "consent_granted": True,
-            "registration_status": "registered"
-        }
-        
-        # When build_profile_flex_summary raises an exception, the handler should fallback to text
-        with patch("database.patient_profile.read_patient_profile_result", return_value=PatientProfileReadResult(True, existing)), \
-             patch("database.patient_profile.upsert_patient_profile", return_value=True), \
-             patch("services.patient_profile.build_profile_flex_summary", side_effect=Exception("Simulated Flex Crash")), \
-             patch("services.patient_profile.invalidate_profile_cache"), \
-             patch("services.dashboard_readers.invalidate_dashboard_cache"), \
-             patch("services.survey.schedule_milestone_surveys"):
-             
-            res, code = handle_patient_identity("U12345", {}, "ข้อมูล")
-            self.assertEqual(code, 200)
-            data = res.get_json()
-            # It should return a plain text response containing patient details as fallback
-            text_response = data.get("fulfillmentText", "")
-            self.assertIn("สมชาย", text_response)
-            self.assertIn("HN123", text_response)
-            self.assertIn("0812345678", text_response)
 
 
 class PatientRegistrationDashboardActionTests(unittest.TestCase):

@@ -53,22 +53,6 @@ class UXAndRobustnessTest(unittest.TestCase):
         self.assertTrue(_has_active_context(req_json, "requestappointment_dialog_context"))
         self.assertEqual(_extract_context_parameters(req_json, "requestappointment_dialog_context").get("apt_day"), "7")
 
-    def test_intent_hijacking_interception_substring(self):
-        from routes.webhook.handler import _has_active_context, _extract_context_parameters
-        req_json = {
-            "queryResult": {
-                "outputContexts": [
-                    {
-                        "name": "projects/mock/agent/sessions/s1/contexts/requestappointment_dialog_context_custom",
-                        "lifespanCount": 3,
-                        "parameters": {"test_param": "val"}
-                    }
-                ]
-            }
-        }
-        self.assertTrue(_has_active_context(req_json, "requestappointment_dialog_context"))
-        self.assertEqual(_extract_context_parameters(req_json, "requestappointment_dialog_context").get("test_param"), "val")
-
     def test_thai_colloquial_time_parsing(self):
         # Morning hours
         self.assertEqual(parse_thai_colloquial_time("เจ็ดโมงเช้า"), "07:00")

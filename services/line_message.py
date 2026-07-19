@@ -467,13 +467,12 @@ def _build_guide_bubble(rec: dict) -> dict:
     key = rec.get("key", "")
     color = _GUIDE_COLORS.get(key, "#37474F")
     icon = _GUIDE_ICONS.get(key, "📖")
-    title = rec.get("title", "ไม่ระบุ")
     return {
         "type": "bubble",
         "size": "micro",
         "header": {
             "type": "box", "layout": "vertical", "backgroundColor": color, "paddingAll": "12px",
-            "contents": [{"type": "text", "text": f"{icon} {title}",
+            "contents": [{"type": "text", "text": f"{icon} {rec['title']}",
                           "color": "#FFFFFF", "weight": "bold", "size": "sm", "wrap": True}],
         },
         "body": {
@@ -484,7 +483,7 @@ def _build_guide_bubble(rec: dict) -> dict:
         "footer": {
             "type": "box", "layout": "vertical", "paddingAll": "8px",
             "contents": [{"type": "button", "style": "primary", "color": color, "height": "sm",
-                          "action": {"type": "message", "label": "อ่านเลย", "text": title}}],
+                          "action": {"type": "message", "label": "อ่านเลย", "text": rec["title"]}}],
         },
     }
 
@@ -510,8 +509,6 @@ def build_nurse_assigned_message(nurse_name: str, contact_link: str) -> dict:
     Flex bubble: notify patient that their consultation was accepted by a nurse.
     Includes altText that acts as a full fallback message with the link.
     """
-    nurse_name = str(nurse_name or "").strip() or "ผู้ดูแล"
-    contact_link = str(contact_link or "").strip() or "https://line.me"
     fallback_text = (
         f"🏥 พยาบาล {nurse_name} รับคำขอปรึกษาของคุณแล้วค่ะ\n\n"
         f"คุณสามารถกดแอดไลน์พยาบาลเพื่อเริ่มสนทนาได้ที่นี่เลยนะคะ: {contact_link}"
