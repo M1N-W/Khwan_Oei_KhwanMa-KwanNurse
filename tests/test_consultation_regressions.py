@@ -26,7 +26,7 @@ class ConsultationRoutingTests(unittest.TestCase):
         )
         updated = _append_patient_cancel_guidance((response, 200), "RequestAppointment")
 
-        self.assertIn("พิมพ์คำว่า ‘ยกเลิก’", updated[0].get_json()["fulfillmentText"])
+        self.assertIn("พิมพ์ ‘ยกเลิก’", updated[0].get_json()["fulfillmentText"])
 
     def test_wound_photo_command_is_not_routed_to_knowledge(self):
         from app import create_app
@@ -83,7 +83,7 @@ class ConsultationRoutingTests(unittest.TestCase):
         from routes.webhook.handlers.fallback import handle_contact_nurse
 
         app = create_app()
-        with app.test_request_context(
+        with patch("config.ENABLE_RICH_MESSAGES", True), app.test_request_context(
             "/webhook",
             json={"session": "projects/p/agent/sessions/U1"},
         ), patch("routes.webhook.handlers.fallback.is_office_hours", return_value=True):
@@ -93,6 +93,12 @@ class ConsultationRoutingTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["outputContexts"][0]["lifespanCount"], 5)
         self.assertIn("5. 👩🏻‍⚕️ ติดต่อพยาบาล", payload["fulfillmentText"])
+        quick_reply_texts = [
+            item["action"]["text"]
+            for item in payload["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
+        ]
+        self.assertEqual(quick_reply_texts, ["1", "2", "3", "4", "5"])
+        self.assertIn("ติดต่อพยาบาล", payload["fulfillmentMessages"][0]["payload"]["line"]["text"])
 
     def test_category_five_returns_direct_nurse_contact(self):
         from services.teleconsult import start_teleconsult
@@ -103,6 +109,24 @@ class ConsultationRoutingTests(unittest.TestCase):
         self.assertTrue(result["direct_contact"])
         self.assertIn("LINE ID: 0899181839", result["message"])
         self.assertIn("line.me/ti/p/~0899181839", result["message"])
+
+    def test_category_five_rich_response_uses_button_without_url_preview(self):
+        from app import create_app
+        from routes.webhook.handlers.fallback import handle_contact_nurse
+
+        app = create_app()
+        with patch("config.ENABLE_RICH_MESSAGES", True), app.test_request_context(
+            "/webhook", json={"session": "projects/p/agent/sessions/U1"}
+        ), patch("routes.webhook.handlers.fallback.is_office_hours", return_value=True):
+            response, status = handle_contact_nurse("U1", {"issue_category": "5"}, "5")
+
+        payload = response.get_json()
+        self.assertEqual(status, 200)
+        line_payload = payload["fulfillmentMessages"][0]["payload"]["line"]
+        self.assertEqual(line_payload["type"], "flex")
+        footer_action = line_payload["contents"]["footer"]["contents"][0]["action"]
+        self.assertEqual(footer_action["type"], "uri")
+        self.assertNotIn("https://line.me", line_payload.get("altText", ""))
 
 
 class ConsultationCancellationTests(unittest.TestCase):
@@ -322,6 +346,32 @@ class AppointmentStateTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         dispatch.assert_called_once_with("ReportSymptoms", "U1", {}, "รายงานอาการ")
         self.assertEqual(response.get_json()["outputContexts"][-1]["lifespanCount"], 0)
+
+    def test_numeric_risk_answer_wins_over_misclassified_teleconsult_intent(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "20",
+                "intent": {"displayName": "AfterHoursChoice"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/assessrisk_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {"age": ""},
+                }],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "น้ำหนัก"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("AssessRisk", "U1", {"age": "20"}, "20")
 
 
 class AlertFormattingTests(unittest.TestCase):

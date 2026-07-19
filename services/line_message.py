@@ -577,6 +577,40 @@ def build_nurse_assigned_message(nurse_name: str, contact_link: str) -> dict:
     }
 
 
+def build_nurse_contact_message(contact_link: str) -> dict:
+    """Compact Flex card that opens the nurse chat without a URL preview."""
+    return {
+        "type": "flex",
+        "altText": "👩🏻‍⚕️ ติดต่อพยาบาลขวัญเรือนโดยตรง",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "header": {
+                "type": "box", "layout": "vertical", "backgroundColor": "#2E7D32",
+                "paddingAll": "16px",
+                "contents": [{
+                    "type": "text", "text": "👩🏻‍⚕️ ติดต่อพยาบาล",
+                    "color": "#FFFFFF", "weight": "bold", "size": "lg", "wrap": True,
+                }],
+            },
+            "body": {
+                "type": "box", "layout": "vertical", "spacing": "sm",
+                "contents": [
+                    {"type": "text", "text": "พยาบาลขวัญเรือนพร้อมให้คำปรึกษาค่ะ", "wrap": True, "size": "md"},
+                    {"type": "text", "text": "กดปุ่มด้านล่างเพื่อเปิดแชตได้เลยนะคะ", "wrap": True, "size": "sm", "color": "#666666"},
+                ],
+            },
+            "footer": {
+                "type": "box", "layout": "vertical",
+                "contents": [{
+                    "type": "button", "style": "primary", "color": "#2E7D32",
+                    "action": {"type": "uri", "label": "💬 เปิดแชตพยาบาล", "uri": contact_link},
+                }],
+            },
+        },
+    }
+
+
 def build_daily_checkin_reminder() -> dict:
     """
     Flex message: reminder to prompt daily symptom reporting check-in.

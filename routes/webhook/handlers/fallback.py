@@ -229,6 +229,13 @@ def handle_contact_nurse(user_id, params, query_text):
                     quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
                 ]
                 return jsonify(_make_dialogflow_response(result['message'], quick_replies=after_hours_replies)), 200
+            if result.get("direct_contact"):
+                from config import NURSE_CONTACT_LINK
+                from services.line_message import build_nurse_contact_message
+                return jsonify(_make_dialogflow_response(
+                    result["message"],
+                    flex_message=build_nurse_contact_message(NURSE_CONTACT_LINK),
+                )), 200
             return jsonify({"fulfillmentText": result['message']}), 200
         else:
             menu = get_category_menu()

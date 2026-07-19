@@ -53,6 +53,34 @@ def _report_symptoms_context(params=None, lifespan_count=5):
     return [context]
 
 
+def _assess_risk_context(params=None, lifespan_count=5):
+    """Keep personal-risk slots in the runtime-owned context."""
+    from flask import has_request_context, request as flask_req
+
+    if not has_request_context():
+        return None
+    req_json = flask_req.get_json(silent=True, force=True) or {}
+    session = req_json.get("session")
+    if not session:
+        return None
+    context_names = [
+        str(context.get("name") or "")
+        for context in (req_json.get("queryResult", {}).get("outputContexts") or [])
+        if isinstance(context, dict)
+    ]
+    context_name = "assesspersonalrisk_dialog_context" if any(
+        name.endswith("/contexts/assesspersonalrisk_dialog_context")
+        for name in context_names
+    ) else "assessrisk_dialog_context"
+    context = {
+        "name": f"{session}/contexts/{context_name}",
+        "lifespanCount": lifespan_count,
+    }
+    if params:
+        context["parameters"] = dict(params)
+    return [context]
+
+
 def handle_report_symptoms(user_id, params):
     """Handle ReportSymptoms intent"""
     pain = params.get('pain_score')
@@ -190,6 +218,7 @@ def handle_report_symptoms(user_id, params):
 
 def handle_assess_risk(user_id, params):
     """Handle AssessRisk intent"""
+    params = dict(params or {})
     age = params.get('age')
     weight = params.get('weight')
     height = params.get('height')
@@ -197,23 +226,28 @@ def handle_assess_risk(user_id, params):
     
     if age is None or str(age).strip() == "":
         ask = "กรุณาระบุ อายุ ของคนไข้ด้วยค่ะ (เช่น 45)"
-        return jsonify(_make_dialogflow_response(ask)), 200
+        return jsonify(_make_dialogflow_response(ask, output_contexts=_assess_risk_context(params))), 200
     if weight is None or str(weight).strip() == "":
         ask = "กรุณาระบุ น้ำหนัก (กิโลกรัม) ของคนไข้ด้วยค่ะ (เช่น 65)"
-        return jsonify(_make_dialogflow_response(ask)), 200
+        return jsonify(_make_dialogflow_response(ask, output_contexts=_assess_risk_context(params))), 200
     if height is None or str(height).strip() == "":
         ask = "กรุณาระบุ ส่วนสูง (เซนติเมตร) ของคนไข้ด้วยค่ะ (เช่น 170)"
-        return jsonify(_make_dialogflow_response(ask)), 200
+        return jsonify(_make_dialogflow_response(ask, output_contexts=_assess_risk_context(params))), 200
     if not disease:
         quick_replies = [
             quick_reply_item("🟢 ไม่มีโรคประจำตัว", "ไม่มี"),
         ]
         ask = "กรุณาระบุ โรคประจำตัว (หรือพิมพ์/เลือก 'ไม่มี') ด้วยค่ะ"
-        return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+        return jsonify(_make_dialogflow_response(
+            ask, quick_replies, output_contexts=_assess_risk_context(params)
+        )), 200
     
     # Calculate risk
     result = calculate_personal_risk(user_id, age, weight, height, disease)
-    return jsonify({"fulfillmentText": result}), 200
+    return jsonify(_make_dialogflow_response(
+        result,
+        output_contexts=_assess_risk_context(lifespan_count=0),
+    )), 200
 
 
 def handle_request_appointment(user_id, params):

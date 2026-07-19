@@ -419,6 +419,12 @@ def register_routes(app):
                     _has_active_context(req, 'requestappointment_dialog_context')
                     and not is_teleconsult_digit
                     and not is_top_level_command
+                    and intent in {
+                        None,
+                        'Default Fallback Intent',
+                        'FreeTextSymptom',
+                        'Default Welcome Intent',
+                    }
                 ):
                     if intent != 'RequestAppointment':
                         ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
@@ -435,6 +441,38 @@ def register_routes(app):
                             "Intent hijacked and rerouted to RequestAppointment: query_len=%d",
                             len(query_text) if isinstance(query_text, str) else 0,
                         )
+                elif (
+                    not is_top_level_command
+                    and intent not in {"AssessRisk", "AssessPersonalRisk"}
+                    and (
+                        _has_active_context(req, "assessrisk_dialog_context")
+                        or _has_active_context(req, "assesspersonalrisk_dialog_context")
+                    )
+                ):
+                    # Runtime owns an active risk-assessment flow; do not let a
+                    # numeric answer be reclassified as a teleconsult choice.
+                    context_name = (
+                        "assesspersonalrisk_dialog_context"
+                        if _has_active_context(req, "assesspersonalrisk_dialog_context")
+                        else "assessrisk_dialog_context"
+                    )
+                    ctx_params = _extract_context_parameters(req, context_name)
+                    new_params = dict(ctx_params)
+                    for key, value in (params or {}).items():
+                        if key not in new_params or not new_params.get(key):
+                            new_params[key] = value
+                    if isinstance(query_text, str) and query_text.strip():
+                        for slot in ("age", "weight", "height", "disease", "diseases"):
+                            if not str(new_params.get(slot) or "").strip():
+                                new_params[slot] = query_text.strip()
+                                break
+                    params = new_params
+                    intent = "AssessPersonalRisk" if context_name.startswith("assesspersonal") else "AssessRisk"
+                    logger.info(
+                        "Intent rerouted to active risk flow context=%s query_len=%d",
+                        context_name,
+                        len(query_text) if isinstance(query_text, str) else 0,
+                    )
                 elif _has_active_context(req, 'reportsymptoms_dialog_context'):
                     if intent != 'ReportSymptoms':
                         ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
@@ -799,7 +837,6 @@ def handle_line_image_event(event):
                 send_line_push(
                     f"📸 ผู้ป่วยส่งรูปแผล (AI ไม่พร้อม)\n"
                     f"👤 ผู้ป่วย: {patient_label}\n"
-                    f"🆔 User ID: {user_id}\n"
                     f"กรุณาตรวจสอบรูปใน LINE",
                     NURSE_GROUP_ID,
                 )

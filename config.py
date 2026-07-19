@@ -181,9 +181,9 @@ ISSUE_CATEGORIES = {
         'max_wait_minutes': 30
     },
     'other': {
-        'name_th': 'อื่นๆ',
+        'name_th': 'ติดต่อพยาบาล',
         'priority': 3,
-        'icon': '❓',
+        'icon': '👩🏻‍⚕️',
         'max_wait_minutes': 30
     }
 }

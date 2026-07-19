@@ -46,14 +46,19 @@ _REGISTRATION_INTENTS = {
 }
 
 _PATIENT_CANCEL_GUIDANCE = (
-    "\n\nหากต้องการเปลี่ยนข้อมูลหรือเปลี่ยนรายการ พิมพ์คำว่า ‘ยกเลิก’ ได้เลยนะคะ "
-    "แล้วเริ่มฟีเจอร์นี้ใหม่อีกครั้งได้ค่ะ 💚"
+    "\n\nหากต้องการเปลี่ยนรายการ พิมพ์ ‘ยกเลิก’ แล้วเริ่มใหม่ได้เลยค่ะ 💚"
 )
+
+_GUIDANCE_INTENTS = {
+    "PatientIdentity", "UpdatePatientIdentity", "RegisterPatient",
+    "ReportSymptoms", "AssessRisk", "AssessPersonalRisk",
+    "RequestAppointment", "ContactNurse", "AfterHoursChoice",
+}
 
 
 def _append_patient_cancel_guidance(response, intent):
     """Add a gentle, consistent cancellation/retry note to patient replies."""
-    if intent in {"CancelConsultation", "Unknown", "Default Fallback Intent"}:
+    if intent not in _GUIDANCE_INTENTS:
         return response
 
     response_obj = response[0] if isinstance(response, tuple) else response
@@ -66,7 +71,12 @@ def _append_patient_cancel_guidance(response, intent):
         return response
 
     text = payload.get("fulfillmentText")
-    if not isinstance(text, str) or not text.strip() or "พิมพ์คำว่า ‘ยกเลิก’" in text:
+    if not isinstance(text, str) or not text.strip() or "‘ยกเลิก’" in text:
+        return response
+    if any(
+        isinstance(context, dict) and int(context.get("lifespanCount", 0) or 0) > 0
+        for context in (payload.get("outputContexts") or [])
+    ):
         return response
     text = text.rstrip() + _PATIENT_CANCEL_GUIDANCE
     payload["fulfillmentText"] = text

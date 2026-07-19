@@ -102,6 +102,27 @@ class LlmProviderTests(unittest.TestCase):
             from services import llm as llm_mod
             self.assertFalse(llm_mod.is_enabled())
 
+    def test_vision_request_uses_safe_key_header_and_gemini_rest_shape(self):
+        from services import llm
+
+        response = _FakeResponse(200, _gemini_ok_payload('{"severity":"low"}'))
+        with patch("services.llm.requests.post", return_value=response) as post:
+            result = llm._call_gemini_vision(
+                "system", "inspect", b"image-bytes", "image/jpeg", 500,
+                "secret-key", "gemini-2.5-flash",
+            )
+
+        self.assertEqual(result, '{"severity":"low"}')
+        url, kwargs = post.call_args.args[0], post.call_args.kwargs
+        self.assertNotIn("?key=", url)
+        self.assertEqual(kwargs["headers"]["x-goog-api-key"], "secret-key")
+        payload = kwargs["json"]
+        self.assertIn("generationConfig", payload)
+        self.assertNotIn("generation_config", payload)
+        image_part = payload["contents"][0]["parts"][-1]
+        self.assertIn("inline_data", image_part)
+        self.assertEqual(image_part["inline_data"]["mime_type"], "image/jpeg")
+
     def test_gemini_happy_path_strips_json_fences(self):
         with patch("services.llm.LLM_PROVIDER", "gemini"), \
              patch("services.llm.GEMINI_API_KEY", "test-key"), \

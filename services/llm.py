@@ -154,7 +154,15 @@ def _execute_with_key_fallback(api_call_fn, model_name):
                 _metric("llm.key_fallback_429")
                 last_exc = e
                 continue
-            logger.warning("Gemini HTTP error %s for key ...%s. Retrying next key.", e.response.status_code if e.response else e, api_key[-6:])
+            status = e.response.status_code if e.response else None
+            if status is not None and 400 <= status < 500 and status != 429:
+                logger.error(
+                    "Gemini request rejected status=%s body=%s",
+                    status,
+                    (e.response.text or "")[:300] if e.response is not None else "",
+                )
+                raise
+            logger.warning("Gemini HTTP error %s for key ...%s. Retrying next key.", status or e, api_key[-6:])
             last_exc = e
             continue
         except requests.exceptions.RequestException as e:
@@ -226,7 +234,7 @@ def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
     """Low-level Gemini REST call. Returns text or raises."""
     if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
         model_name = "gemini-2.5-flash"
-    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     parts = []
     if system:
@@ -238,7 +246,7 @@ def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
         "temperature": 0.2,
     }
     if want_json:
-        generation_config["responseMimeType"] = "application/json"
+        generation_config["response_mime_type"] = "application/json"
 
     payload = {
         "contents": [{"role": "user", "parts": parts}],
@@ -249,7 +257,7 @@ def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
         url,
         json=payload,
         timeout=LLM_TIMEOUT_SECONDS,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
     )
     resp.raise_for_status()
     data = resp.json()
@@ -384,7 +392,7 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
     """
     if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
         model_name = "gemini-2.5-flash"
-    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     parts = []
     if system:
@@ -394,8 +402,8 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
 
     image_b64 = base64.b64encode(image_bytes).decode("ascii")
     parts.append({
-        "inlineData": {
-            "mimeType": mime_type or "image/jpeg",
+        "inline_data": {
+            "mime_type": mime_type or "image/jpeg",
             "data": image_b64,
         }
     })
@@ -405,7 +413,7 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
         "generationConfig": {
             "maxOutputTokens": max_tokens,
             "temperature": 0.2,
-            "responseMimeType": "application/json",
+            "response_mime_type": "application/json",
         },
     }
 
@@ -413,7 +421,7 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
         url,
         json=payload,
         timeout=LLM_VISION_TIMEOUT_SECONDS,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
     )
     resp.raise_for_status()
     data = resp.json()
@@ -464,7 +472,9 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
     if tokens < 300:
         tokens = 500
-    model_name = route_model(intent)
+    # Vision has its own safe model setting; do not inherit text-intent
+    # routing or preview aliases that may not support multimodal JSON.
+    model_name = LLM_VISION_MODEL or "gemini-2.5-flash"
 
     for attempt in range(3):
         start = time.time()
@@ -531,12 +541,12 @@ def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
     """Low-level Gemini multimodal call for audio → text transcription."""
     if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
         model_name = "gemini-2.5-flash"
-    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
     parts = [
         {"text": _TRANSCRIBE_PROMPT},
-        {"inlineData": {"mimeType": mime_type or "audio/mp4", "data": audio_b64}},
+        {"inline_data": {"mime_type": mime_type or "audio/mp4", "data": audio_b64}},
     ]
     payload = {
         "contents": [{"role": "user", "parts": parts}],
@@ -549,7 +559,7 @@ def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
     resp = requests.post(
         url, json=payload,
         timeout=LLM_VISION_TIMEOUT_SECONDS,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
     )
     resp.raise_for_status()
     data = resp.json()

@@ -179,10 +179,29 @@ class NotificationHelpersTests(unittest.TestCase):
         )
         self.assertNotIn("U-abc", msg)
         self.assertIn("ยังไม่ลงทะเบียน", msg)
-        self.assertIn("สูง", msg)        # Thai severity label
-        self.assertIn("90%", msg)        # confidence pct
+        self.assertIn("สูง", msg)
+        self.assertIn("90%", msg)
         self.assertIn("บวม", msg)
         self.assertIn("พบพยาบาลด่วน", msg)
+
+    def test_ai_unavailable_wound_notice_has_no_user_id(self):
+        from routes.webhook.handler import handle_line_image_event
+
+        with patch("services.notification.download_line_content", return_value=b"image"), \
+             patch("services.wound_analysis.analyze_wound_image", return_value=None), \
+             patch("services.notification.reply_line_message"), \
+             patch("services.notification.send_line_push") as push, \
+             patch("routes.webhook.handler.NURSE_GROUP_ID", "group"):
+            handle_line_image_event({
+                "type": "message",
+                "replyToken": "reply",
+                "source": {"userId": "U-secret-user-id"},
+                "message": {"id": "message-1", "type": "image"},
+            })
+
+        alert = push.call_args.args[0]
+        self.assertNotIn("User ID", alert)
+        self.assertNotIn("U-secret-user-id", alert)
 
     def test_build_wound_user_reply_high_includes_warning(self):
         from services.notification import build_wound_user_reply

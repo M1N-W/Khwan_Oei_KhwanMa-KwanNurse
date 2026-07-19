@@ -38,6 +38,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # -----------------------------------------------------------------------------
 class ApiKeyRedactionTests(unittest.TestCase):
 
+    def test_non_retryable_gemini_400_does_not_try_other_keys(self):
+        from services import llm
+
+        response = MagicMock(status_code=400, text='{"error":{"message":"invalid request"}}')
+        error = requests.exceptions.HTTPError(response=response)
+        calls = []
+        def fail_once(key, _model):
+            calls.append(key)
+            raise error
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            llm._execute_with_key_fallback(fail_once, "gemini-2.5-flash")
+        self.assertEqual(len(calls), 1)
+
     def test_redact_strips_query_string_key(self):
         from services.llm import _redact_api_key
         msg = (

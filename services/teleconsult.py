@@ -66,7 +66,7 @@ def get_category_menu():
         menu_items.append(f"{i}. {icon} {name}")
 
     menu = "📋 เลือกเรื่องที่ต้องการปรึกษา\n\n" + "\n".join(menu_items)
-    menu += "\n\nเลือกหมายเลข (1-5) ตามที่ปรากฏได้เลยค่ะ"
+    menu += "\n\nเลือกหมายเลข 1–5 ได้เลยค่ะ"
     
     return menu
 
