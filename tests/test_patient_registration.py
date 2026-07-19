@@ -452,6 +452,36 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("ชื่อจริง", response.get_json()["fulfillmentText"])
 
+    def test_registered_profile_uses_text_summary_through_dialogflow_line(self):
+        from routes.webhook import handle_patient_identity
+        from database.patient_profile import PatientProfileReadResult
+        from config import PATIENT_CONSENT_VERSION
+
+        profile = {
+            "first_name": "สมชาย",
+            "last_name": "ใจดี",
+            "hn": "HN001",
+            "citizen_id": "1234567890121",
+            "phone": "0812345678",
+            "registration_status": "registered",
+            "consent_version": PATIENT_CONSENT_VERSION,
+            "consent_at": "2026-01-01",
+        }
+        with self.app.test_request_context(
+            "/webhook",
+            method="POST",
+            json={"session": "projects/test/agent/sessions/s1"},
+        ), patch(
+            "database.patient_profile.read_patient_profile_result",
+            return_value=PatientProfileReadResult(True, profile),
+        ), patch("services.survey.schedule_milestone_surveys"):
+            response, status = handle_patient_identity("U1", {}, "ลงทะเบียน")
+
+        payload = response.get_json()
+        self.assertEqual(status, 200)
+        self.assertIn("ข้อมูลลงทะเบียนครบแล้ว", payload["fulfillmentText"])
+        self.assertNotIn("fulfillmentMessages", payload)
+
     def test_existing_profile_resumes_from_stored_fields(self):
         from routes.webhook import handle_patient_identity
         from database.patient_profile import PatientProfileReadResult

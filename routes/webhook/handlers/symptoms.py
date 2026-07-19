@@ -33,6 +33,25 @@ SLOT_LABELS = {
 }
 
 
+def _report_symptoms_context(params=None, lifespan_count=5):
+    """Keep symptom slot filling in the runtime-owned Dialogflow context."""
+    from flask import has_request_context, request as flask_req
+
+    if not has_request_context():
+        return None
+    req_json = flask_req.get_json(silent=True, force=True) or {}
+    session = req_json.get("session")
+    if not session:
+        return None
+    context = {
+        "name": f"{session}/contexts/reportsymptoms_dialog_context",
+        "lifespanCount": lifespan_count,
+    }
+    if params:
+        context["parameters"] = dict(params)
+    return [context]
+
+
 def handle_report_symptoms(user_id, params):
     """Handle ReportSymptoms intent"""
     pain = params.get('pain_score')
@@ -88,7 +107,11 @@ def handle_report_symptoms(user_id, params):
                 "🔴 4: ปวดมาก (รบกวนมาก/เริ่มนอนไม่หลับ)\n"
                 "🚨 5: ปวดรุนแรงที่สุด (ทรมานมาก/ทนไม่ไหว)"
             )
-            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+            return jsonify(_make_dialogflow_response(
+                ask,
+                quick_replies,
+                output_contexts=_report_symptoms_context(params),
+            )), 200
         elif not wound:
             first_missing_key = "wound"
             quick_replies = [
@@ -97,7 +120,11 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🔴 แผลบวม/มีหนอง", "แผลบวมหนอง"),
             ]
             ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
-            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+            return jsonify(_make_dialogflow_response(
+                ask,
+                quick_replies,
+                output_contexts=_report_symptoms_context(params),
+            )), 200
         elif not fever:
             first_missing_key = "fever"
             quick_replies = [
@@ -105,7 +132,11 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🔴 มีไข้ตัวร้อน", "มีไข้"),
             ]
             ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
-            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+            return jsonify(_make_dialogflow_response(
+                ask,
+                quick_replies,
+                output_contexts=_report_symptoms_context(params),
+            )), 200
         else:  # mobility
             first_missing_key = "mobility"
             quick_replies = [
@@ -114,7 +145,11 @@ def handle_report_symptoms(user_id, params):
                 quick_reply_item("🔴 เดินไม่ได้เลย", "เดินไม่ได้"),
             ]
             ask = f"กรุณาระบุ {SLOT_LABELS[first_missing_key]} ด้วยค่ะ"
-            return jsonify(_make_dialogflow_response(ask, quick_replies)), 200
+            return jsonify(_make_dialogflow_response(
+                ask,
+                quick_replies,
+                output_contexts=_report_symptoms_context(params),
+            )), 200
 
     # Calculate risk
     result = calculate_symptom_risk(user_id, pain, wound, fever, mobility, neuro=neuro)
@@ -146,7 +181,10 @@ def handle_report_symptoms(user_id, params):
         except Exception:
             logger.exception("Failed to push proactive education user=%s", user_id)
 
-    return jsonify({"fulfillmentText": result}), 200
+    return jsonify(_make_dialogflow_response(
+        result,
+        output_contexts=_report_symptoms_context(lifespan_count=0),
+    )), 200
 
 
 def handle_assess_risk(user_id, params):

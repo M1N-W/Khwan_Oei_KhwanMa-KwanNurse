@@ -18,6 +18,23 @@ from services.line_message import flex_bubble, flex_text
 
 
 class TestUIUXImprovements(unittest.TestCase):
+    def test_report_symptoms_prompt_keeps_runtime_context(self):
+        from routes.webhook.handlers.symptoms import handle_report_symptoms
+
+        payload = {
+            "session": "projects/test/agent/sessions/line-session",
+            "queryResult": {"parameters": {"pain_score": ""}},
+        }
+        with app.test_request_context("/webhook", method="POST", json=payload):
+            response, status = handle_report_symptoms("U_TEST", {"pain_score": ""})
+
+        data = response.get_json()
+        self.assertEqual(status, 200)
+        contexts = data["outputContexts"]
+        self.assertEqual(len(contexts), 1)
+        self.assertTrue(contexts[0]["name"].endswith("/contexts/reportsymptoms_dialog_context"))
+        self.assertEqual(contexts[0]["lifespanCount"], 5)
+
     def test_pain_scale_mapping_and_validation(self):
         # 1. Test mapping 1 to 0
         with patch("routes.webhook.handlers.symptoms.calculate_symptom_risk") as mock_calc:
@@ -376,4 +393,3 @@ class TestUIUXImprovements(unittest.TestCase):
             contexts = data["outputContexts"]
             # Verify contexts are cleared
             self.assertEqual(contexts[0]["lifespanCount"], 0)
-

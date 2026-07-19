@@ -154,7 +154,13 @@ def handle_patient_identity(user_id, params, query_text=""):
             citizen_id=cid_masked,
             phone=mask_phone_number(phone),
         )
-        flex_summary = build_profile_flex_summary(merged)
+        # Dialogflow ES's LINE integration does not support LINE Flex messages.
+        # Keep the Flex builder for direct LINE mode, but return the reliable
+        # text summary through the Dialogflow webhook path.
+        flex_summary = None
+        from flask import has_request_context, request as flask_req
+        if has_request_context() and flask_req.path == "/line/webhook":
+            flex_summary = build_profile_flex_summary(merged)
         
         try:
             from services.survey import schedule_milestone_surveys
@@ -164,7 +170,6 @@ def handle_patient_identity(user_id, params, query_text=""):
             
         # Clear registering context
         clear_contexts = None
-        from flask import has_request_context, request as flask_req
         if has_request_context():
             req_json = flask_req.get_json(silent=True, force=True) or {}
             session = req_json.get("session")
