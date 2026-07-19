@@ -816,28 +816,10 @@ def build_registration_quick_replies(missing_fields: list[str]) -> list[dict]:
 def build_profile_flex_summary(profile: dict) -> dict:
     """
     Build a Flex bubble that summarises a patient's registration status.
-
-    Privacy rules (ADR-002, ADR-003):
-    - HN is shown (clinical identity field — nurses need it).
-    - Phone is masked (``0X-XXX-XXXX`` format via ``mask_phone_number``).
-    - LINE User ID is **never** shown.
-    - Name is shown as-is (self-entered, not verified — no special handling).
-
-    Args:
-        profile: Patient profile dict (from ``read_patient_profile`` or merged).
-
-    Returns:
-        dict: LINE Flex message object (``{"type": "flex", ...}``).
-    """
-    from services.line_message import (  # deferred to avoid circular import
-        flex_text, flex_separator, flex_bubble, build_flex_message, flex_button,
-    )
-
-def build_profile_flex_summary(profile: dict) -> dict:
-    """
-    Build a Flex bubble that summarises a patient's registration status.
     Replicated to match the premium card design from image_09929a.png precisely.
     """
+    if not isinstance(profile, dict):
+        profile = {}
     from services.line_message import build_flex_message  # deferred to avoid circular import
 
     # Safe field extraction

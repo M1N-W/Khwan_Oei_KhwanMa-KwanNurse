@@ -4,8 +4,8 @@
     "data": [
       {
         "text": "นายสมชาย",
-        "alias": "any_input",
         "meta": "@sys.any",
+        "alias": "any_input",
         "userDefined": true
       }
     ],
@@ -19,8 +19,8 @@
     "data": [
       {
         "text": "อยู่เย็น",
-        "alias": "any_input",
         "meta": "@sys.any",
+        "alias": "any_input",
         "userDefined": true
       }
     ],
@@ -34,8 +34,8 @@
     "data": [
       {
         "text": "0812345678",
-        "alias": "any_input",
         "meta": "@sys.any",
+        "alias": "any_input",
         "userDefined": true
       }
     ],
@@ -49,8 +49,8 @@
     "data": [
       {
         "text": "123456",
-        "alias": "any_input",
         "meta": "@sys.any",
+        "alias": "any_input",
         "userDefined": true
       }
     ],
@@ -64,8 +64,8 @@
     "data": [
       {
         "text": "ยินยอม",
-        "alias": "any_input",
         "meta": "@sys.any",
+        "alias": "any_input",
         "userDefined": true
       }
     ],

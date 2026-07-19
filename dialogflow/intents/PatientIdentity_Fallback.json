@@ -12,7 +12,7 @@
       "affectedContexts": [
         {
           "name": "registering",
-          "lifespanCount": 5
+          "lifespan": 0
         }
       ],
       "parameters": [],

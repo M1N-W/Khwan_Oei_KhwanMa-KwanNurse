@@ -241,7 +241,17 @@ def register_routes(app):
                 user_id = req.get('session', 'unknown').split('/')[-1]
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
-            
+
+            # --- TEMP DEBUG (remove after diagnosing RequestAppointment loop) ---
+            logger.info(
+                "RAW_INTENT_DEBUG: matched=%s query=%r params=%s active_contexts=%s",
+                req.get('queryResult', {}).get('intent', {}).get('displayName'),
+                query_text,
+                req.get('queryResult', {}).get('parameters'),
+                [c.get('name') for c in req.get('queryResult', {}).get('outputContexts', [])],
+            )
+            # --- END TEMP DEBUG ---
+
             # Context-based Intent Interception (Component 4)
             is_cancel_or_nurse = False
             if isinstance(query_text, str):

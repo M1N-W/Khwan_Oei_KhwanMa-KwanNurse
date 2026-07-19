@@ -235,10 +235,12 @@ def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
 
     generation_config = {
         "maxOutputTokens": max_tokens,
+        "max_output_tokens": max_tokens,
         "temperature": 0.2,
     }
     if want_json:
         generation_config["responseMimeType"] = "application/json"
+        generation_config["response_mime_type"] = "application/json"
 
     payload = {
         "contents": [{"role": "user", "parts": parts}],
@@ -404,8 +406,10 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "maxOutputTokens": max_tokens,
+            "max_output_tokens": max_tokens,
             "temperature": 0.2,
             "responseMimeType": "application/json",
+            "response_mime_type": "application/json",
         },
     }
 
@@ -542,6 +546,7 @@ def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "maxOutputTokens": max_tokens,
+            "max_output_tokens": max_tokens,
             "temperature": 0.0,  # transcription should be deterministic
         },
     }

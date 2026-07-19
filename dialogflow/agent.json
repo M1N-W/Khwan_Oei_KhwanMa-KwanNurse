@@ -11,7 +11,9 @@
   "webhook": {
     "url": "https://khwan-oei-khwanma.onrender.com/webhook",
     "username": "",
-    "headers": {},
+    "headers": {
+      "Authorization": "Bearer M5g9PT3YuB8ciHvvFIyembd9pcB0gTIAq2t7bmey160"
+    },
     "available": true,
     "useForDomains": false,
     "cloudFunctionsEnabled": false,
