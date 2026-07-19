@@ -243,12 +243,13 @@ def register_routes(app):
             query_text = req.get('queryResult', {}).get('queryText', '')
 
             # --- TEMP DEBUG (remove after diagnosing RequestAppointment loop) ---
+            output_contexts = req.get('queryResult', {}).get('outputContexts') or []
             logger.info(
                 "RAW_INTENT_DEBUG: matched=%s query=%r params=%s active_contexts=%s",
                 req.get('queryResult', {}).get('intent', {}).get('displayName'),
                 query_text,
                 req.get('queryResult', {}).get('parameters'),
-                [c.get('name') for c in req.get('queryResult', {}).get('outputContexts', [])],
+                [c.get('name') for c in output_contexts if isinstance(c, dict)],
             )
             # --- END TEMP DEBUG ---
 
