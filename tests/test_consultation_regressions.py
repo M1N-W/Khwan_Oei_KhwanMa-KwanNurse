@@ -37,10 +37,15 @@ class ConsultationRoutingTests(unittest.TestCase):
 
         app = create_app()
         client = app.test_client()
-        with patch("routes.webhook.handler._dispatch_intent") as dispatch:
-            dispatch.return_value = (app.response_class(
-                '{"fulfillmentText":"กรุณาระบุชื่อ"}', mimetype="application/json"
-            ), 200)
+        with patch("services.dialogflow_bridge.detect_intent") as detect, \
+             patch("services.notification.reply_line_message") as reply:
+            detect.return_value = {
+                "queryResult": {
+                    "intent": {"displayName": "PatientIdentity"},
+                    "fulfillmentText": "กรุณาระบุชื่อ",
+                    "fulfillmentMessages": [],
+                }
+            }
             response = client.post("/line/webhook", json={"events": [{
                 "type": "message",
                 "replyToken": "reply-1",
@@ -49,7 +54,8 @@ class ConsultationRoutingTests(unittest.TestCase):
             }]})
 
         self.assertEqual(response.status_code, 200)
-        dispatch.assert_called_once_with("PatientIdentity", "U1", {}, "ลงทะเบียน")
+        detect.assert_called_once_with("U1", "ลงทะเบียน")
+        reply.assert_called_once_with("reply-1", "กรุณาระบุชื่อ")
     def test_all_five_category_numbers_are_parseable(self):
         from services.teleconsult import parse_category_choice
 
@@ -170,6 +176,69 @@ class AppointmentStateTests(unittest.TestCase):
         self.assertEqual(context_params["preferred_time"], "14:30")
         self.assertNotIn("reason", context_params)
 
+    def test_bare_morning_choice_sets_morning_time(self):
+        from app import create_app
+        from routes.webhook.handlers.symptoms import handle_request_appointment
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "เช้า",
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {
+                        "apt_day": "26",
+                        "apt_month": "11",
+                        "apt_year": "2026",
+                    },
+                }],
+            },
+        }
+        with app.test_request_context("/webhook", json=request_payload):
+            response, status = handle_request_appointment("U1", {})
+
+        payload = response.get_json()
+        self.assertEqual(status, 200)
+        self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
+        self.assertEqual(payload["outputContexts"][0]["parameters"]["preferred_time"], "09:00")
+
+    def test_past_date_response_clears_date_slots_for_restart(self):
+        from app import create_app
+        from routes.webhook.handlers.symptoms import handle_request_appointment
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "เหตุผลเดิม",
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {
+                        "apt_day": "1",
+                        "apt_month": "1",
+                        "apt_year": "2026",
+                        "preferred_time": "09:00",
+                        "reason": "เหตุผลเดิม",
+                    },
+                }],
+            },
+        }
+        with app.test_request_context("/webhook", json=request_payload):
+            response, status = handle_request_appointment("U1", {})
+
+        payload = response.get_json()
+        context_params = payload["outputContexts"][0]["parameters"]
+        self.assertEqual(status, 200)
+        self.assertIn("วันที่ที่เลือกเป็นอดีต", payload["fulfillmentText"])
+        self.assertNotIn("apt_day", context_params)
+        self.assertNotIn("apt_month", context_params)
+        self.assertNotIn("apt_year", context_params)
+
     def test_consultation_digit_wins_over_stale_appointment_context(self):
         from app import create_app
 
@@ -202,6 +271,33 @@ class AppointmentStateTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         dispatch.assert_called_once_with("AfterHoursChoice", "U1", {}, "2")
+
+    def test_top_level_symptom_command_escapes_appointment_context(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "รายงานอาการ",
+                "intent": {"displayName": "ReportSymptoms"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {"apt_day": "1"},
+                }],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "ระดับความปวด"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("ReportSymptoms", "U1", {}, "รายงานอาการ")
+        self.assertEqual(response.get_json()["outputContexts"][-1]["lifespanCount"], 0)
 
 
 class AlertFormattingTests(unittest.TestCase):

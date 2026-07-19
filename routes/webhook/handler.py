@@ -4,6 +4,7 @@ Webhook routing and entry point (KWN-09).
 Maps incoming HTTP webhook requests and dispatches Dialogflow intents to handlers.
 """
 import os
+import json
 from datetime import datetime
 from flask import request, jsonify, Response
 from config import get_logger, LOCAL_TZ, DEBUG
@@ -102,23 +103,48 @@ def _handle_line_text_event(event: dict) -> None:
         )
         return
 
-    # Direct LINE mode has no Dialogflow session/context. Registration is
-    # therefore routed by the persisted profile state instead of intent ML.
-    registration_command = normalized in {"ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"}
-    if registration_command:
-        result = _dispatch_intent("PatientIdentity", user_id, {}, text)
-        _reply_line_from_dialogflow_result(reply_token, result)
-        return
-
     try:
-        from database.patient_profile import read_patient_profile_result
-        from services.patient_profile import registration_missing_fields
-        profile_result = read_patient_profile_result(user_id)
-        if profile_result.available and profile_result.profile and registration_missing_fields(profile_result.profile):
-            result = _dispatch_intent("PatientIdentity", user_id, {}, text)
-            _reply_line_from_dialogflow_result(reply_token, result)
+        from services.dialogflow_bridge import detect_intent
+        result = detect_intent(user_id, text)
+        _reply_line_from_bridge_result(reply_token, user_id, result)
     except Exception:
-        logger.exception("Direct LINE text routing failed user=%s", scrub_user_id(user_id))
+        logger.exception("Direct LINE text bridge failed user=%s", scrub_user_id(user_id))
+        from services.notification import reply_line_message
+        reply_line_message(reply_token, "⚠️ ขออภัยค่ะ ระบบสนทนาขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งค่ะ")
+
+
+def _reply_line_from_bridge_result(reply_token: str, user_id: str, result: dict) -> None:
+    """Send Dialogflow detect-intent output through the LINE Messaging API."""
+    query_result = (result or {}).get("queryResult") or {}
+    intent_name = ((query_result.get("intent") or {}).get("displayName") or "")
+
+    # Direct LINE mode can send Flex safely; use it for the completed profile
+    # card while the Dialogflow LINE integration remains text-only for Flex.
+    if intent_name in {"PatientIdentity", "PatientIdentity_Input", "PatientIdentity_Fallback"}:
+        try:
+            from database.patient_profile import read_patient_profile_result
+            from services.patient_profile import build_profile_flex_summary, is_registration_complete
+            profile_result = read_patient_profile_result(user_id)
+            if profile_result.available and is_registration_complete(profile_result.profile):
+                from services.notification import reply_line_message_objects
+                reply_line_message_objects(reply_token, [build_profile_flex_summary(profile_result.profile)])
+                return
+        except Exception:
+            logger.exception("Failed to build direct LINE profile card user=%s", scrub_user_id(user_id))
+
+    line_messages = []
+    for item in query_result.get("fulfillmentMessages") or []:
+        if item.get("platform") != "LINE":
+            continue
+        line_payload = (item.get("payload") or {}).get("line")
+        if line_payload:
+            line_messages.append(line_payload)
+
+    from services.notification import reply_line_message, reply_line_message_objects
+    if line_messages:
+        reply_line_message_objects(reply_token, line_messages)
+        return
+    reply_line_message(reply_token, query_result.get("fulfillmentText") or "ขออภัยค่ะ กรุณาลองใหม่อีกครั้ง")
 
 
 def _reply_line_from_dialogflow_result(reply_token: str, result) -> None:
@@ -160,6 +186,43 @@ def _extract_context_parameters(req: dict, context_name: str) -> dict:
         if context_name in name:
             return ctx.get('parameters', {}) or {}
     return {}
+
+
+def _clear_context_from_response(response, session: str | None, context_name: str):
+    """Append a Dialogflow context clear operation without changing handler output."""
+    if not session or not response:
+        return response
+    if isinstance(response, tuple) and isinstance(response[0], dict):
+        payload = dict(response[0])
+        output_contexts = list(payload.get("outputContexts") or [])
+        output_contexts.append({
+            "name": f"{session}/contexts/{context_name}",
+            "lifespanCount": 0,
+        })
+        payload["outputContexts"] = output_contexts
+        return (payload, *response[1:])
+    if isinstance(response, dict):
+        payload = dict(response)
+        output_contexts = list(payload.get("outputContexts") or [])
+        output_contexts.append({
+            "name": f"{session}/contexts/{context_name}",
+            "lifespanCount": 0,
+        })
+        payload["outputContexts"] = output_contexts
+        return payload
+    response_obj = response[0] if isinstance(response, tuple) else response
+    payload = response_obj.get_json(silent=True) if hasattr(response_obj, "get_json") else None
+    if not isinstance(payload, dict):
+        return response
+    output_contexts = list(payload.get("outputContexts") or [])
+    output_contexts.append({
+        "name": f"{session}/contexts/{context_name}",
+        "lifespanCount": 0,
+    })
+    payload["outputContexts"] = output_contexts
+    response_obj.set_data(json.dumps(payload, ensure_ascii=False))
+    response_obj.content_type = "application/json"
+    return response
 
 
 def register_routes(app):
@@ -317,6 +380,15 @@ def register_routes(app):
                 user_id = req.get('session', 'unknown').split('/')[-1]
                 
             query_text = req.get('queryResult', {}).get('queryText', '')
+            normalized_query = query_text.strip().lower() if isinstance(query_text, str) else ""
+            top_level_commands = {
+                "ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร",
+                "รายงานอาการ", "แจ้งอาการ", "ประเมินความเสี่ยง", "ประเมินความเสี่ยงส่วนบุคคล",
+                "นัดหมายพยาบาล", "นัดหมาย", "ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ",
+                "ติดตามหลังให้ยา", "ติดตามอาการ", "ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล",
+                "ส่งรูปแผล", "ส่งภาพแผล", "ถ่ายรูปแผล",
+            }
+            is_top_level_command = normalized_query in top_level_commands
 
             # Safe routing diagnostics: log intent and parameter names, never values.
             output_contexts = req.get('queryResult', {}).get('outputContexts') or []
@@ -343,7 +415,11 @@ def register_routes(app):
                     query_text.strip() in {"1", "2", "3", "4", "5"}
                     and _has_active_context(req, "teleconsult_category_context")
                 )
-                if _has_active_context(req, 'requestappointment_dialog_context') and not is_teleconsult_digit:
+                if (
+                    _has_active_context(req, 'requestappointment_dialog_context')
+                    and not is_teleconsult_digit
+                    and not is_top_level_command
+                ):
                     if intent != 'RequestAppointment':
                         ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
                         new_params = dict(ctx_params)
@@ -511,7 +587,18 @@ def register_routes(app):
         incr(f"webhook.intent.{intent_for_metric}")
 
         try:
-            return _dispatch_intent(intent, user_id, params, query_text)
+            response = _dispatch_intent(intent, user_id, params, query_text)
+            if (
+                is_top_level_command
+                and normalized_query not in {"นัดหมายพยาบาล", "นัดหมาย"}
+                and _has_active_context(req, "requestappointment_dialog_context")
+            ):
+                response = _clear_context_from_response(
+                    response,
+                    req.get("session"),
+                    "requestappointment_dialog_context",
+                )
+            return response
         except Exception:
             incr(f"webhook.error.{intent_for_metric}")
             logger.exception(

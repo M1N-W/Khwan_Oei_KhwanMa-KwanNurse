@@ -8,6 +8,11 @@ This checklist is safe to use in Render without exposing credentials.
 - `WORKSHEET_LINK` and either `GSPREAD_CREDENTIALS` (raw service-account JSON) or `GOOGLE_CREDS_B64` (Base64 of the same JSON).
 - `LLM_PROVIDER=gemini` and at least one of `GEMINI_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, or `GEMINI_API_KEY_3` to enable Gemini. `LLM_PROVIDER=none` intentionally disables Gemini and uses rule-based fallbacks.
 - `DIALOGFLOW_WEBHOOK_TOKEN` when Dialogflow calls `/webhook`.
+- `DIALOGFLOW_PROJECT_ID` (or a `project_id` in the Google service-account JSON),
+  `DIALOGFLOW_LANGUAGE_CODE=th`, and optionally
+  `DIALOGFLOW_BRIDGE_TIMEOUT_SECONDS=8` for the direct LINE text bridge.
+- The Google service account must have permission to call Dialogflow ES
+  `detectIntent` and the Dialogflow API must be enabled for that project.
 
 Do not commit the service-account JSON or API keys. Add them only in Render Environment settings.
 
@@ -23,5 +28,18 @@ An empty worksheet with headers is not evidence that its feature is broken: seve
 
 ## Routing contract
 
-- Configure Dialogflow to call `/webhook` for text intents, or use `/line/webhook` for direct LINE mode.
-- Direct LINE mode now handles text registration and the exact wound-photo commands. Image events continue through `handle_line_image_event`.
+- Set the LINE Developers webhook URL to
+  `https://<render-service>.onrender.com/line/webhook` and keep webhook enabled.
+- `/line/webhook` verifies the LINE signature, forwards every text event to
+  Dialogflow `detectIntent`, and returns Dialogflow text/LINE payloads through
+  the LINE Messaging API. This is the bridge path that can send the completed
+  registration profile as a Flex card.
+- Image events do not go through Dialogflow: the bridge downloads the LINE
+  image content and passes it to Gemini through `handle_line_image_event`.
+- Keep Dialogflow fulfillment pointed at
+  `https://<render-service>.onrender.com/webhook`, with the
+  `Authorization: Bearer <DIALOGFLOW_WEBHOOK_TOKEN>` header. Do not configure
+  Dialogflow's built-in LINE integration as a second LINE webhook, or events
+  can be delivered to the old text-only path.
+- The direct bridge intentionally keeps Dialogflow as the intent/entity
+  classifier while the runtime webhook remains the state-machine authority.

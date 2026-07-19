@@ -236,6 +236,10 @@ def handle_request_appointment(user_id, params):
                 ctx_params = ctx.get('parameters', {}) or {}
                 break
 
+        if str(query_text).strip().lower() in {"นัดหมายพยาบาล", "นัดหมาย"}:
+            # A fresh appointment command must not inherit a previous abandoned flow.
+            ctx_params = {}
+
     # --- Smart merge (Bug #3 fix) ---
     # Context params represent what the user has ALREADY provided slot-by-slot.
     # Fresh Dialogflow params may include a full @sys.date even when the user only
@@ -390,6 +394,7 @@ def handle_request_appointment(user_id, params):
         for k in ("apt_day", "apt_month", "apt_year"):
             merged_params.pop(k, None)
         ask = "⚠️ วันที่ระบุไม่ถูกต้องตามปฏิทิน กรุณาระบุ วันที่ นัดหมายใหม่อีกครั้งค่ะ (ตัวเลข 1-31)"
+        output_contexts = appointment_context()
         return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
 
     # 4. Time Collection
@@ -416,6 +421,8 @@ def handle_request_appointment(user_id, params):
         else:
             # Check if user typed or sent time parameter directly
             parsed_t = parse_thai_colloquial_time(query_text)
+            if not parsed_t:
+                parsed_t = resolve_time_from_params(query_text, query_text)
             if not parsed_t:
                 parsed_t = resolve_time_from_params(params.get('time'), params.get('timeofday'))
             if parsed_t:
@@ -460,6 +467,7 @@ def handle_request_appointment(user_id, params):
         for k in ("apt_day", "apt_month", "apt_year"):
             merged_params.pop(k, None)
         ask = "⚠️ วันที่ที่เลือกเป็นอดีตแล้ว กรุณาเลือกวันที่ในอนาคตค่ะ (เริ่มที่การระบุวันที่ 1-31)"
+        output_contexts = appointment_context()
         return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
 
     # Final Execution
