@@ -66,6 +66,13 @@ ENABLE_RICH_MESSAGES: bool = (
     os.environ.get("ENABLE_RICH_MESSAGES", "false").lower()
     in ("1", "true", "yes", "on")
 )
+# Dialogflow remains the authoritative text webhook in the current production
+# topology.  Raw LINE events are still accepted for images/audio, while text
+# bridging is an explicit migration switch to prevent duplicate replies.
+LINE_TEXT_BRIDGE_ENABLED: bool = (
+    os.environ.get("LINE_TEXT_BRIDGE_ENABLED", "false").lower()
+    in ("1", "true", "yes", "on")
+)
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
 
 # LINE Messaging API Configuration

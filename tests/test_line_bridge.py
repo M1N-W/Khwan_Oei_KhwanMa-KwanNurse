@@ -24,7 +24,7 @@ class DirectLineBridgeTests(unittest.TestCase):
                 "fulfillmentMessages": [],
             }
         }
-        with patch(
+        with patch("config.LINE_TEXT_BRIDGE_ENABLED", True), patch(
             "services.dialogflow_bridge.detect_intent", return_value=detect_result
         ) as detect, patch(
             "services.notification.reply_line_message"
@@ -66,7 +66,8 @@ class DirectLineBridgeTests(unittest.TestCase):
             "consent_version": "v1",
             "consent_at": "2026-07-19 16:00:00",
         }
-        with patch("services.dialogflow_bridge.detect_intent", return_value=detect_result), \
+        with patch("config.LINE_TEXT_BRIDGE_ENABLED", True), \
+             patch("services.dialogflow_bridge.detect_intent", return_value=detect_result), \
              patch("database.patient_profile.read_patient_profile_result") as read, \
              patch("services.notification.reply_line_message_objects") as reply_objects:
             from database.patient_profile import PatientProfileReadResult

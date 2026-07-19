@@ -812,7 +812,13 @@ def register_routes(app):
                     from services.voice import handle_voice_event
                     handle_voice_event(event)
                 elif msg_type == "text":
-                    _handle_line_text_event(event)
+                    # Dialogflow is the production owner of text turns.  Processing
+                    # the same LINE event here would consume the reply token twice.
+                    from config import LINE_TEXT_BRIDGE_ENABLED
+                    if LINE_TEXT_BRIDGE_ENABLED:
+                        _handle_line_text_event(event)
+                    else:
+                        logger.debug("Ignoring raw LINE text; Dialogflow owns text routing")
             except Exception:
                 logger.exception("Error processing LINE event: %s", event.get("type"))
                 reply_token = event.get("replyToken")

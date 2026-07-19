@@ -119,6 +119,10 @@ class LlmProviderTests(unittest.TestCase):
         payload = kwargs["json"]
         self.assertIn("generationConfig", payload)
         self.assertNotIn("generation_config", payload)
+        generation = payload["generationConfig"]
+        self.assertEqual(generation["responseMimeType"], "application/json")
+        self.assertEqual(generation["thinkingConfig"]["thinkingLevel"], "minimal")
+        self.assertEqual(generation["responseSchema"]["type"], "OBJECT")
         image_part = payload["contents"][0]["parts"][-1]
         self.assertIn("inline_data", image_part)
         self.assertEqual(image_part["inline_data"]["mime_type"], "image/jpeg")

@@ -50,7 +50,8 @@ class ConsultationRoutingTests(unittest.TestCase):
 
         app = create_app()
         client = app.test_client()
-        with patch("services.dialogflow_bridge.detect_intent") as detect, \
+        with patch("config.LINE_TEXT_BRIDGE_ENABLED", True), \
+             patch("services.dialogflow_bridge.detect_intent") as detect, \
              patch("services.notification.reply_line_message") as reply:
             detect.return_value = {
                 "queryResult": {

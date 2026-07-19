@@ -1092,53 +1092,21 @@ def build_profile_flex_summary(profile: dict) -> dict:
             "contents": [
                 {
                     "type": "button",
-                    "style": "secondary",
+                    "style": "primary",
                     "height": "sm",
                     "action": {
                         "type": "message",
-                        "label": "✏️ แก้ไขชื่อ-นามสกุล",
-                        "text": "แก้ไขชื่อ"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "action": {
-                        "type": "message",
-                        "label": "✏️ แก้ไขเลข HN",
-                        "text": "แก้ไข HN"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "action": {
-                        "type": "message",
-                        "label": "✏️ แก้ไขเลขบัตรประชาชน",
-                        "text": "แก้ไขเลขบัตรประชาชน"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "action": {
-                        "type": "message",
-                        "label": "✏️ แก้ไขเบอร์โทรศัพท์",
-                        "text": "แก้ไขเบอร์โทร"
-                    }
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "height": "sm",
-                    "action": {
-                        "type": "message",
-                        "label": "✏️ แก้ไขข้อมูลทั้งหมด",
+                        "label": "✏️ แก้ไขข้อมูล",
                         "text": "แก้ไขข้อมูล"
                     }
+                },
+                {
+                    "type": "text",
+                    "text": "เลือกแก้ไขเฉพาะรายการได้ในขั้นตอนถัดไป",
+                    "size": "xs",
+                    "color": "#6B7280",
+                    "align": "center",
+                    "wrap": True,
                 }
             ]
         }

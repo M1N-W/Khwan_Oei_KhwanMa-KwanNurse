@@ -87,6 +87,11 @@ class TestRegistrationUXHelpers(unittest.TestCase):
         # Name is shown
         self.assertTrue(any("สมชาย ใจดี" in text for text in body_text_list))
 
+        footer = contents["footer"]["contents"]
+        buttons = [item for item in footer if item.get("type") == "button"]
+        self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0]["action"]["text"], "แก้ไขข้อมูล")
+
 
 class TestWebhookIntegrationUX(unittest.TestCase):
     """Test webhook integrations with Flask Test Client."""

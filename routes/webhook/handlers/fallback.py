@@ -29,7 +29,7 @@ from services.teleconsult import (
 logger = get_logger(__name__)
 
 
-def _teleconsult_category_context(lifespan_count=5):
+def _teleconsult_category_context(lifespan_count=5, parameters=None):
     """Return the short-lived context used to route bare category digits."""
     if not has_request_context():
         return None
@@ -37,10 +37,13 @@ def _teleconsult_category_context(lifespan_count=5):
     session = payload.get("session")
     if not session:
         return None
-    return [{
+    context = {
         "name": f"{session}/contexts/teleconsult_category_context",
         "lifespanCount": lifespan_count,
-    }]
+    }
+    if parameters:
+        context["parameters"] = dict(parameters)
+    return [context]
 
 
 def _clear_teleconsult_category_context():
@@ -250,10 +253,6 @@ def handle_contact_nurse(user_id, params, query_text):
             if not is_office_hours():
                 now = datetime.now(tz=LOCAL_TZ)
                 current_time = now.strftime("%H:%M")
-                after_hours_replies = [
-                    quick_reply_item("⏳ รอเวลาทำการ", "รอเวลาทำการ"),
-                    quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
-                ]
                 menu = (
                     f"⏰ ขณะนี้นอกเวลาทำการ ({current_time} น.)\n"
                     f"เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
@@ -262,7 +261,8 @@ def handle_contact_nurse(user_id, params, query_text):
                 )
                 return jsonify(_make_dialogflow_response(
                     menu,
-                    quick_replies=after_hours_replies,
+                    # Keep the visible 1-5 menu and the tappable controls aligned.
+                    quick_replies=categories_quick_replies,
                     output_contexts=_teleconsult_category_context(),
                 )), 200
 
@@ -311,6 +311,36 @@ def handle_unknown_intent(intent):
 
 def handle_after_hours_choice(user_id, query_text):
     """Handle AfterHoursChoice intent"""
+    choice = str(query_text or "").strip()
+    selected_category = None
+    if has_request_context():
+        contexts = (request.get_json(silent=True, force=True) or {}).get("queryResult", {}).get("outputContexts", [])
+        for context in contexts:
+            if "teleconsult_category_context" in context.get("name", ""):
+                selected_category = (context.get("parameters") or {}).get("selected_category")
+                break
+
+    # Outside office hours, a category is not yet a request.  Ask for explicit
+    # urgency confirmation before creating a durable teleconsult session.
+    if not is_office_hours() and not selected_category and choice in {"2", "3", "4", "5"}:
+        category = parse_category_choice(choice)
+        return jsonify(_make_dialogflow_response(
+            "เลือกหัวข้อแล้วค่ะ ต้องการให้ทีมพยาบาลดำเนินการแบบใดคะ?",
+            quick_replies=[
+                quick_reply_item("📝 รอเวลาทำการ", "รอเวลาทำการ"),
+                quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "แจ้งเรื่องฉุกเฉิน"),
+            ],
+            output_contexts=_teleconsult_category_context(parameters={"selected_category": category}),
+        )), 200
+    if not is_office_hours() and selected_category and choice in {"รอเวลาทำการ", "แจ้งเรื่องฉุกเฉิน"}:
+        started = start_teleconsult(user_id, selected_category, "")
+        if started.get("awaiting_choice"):
+            result = teleconsult_after_hours_choice(
+                user_id, "1" if choice == "แจ้งเรื่องฉุกเฉิน" else "2"
+            )
+            return jsonify(_make_dialogflow_response(
+                result["message"], output_contexts=_clear_teleconsult_category_context()
+            )), 200
     result = teleconsult_after_hours_choice(user_id, query_text)
     if result.get('awaiting_choice'):
         after_hours_replies = [

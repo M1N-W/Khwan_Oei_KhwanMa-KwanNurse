@@ -390,8 +390,20 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "maxOutputTokens": max_tokens,
-            "temperature": 0.2,
-            "response_mime_type": "application/json",
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "severity": {"type": "STRING", "enum": ["low", "medium", "high"]},
+                    "observations": {"type": "ARRAY", "items": {"type": "STRING"}, "maxItems": 5},
+                    "advice": {"type": "STRING"},
+                    "confidence": {"type": "NUMBER"},
+                },
+                "required": ["severity", "observations", "advice", "confidence"],
+            },
+            # Wound triage is a short extraction task.  Reserve tokens for the
+            # JSON response instead of allowing default medium reasoning to use them.
+            "thinkingConfig": {"thinkingLevel": "minimal"},
         },
     }
 
@@ -447,9 +459,7 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     # `user_text` go through scrub_pii like the text path.
     scrubbed_system = scrub_pii(system) if system else None
     scrubbed_user = scrub_pii(user_text) if user_text else ""
-    tokens = max_tokens or LLM_MAX_OUTPUT_TOKENS
-    if tokens < 300:
-        tokens = 500
+    tokens = max(max_tokens or LLM_MAX_OUTPUT_TOKENS, 1024)
     # Vision has its own safe model setting; do not inherit text-intent
     # routing or preview aliases that may not support multimodal JSON.
     model_name = LLM_VISION_MODEL or _resolve_model()
