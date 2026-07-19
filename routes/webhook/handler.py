@@ -326,6 +326,7 @@ def register_routes(app):
                 "missing_items": config_status["missing"],
                 "can_notify_line": config_status["can_notify"],
                 "can_persist_sheets": config_status["can_persist"],
+                "conversation_router_ready": config_status.get("conversation_router_ready", False),
                 "llm_provider": os.environ.get("LLM_PROVIDER", "none"),
                 "llm_enabled": bool(is_enabled()),
                 "llm_model": _resolve_model() or None,
