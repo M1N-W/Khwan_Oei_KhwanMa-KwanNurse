@@ -12,7 +12,7 @@
         {
           "id": "9449d439-e825-4716-8a44-8658e5ca8b7b",
           "name": "pain_score",
-          "required": true,
+          "required": false,
           "dataType": "@sys.number",
           "value": "$pain_score",
           "defaultValue": "",
@@ -31,7 +31,7 @@
         {
           "id": "4b2c986d-fe50-47a2-9a64-23141b05e1ba",
           "name": "wound_status",
-          "required": true,
+          "required": false,
           "dataType": "@WoundStatus",
           "value": "$wound_status",
           "defaultValue": "",
@@ -50,7 +50,7 @@
         {
           "id": "e876bdcf-a14a-455a-9432-1330249feb95",
           "name": "fever_check",
-          "required": true,
+          "required": false,
           "dataType": "@sys.any",
           "value": "$fever_check",
           "defaultValue": "",
@@ -69,7 +69,7 @@
         {
           "id": "444b3e6a-d36d-475f-83be-29e67fff66e3",
           "name": "mobility_status",
-          "required": true,
+          "required": false,
           "dataType": "@Mobility",
           "value": "$mobility_status",
           "defaultValue": "",
@@ -119,7 +119,7 @@
   ],
   "priority": 500000,
   "webhookUsed": true,
-  "webhookForSlotFilling": true,
+  "webhookForSlotFilling": false,
   "fallbackIntent": false,
   "events": [],
   "conditionalResponses": [],

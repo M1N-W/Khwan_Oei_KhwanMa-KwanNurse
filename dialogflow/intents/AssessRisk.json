@@ -12,7 +12,7 @@
         {
           "id": "d7560e93-2750-481a-9f22-da56d946445c",
           "name": "age",
-          "required": true,
+          "required": false,
           "dataType": "@sys.number",
           "value": "$age",
           "defaultValue": "",
@@ -31,7 +31,7 @@
         {
           "id": "bd36a0f0-6f14-4c2d-b1c5-fdfb74aa6290",
           "name": "weight",
-          "required": true,
+          "required": false,
           "dataType": "@sys.number",
           "value": "$weight",
           "defaultValue": "",
@@ -50,7 +50,7 @@
         {
           "id": "fe0a29e7-a648-42ed-a342-5f6911b48cb4",
           "name": "height",
-          "required": true,
+          "required": false,
           "dataType": "@sys.number",
           "value": "$height",
           "defaultValue": "",
@@ -69,7 +69,7 @@
         {
           "id": "59978876-0660-4c26-8846-05035673d639",
           "name": "diseases",
-          "required": true,
+          "required": false,
           "dataType": "@Disease",
           "value": "$diseases",
           "defaultValue": "",
@@ -100,7 +100,7 @@
   ],
   "priority": 500000,
   "webhookUsed": true,
-  "webhookForSlotFilling": true,
+  "webhookForSlotFilling": false,
   "fallbackIntent": false,
   "events": [],
   "conditionalResponses": [],

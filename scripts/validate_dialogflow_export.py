@@ -12,6 +12,9 @@ DISPATCHED = {
     "GetKnowledge", "GetFollowUpSummary", "ContactNurse", "AfterHoursChoice",
     "CancelConsultation", "GetGroupID", "FreeTextSymptom", "RecommendKnowledge",
 }
+RUNTIME_SLOT_FILLING = {
+    "ReportSymptoms", "AssessRisk", "AssessPersonalRisk", "RequestAppointment",
+}
 
 
 def load_json(path: Path):
@@ -32,6 +35,16 @@ def main() -> int:
         intent = load_json(path)
         if not intent.get("webhookUsed"):
             errors.append(f"webhook disabled: {name}")
+        if name in RUNTIME_SLOT_FILLING:
+            if intent.get("webhookForSlotFilling"):
+                errors.append(f"Dialogflow slot filling must be disabled: {name}")
+            for response in intent.get("responses", []):
+                for parameter in response.get("parameters", []):
+                    if parameter.get("required"):
+                        errors.append(
+                            f"runtime-owned parameter must not be required: "
+                            f"{name}.{parameter.get('name')}"
+                        )
 
     fallback = load_json(intent_dir / "Default Fallback Intent.json")
     if not fallback.get("fallbackIntent") or not fallback.get("webhookUsed"):
