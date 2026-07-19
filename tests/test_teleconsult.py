@@ -103,7 +103,7 @@ class TeleconsultServiceTests(unittest.TestCase):
         self.assertIn('ถามเรื่องยา', menu)
         self.assertIn('แผลผ่าตัด', menu)
         self.assertIn('นัดหมาย/เอกสาร', menu)
-        self.assertIn('อื่นๆ', menu)
+        self.assertIn('ติดต่อพยาบาล', menu)
 
     def test_category_parsing_supports_number_and_text(self):
         self.assertEqual(parse_category_choice('1'), 'emergency')

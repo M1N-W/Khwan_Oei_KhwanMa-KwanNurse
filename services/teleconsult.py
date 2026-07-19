@@ -60,14 +60,13 @@ def get_category_menu():
         str: Formatted menu message
     """
     menu_items = []
-    
     for i, (key, info) in enumerate(ISSUE_CATEGORIES.items(), 1):
-        icon = info['icon']
-        name = info['name_th']
+        icon = "👩🏻‍⚕️" if key == "other" else info['icon']
+        name = "ติดต่อพยาบาล" if key == "other" else info['name_th']
         menu_items.append(f"{i}. {icon} {name}")
-    
+
     menu = "📋 เลือกเรื่องที่ต้องการปรึกษา\n\n" + "\n".join(menu_items)
-    menu += "\n\nพิมพ์หมายเลข (1-5) เพื่อเลือก"
+    menu += "\n\nเลือกหมายเลข (1-5) ตามที่ปรากฏได้เลยค่ะ"
     
     return menu
 
@@ -77,8 +76,18 @@ _CATEGORY_TH = {
     'medication': 'ปรึกษาเรื่องยา',
     'wound': 'แผลผ่าตัด',
     'appointment': 'นัดหมาย/เอกสาร',
-    'other': 'อื่นๆ'
+    'other': 'ติดต่อพยาบาล'
 }
+
+
+def get_nurse_contact_message():
+    """Return the LINE profile link for direct nurse contact."""
+    from config import NURSE_CONTACT_LINK
+    return (
+        "👩🏻‍⚕️ ติดต่อพยาบาลขวัญเรือนโดยตรงค่ะ\n\n"
+        "LINE ID: 0899181839\n"
+        f"กดลิงก์นี้เพื่อเปิดแชตพยาบาลได้เลยนะคะ\n{NURSE_CONTACT_LINK}"
+    )
 
 
 def parse_category_choice(choice_text):
@@ -115,6 +124,8 @@ def parse_category_choice(choice_text):
             if (key in choice_lower or 
                 info['name_th'] in s or
                 info['icon'] in s):
+                return key
+            if key == "other" and "ติดต่อพยาบาล" in choice_lower:
                 return key
         
         return None
@@ -163,6 +174,14 @@ def start_teleconsult(user_id, issue_type, description=""):
                 )
             }
         
+        # Category 5 is a direct contact action, not a queue request.
+        if issue_type == "other":
+            return {
+                'success': True,
+                'message': get_nurse_contact_message(),
+                'direct_contact': True,
+            }
+
         # Get category info
         category_info = ISSUE_CATEGORIES.get(issue_type, ISSUE_CATEGORIES['other'])
         priority = category_info['priority']
@@ -495,7 +514,7 @@ def handle_after_hours_choice(user_id, choice_text):
                     "2. 💊 ถามเรื่องยา\n"
                     "3. 🩹 แผลผ่าตัด\n"
                     "4. 📋 นัดหมาย/เอกสาร\n"
-                    "5. ❓ อื่นๆ"
+                    "5. 👩🏻‍⚕️ ติดต่อพยาบาล"
                 )
             }
 

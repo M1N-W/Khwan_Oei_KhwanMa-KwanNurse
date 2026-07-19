@@ -169,7 +169,7 @@ class AfterHoursChoiceRoutingTests(unittest.TestCase):
              patch.object(teleconsult, "parse_category_choice", return_value=None):
             result = teleconsult.handle_after_hours_choice("U-x", "99")
         self.assertIn("กรุณาเลือกหมายเลขจากเมนู", result["message"])
-        self.assertIn("5. ❓ อื่นๆ", result["message"])
+        self.assertIn("5. 👩🏻‍⚕️ ติดต่อพยาบาล", result["message"])
 
 
 # -----------------------------------------------------------------------------

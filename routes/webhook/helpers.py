@@ -45,6 +45,46 @@ _REGISTRATION_INTENTS = {
     "PatientIdentity_Fallback",
 }
 
+_PATIENT_CANCEL_GUIDANCE = (
+    "\n\nหากต้องการเปลี่ยนข้อมูลหรือเปลี่ยนรายการ พิมพ์คำว่า ‘ยกเลิก’ ได้เลยนะคะ "
+    "แล้วเริ่มฟีเจอร์นี้ใหม่อีกครั้งได้ค่ะ 💚"
+)
+
+
+def _append_patient_cancel_guidance(response, intent):
+    """Add a gentle, consistent cancellation/retry note to patient replies."""
+    if intent in {"CancelConsultation", "Unknown", "Default Fallback Intent"}:
+        return response
+
+    response_obj = response[0] if isinstance(response, tuple) else response
+    payload = None
+    if isinstance(response_obj, dict):
+        payload = dict(response_obj)
+    elif hasattr(response_obj, "get_json"):
+        payload = response_obj.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return response
+
+    text = payload.get("fulfillmentText")
+    if not isinstance(text, str) or not text.strip() or "พิมพ์คำว่า ‘ยกเลิก’" in text:
+        return response
+    text = text.rstrip() + _PATIENT_CANCEL_GUIDANCE
+    payload["fulfillmentText"] = text
+
+    # Keep the LINE custom payload in sync with fulfillmentText for direct bridge mode.
+    for message in payload.get("fulfillmentMessages") or []:
+        if message.get("platform") != "LINE":
+            continue
+        line_payload = (message.get("payload") or {}).get("line") or {}
+        if line_payload.get("type") == "text":
+            line_payload["text"] = text[:5000]
+
+    if isinstance(response_obj, dict):
+        return (payload, *response[1:]) if isinstance(response, tuple) else payload
+    response_obj.set_data(__import__("json").dumps(payload, ensure_ascii=False))
+    response_obj.content_type = "application/json"
+    return response
+
 
 def _mask_user_id_for_log(user_id):
     return scrub_user_id(user_id)

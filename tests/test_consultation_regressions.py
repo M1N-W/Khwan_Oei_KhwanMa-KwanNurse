@@ -15,6 +15,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class ConsultationRoutingTests(unittest.TestCase):
+    def test_patient_replies_include_cancel_and_retry_guidance(self):
+        from app import create_app
+        from routes.webhook.helpers import _append_patient_cancel_guidance
+
+        app = create_app()
+        response = app.response_class(
+            '{"fulfillmentText":"✅ บันทึกคำขอเรียบร้อยแล้วค่ะ"}',
+            mimetype="application/json",
+        )
+        updated = _append_patient_cancel_guidance((response, 200), "RequestAppointment")
+
+        self.assertIn("พิมพ์คำว่า ‘ยกเลิก’", updated[0].get_json()["fulfillmentText"])
+
     def test_wound_photo_command_is_not_routed_to_knowledge(self):
         from app import create_app
 
@@ -63,6 +76,7 @@ class ConsultationRoutingTests(unittest.TestCase):
             [parse_category_choice(str(number)) for number in range(1, 6)],
             ["emergency", "medication", "wound", "appointment", "other"],
         )
+        self.assertEqual(parse_category_choice("ติดต่อพยาบาล"), "other")
 
     def test_contact_nurse_in_hours_exposes_category_context(self):
         from app import create_app
@@ -78,7 +92,17 @@ class ConsultationRoutingTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(status, 200)
         self.assertEqual(payload["outputContexts"][0]["lifespanCount"], 5)
-        self.assertIn("5. ❓ อื่นๆ", payload["fulfillmentText"])
+        self.assertIn("5. 👩🏻‍⚕️ ติดต่อพยาบาล", payload["fulfillmentText"])
+
+    def test_category_five_returns_direct_nurse_contact(self):
+        from services.teleconsult import start_teleconsult
+
+        result = start_teleconsult("U1", "other")
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["direct_contact"])
+        self.assertIn("LINE ID: 0899181839", result["message"])
+        self.assertIn("line.me/ti/p/~0899181839", result["message"])
 
 
 class ConsultationCancellationTests(unittest.TestCase):

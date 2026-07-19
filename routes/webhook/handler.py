@@ -588,6 +588,8 @@ def register_routes(app):
 
         try:
             response = _dispatch_intent(intent, user_id, params, query_text)
+            from routes.webhook.helpers import _append_patient_cancel_guidance
+            response = _append_patient_cancel_guidance(response, intent)
             if (
                 is_top_level_command
                 and normalized_query not in {"นัดหมายพยาบาล", "นัดหมาย"}
