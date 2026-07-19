@@ -133,6 +133,76 @@ class AppointmentStateTests(unittest.TestCase):
         self.assertEqual(context_params["apt_month"], "9")
         self.assertIn("ปี พ.ศ.", payload["fulfillmentText"])
 
+    def test_time_turn_is_not_saved_as_appointment_reason(self):
+        from app import create_app
+        from routes.webhook.handlers.symptoms import handle_request_appointment
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "14:30",
+                "parameters": {
+                    "time": "14:30",
+                    "reason": "14:30",
+                },
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {
+                        "apt_day": "26",
+                        "apt_month": "11",
+                        "apt_year": "2026",
+                        "waiting_for_custom_time": "true",
+                    },
+                }],
+            },
+        }
+        with app.test_request_context("/webhook", json=request_payload):
+            response, status = handle_request_appointment(
+                "U1", request_payload["queryResult"]["parameters"]
+            )
+
+        payload = response.get_json()
+        self.assertEqual(status, 200)
+        self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
+        context_params = payload["outputContexts"][0]["parameters"]
+        self.assertEqual(context_params["preferred_time"], "14:30")
+        self.assertNotIn("reason", context_params)
+
+    def test_consultation_digit_wins_over_stale_appointment_context(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "2",
+                "intent": {"displayName": "Default Fallback Intent"},
+                "parameters": {},
+                "outputContexts": [
+                    {
+                        "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                        "lifespanCount": 5,
+                        "parameters": {"apt_day": "26"},
+                    },
+                    {
+                        "name": "projects/p/agent/sessions/U1/contexts/teleconsult_category_context",
+                        "lifespanCount": 5,
+                        "parameters": {},
+                    },
+                ],
+            },
+        }
+        with patch(
+            "routes.webhook.handler._dispatch_intent",
+            return_value=({"fulfillmentText": "ยา"}, 200),
+        ) as dispatch:
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("AfterHoursChoice", "U1", {}, "2")
+
 
 class AlertFormattingTests(unittest.TestCase):
     def test_symptom_alert_is_compact_and_does_not_leak_debug_fields(self):

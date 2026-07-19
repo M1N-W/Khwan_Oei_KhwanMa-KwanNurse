@@ -339,7 +339,11 @@ def register_routes(app):
                 )
 
             if not is_cancel_or_nurse:
-                if _has_active_context(req, 'requestappointment_dialog_context'):
+                is_teleconsult_digit = (
+                    query_text.strip() in {"1", "2", "3", "4", "5"}
+                    and _has_active_context(req, "teleconsult_category_context")
+                )
+                if _has_active_context(req, 'requestappointment_dialog_context') and not is_teleconsult_digit:
                     if intent != 'RequestAppointment':
                         ctx_params = _extract_context_parameters(req, 'requestappointment_dialog_context')
                         new_params = dict(ctx_params)

@@ -259,7 +259,8 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(flagged, 1)
             self.assertEqual(mock_push.call_count, 1)
             msg = mock_push.call_args.args[0]
-            self.assertIn("u_rising", msg)
+            self.assertNotIn("u_rising", msg)
+            self.assertIn("ยังไม่ลงทะเบียน", msg)
 
     def test_scan_empty_window_returns_zero(self):
         with patch("services.early_warning.get_recent_symptom_reports",

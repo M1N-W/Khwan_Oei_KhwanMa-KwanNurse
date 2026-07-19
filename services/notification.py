@@ -184,7 +184,7 @@ def send_line_push_objects(messages: list, target_id: str) -> bool:
 
 
 def _get_patient_prefix_label(user_id: str) -> str:
-    """Helper to return Name Surname (HN: xxx) or fallback to User ID if not registered."""
+    """Return a nurse-safe patient label without exposing a LINE user ID."""
     if not user_id:
         return "-"
     try:
@@ -206,7 +206,7 @@ def _get_patient_prefix_label(user_id: str) -> str:
                 return label
     except Exception:
         logger.exception("Failed to retrieve profile for prefix label user_id=%s", user_id)
-    return user_id
+    return "ไม่ระบุชื่อ (ยังไม่ลงทะเบียน)"
 
 
 def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level, risk_score):

@@ -3,6 +3,7 @@
 Intent handlers for symptom reports, risk assessment, appointments, and triage (KWN-09).
 """
 from datetime import datetime
+import re
 from flask import jsonify
 from config import get_logger, LOCAL_TZ, NURSE_GROUP_ID
 from utils import (
@@ -274,6 +275,14 @@ def handle_request_appointment(user_id, params):
             merged_params["apt_year"]  = str(pd.year)
 
     from utils.parsers import parse_thai_colloquial_time, resolve_time_from_params
+
+    def looks_like_time(value):
+        if value in (None, ""):
+            return False
+        text = str(value).strip()
+        return bool(parse_thai_colloquial_time(text)) or bool(
+            re.fullmatch(r"\d{1,2}\s*[:.]\s*\d{2}", text)
+        )
     pt = resolve_time_from_params(preferred_time_raw, timeofday_raw)
     if pt:
         merged_params["preferred_time"] = pt
@@ -284,8 +293,12 @@ def handle_request_appointment(user_id, params):
                 if k in reason_raw and isinstance(reason_raw[k], str):
                     reason_raw = reason_raw[k]
                     break
-        if isinstance(reason_raw, str):
+        if isinstance(reason_raw, str) and not looks_like_time(reason_raw):
             merged_params["reason"] = reason_raw
+        elif looks_like_time(reason_raw):
+            # Dialogflow can copy the latest time entity into the reason slot.
+            # Remove that inferred value before the state machine checks reason.
+            merged_params.pop("reason", None)
 
     # 1. Day Collection
     if not merged_params.get("apt_day"):
@@ -382,6 +395,7 @@ def handle_request_appointment(user_id, params):
     # 4. Time Collection
     from utils.parsers import parse_thai_colloquial_time, resolve_time_from_params
     
+    time_collected_this_turn = False
     if not merged_params.get("preferred_time"):
         if query_text == "ระบุเวลาเอง":
             merged_params["waiting_for_custom_time"] = "true"
@@ -394,6 +408,7 @@ def handle_request_appointment(user_id, params):
             if parsed_t:
                 merged_params["preferred_time"] = parsed_t
                 merged_params.pop("waiting_for_custom_time", None)
+                time_collected_this_turn = True
                 output_contexts = appointment_context()
             else:
                 ask = "⚠️ ไม่สามารถเข้าใจเวลาที่ระบุได้ กรุณาพิมพ์เวลาใหม่อีกครั้งค่ะ (เช่น 14:30 หรือ บ่ายสองโมงครึ่ง)"
@@ -405,6 +420,7 @@ def handle_request_appointment(user_id, params):
                 parsed_t = resolve_time_from_params(params.get('time'), params.get('timeofday'))
             if parsed_t:
                 merged_params["preferred_time"] = parsed_t
+                time_collected_this_turn = True
                 output_contexts = appointment_context()
 
     if not merged_params.get("preferred_time"):
@@ -419,7 +435,13 @@ def handle_request_appointment(user_id, params):
     # 5. Reason Collection
     if not merged_params.get("reason"):
         from services.patient_profile import is_registration_trigger_text
-        if query_text and not is_registration_trigger_text(query_text) and query_text != "ระบุเวลาเอง":
+        if (
+            query_text
+            and not is_registration_trigger_text(query_text)
+            and query_text != "ระบุเวลาเอง"
+            and not time_collected_this_turn
+            and not looks_like_time(query_text)
+        ):
             merged_params["reason"] = query_text
         output_contexts = appointment_context()
 

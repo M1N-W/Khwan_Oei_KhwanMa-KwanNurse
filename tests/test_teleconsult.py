@@ -26,6 +26,7 @@ from services.teleconsult import (
     parse_category_choice,
     start_teleconsult,
 )
+from services.teleconsult import alert_nurse_new_request
 
 
 class SchedulerOwnershipTests(unittest.TestCase):
@@ -72,6 +73,30 @@ class TeleconsultDatabaseTests(unittest.TestCase):
 
 
 class TeleconsultServiceTests(unittest.TestCase):
+    def test_category_number_two_is_medication(self):
+        self.assertEqual(parse_category_choice("2"), "medication")
+
+    @patch("services.teleconsult.send_line_push")
+    @patch("services.teleconsult.get_queue_status", return_value={"total": 1})
+    @patch("services.notification._get_patient_prefix_label", return_value="สมชาย ใจดี (HN: HN001)")
+    def test_nurse_alert_uses_safe_label_and_hides_internal_ids(
+        self, _label, _queue, mock_push
+    ):
+        session = {
+            "session_id": "TC_INTERNAL",
+            "user_id": "U_INTERNAL",
+            "issue_type": "medication",
+            "priority": 2,
+            "description": "",
+        }
+        alert_nurse_new_request(session, {"estimated_wait": 15})
+
+        message = mock_push.call_args.args[0]
+        self.assertIn("สมชาย ใจดี (HN: HN001)", message)
+        self.assertNotIn("U_INTERNAL", message)
+        self.assertNotIn("TC_INTERNAL", message)
+        self.assertIn("💊 ถามเรื่องยา", message)
+
     def test_category_menu_contains_all_options(self):
         menu = get_category_menu()
         self.assertIn('ฉุกเฉิน', menu)

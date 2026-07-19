@@ -590,15 +590,17 @@ def alert_nurse_new_request(session, queue_info):
         
         queue_status = get_queue_status()
         
+        from services.notification import _get_patient_prefix_label
+        patient_label = _get_patient_prefix_label(session.get('user_id', ''))
+        description = str(session.get('description') or '').strip()
         message = (
             f"🔔 คำขอปรึกษาใหม่\n\n"
-            f"👤 ผู้ป่วย: {session['user_id']}\n"
+            f"👤 ผู้ป่วย: {patient_label}\n"
             f"📋 ประเภท: {icon} {name_th}\n"
             f"⚠️ ระดับ: {priority_text}\n"
-            f"💬 รายละเอียด: {session.get('description', '(ไม่มี)')}\n\n"
+            f"💬 รายละเอียด: {description or 'ไม่ระบุ'}\n\n"
             f"📊 คิวปัจจุบัน: {queue_status['total']} คน\n"
-            f"⏱️ เวลารอ: {queue_info.get('estimated_wait', '?')} นาที\n\n"
-            f"Session ID: {session['session_id']}"
+            f"⏱️ เวลารอ: {queue_info.get('estimated_wait', '?')} นาที"
         )
 
         # Phase 2-B: append pre-consult briefing so nurse can prep before

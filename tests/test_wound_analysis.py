@@ -177,7 +177,8 @@ class NotificationHelpersTests(unittest.TestCase):
             advice="พบพยาบาลด่วน",
             confidence=0.9,
         )
-        self.assertIn("U-abc", msg)
+        self.assertNotIn("U-abc", msg)
+        self.assertIn("ยังไม่ลงทะเบียน", msg)
         self.assertIn("สูง", msg)        # Thai severity label
         self.assertIn("90%", msg)        # confidence pct
         self.assertIn("บวม", msg)

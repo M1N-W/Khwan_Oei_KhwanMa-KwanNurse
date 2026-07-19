@@ -126,10 +126,10 @@ class TestUIUXImprovements(unittest.TestCase):
         label = _get_patient_prefix_label("U_REG")
         self.assertEqual(label, "มาวิน อยู่เย็น (HN: 123456)")
 
-        # 2. Non-registered patient (fallback to user_id)
+        # 2. Non-registered patient must not expose the LINE user ID
         mock_read.return_value = None
         label = _get_patient_prefix_label("U_NON_REG")
-        self.assertEqual(label, "U_NON_REG")
+        self.assertEqual(label, "ไม่ระบุชื่อ (ยังไม่ลงทะเบียน)")
 
     def test_profile_flex_summary_status_and_consent(self):
         # 1. Registered and consented
