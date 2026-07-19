@@ -185,16 +185,11 @@ class LlmProviderTests(unittest.TestCase):
 
     def test_route_model(self):
         from services.llm import route_model
-        # Test complex intents
-        self.assertEqual(route_model("ContactNurse"), "gemini-3-flash-preview")
-        self.assertEqual(route_model("reportsymptoms"), "gemini-3-flash-preview")
-        self.assertEqual(route_model("Teleconsult  "), "gemini-3-flash-preview")
-        # Test simple intents
-        self.assertEqual(route_model("GetKnowledge"), "gemini-3.1-flash-lite")
-        self.assertEqual(route_model("smalltalk"), "gemini-3.1-flash-lite")
-        # Test fallback
-        self.assertEqual(route_model("UnknownIntent"), "gemini-2.5-flash")
-        self.assertEqual(route_model(None), "gemini-2.5-flash")
+        # All intents must use the configured model; no hidden alias rewrite.
+        self.assertEqual(route_model("ContactNurse"), "gemini-3.5-flash")
+        self.assertEqual(route_model("GetKnowledge"), "gemini-3.5-flash")
+        self.assertEqual(route_model("UnknownIntent"), "gemini-3.5-flash")
+        self.assertEqual(route_model(None), "gemini-3.5-flash")
 
     def test_key_failover_on_429(self):
         import requests

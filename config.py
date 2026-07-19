@@ -208,7 +208,7 @@ GEMINI_API_KEYS = [k for k in (GEMINI_API_KEY_1, GEMINI_API_KEY_2, GEMINI_API_KE
 
 GEMINI_API_KEY = GEMINI_API_KEY_1
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
+GEMINI_DEFAULT_MODEL = "gemini-3.5-flash"
 if LLM_PROVIDER == "gemini" and not GEMINI_API_KEYS:
     import warnings
     warnings.warn(

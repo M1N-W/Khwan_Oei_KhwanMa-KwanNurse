@@ -474,7 +474,14 @@ def register_routes(app):
                         len(query_text) if isinstance(query_text, str) else 0,
                     )
                 elif _has_active_context(req, 'reportsymptoms_dialog_context'):
-                    if intent != 'ReportSymptoms':
+                    # Recognized commands interrupt slot filling; only
+                    # fallback-like intents may consume the next symptom slot.
+                    interrupting_intents = {
+                        'CancelConsultation', 'GetKnowledge', 'ContactNurse',
+                        'RequestAppointment', 'AssessRisk', 'AssessPersonalRisk',
+                        'ReportSymptoms', 'Teleconsult', 'AfterHoursChoice',
+                    }
+                    if intent not in interrupting_intents:
                         ctx_params = _extract_context_parameters(req, 'reportsymptoms_dialog_context')
                         new_params = dict(ctx_params)
                         new_params.update(params)

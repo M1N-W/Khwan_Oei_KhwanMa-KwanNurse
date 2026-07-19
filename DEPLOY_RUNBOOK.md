@@ -26,7 +26,7 @@ alerts cannot fire.
 |---|---|---|---|
 | `LLM_PROVIDER` | no | `none` | Set to `gemini` to enable LLM paths |
 | `GEMINI_API_KEY` | yes, if `LLM_PROVIDER=gemini` | — | From Google AI Studio |
-| `LLM_MODEL` | no | `gemini-2.0-flash` | Override model |
+| `LLM_MODEL` | no | `gemini-3.5-flash` | Override model |
 | `LLM_TIMEOUT_SECONDS` | no | `8` | Webhook budget guard |
 | `LLM_MAX_OUTPUT_TOKENS` | no | `500` | Cost guard |
 | `LLM_DAILY_CALL_LIMIT` | no | `1000` | Soft per-process cap |

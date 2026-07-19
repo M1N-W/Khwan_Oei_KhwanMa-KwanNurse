@@ -378,7 +378,21 @@ class TestUIUXImprovements(unittest.TestCase):
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0]["action"]["text"], "ไม่มี")
 
-        # 3. Test escape hatch "ยกเลิก"
+        # 3. A free-text negative disease answer completes the flow instead
+        # of restarting at the age prompt.
+        with app.app_context():
+            with patch("routes.webhook.handlers.symptoms.calculate_personal_risk", return_value="risk result") as calc:
+                response = handle_assess_risk("U_TEST", {
+                    "age": 25,
+                    "weight": 57,
+                    "height": 170,
+                    "disease": "ไม่มี",
+                })
+                data = json.loads(response[0].data)
+                self.assertEqual(data["fulfillmentText"], "risk result")
+                calc.assert_called_once_with("U_TEST", 25, 57, 170, "ไม่มีโรคประจำตัว")
+
+        # 4. Test escape hatch "ยกเลิก"
         with app.app_context():
             response = app.test_client().post("/webhook", json={
                 "queryResult": {

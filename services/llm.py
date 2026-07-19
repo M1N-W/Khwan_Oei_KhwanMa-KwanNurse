@@ -94,27 +94,9 @@ def _resolve_model():
 
 
 def route_model(intent: str = None) -> str:
-    if not intent:
-        return "gemini-2.5-flash"
-    
-    intent_lower = str(intent).strip().lower()
-    
-    complex_intents = {
-        "contactnurse", "reportsymptoms", "assessrisk", 
-        "assesspersonalrisk", "teleconsult", "emergencychoice", 
-        "afterhourschoice", "freetextsymptom"
-    }
-    simple_intents = {
-        "getknowledge", "default welcome intent", "smalltalk", 
-        "requestappointment", "cancelconsultation"
-    }
-    
-    if intent_lower in complex_intents:
-        return "gemini-3-flash-preview"
-    elif intent_lower in simple_intents:
-        return "gemini-3.1-flash-lite"
-        
-    return "gemini-2.5-flash"
+    # Use one configured model across text, vision, and audio paths. Intent
+    # aliases previously rewrote requests to unavailable preview models.
+    return LLM_MODEL or GEMINI_DEFAULT_MODEL
 
 
 def _execute_with_key_fallback(api_call_fn, model_name):
@@ -232,8 +214,6 @@ def _try_consume_vision_quota():
 # ---------------------------------------------------------------------------
 def _call_gemini(system, user, max_tokens, want_json, api_key, model_name):
     """Low-level Gemini REST call. Returns text or raises."""
-    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
-        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     parts = []
@@ -390,8 +370,6 @@ def _call_gemini_vision(system, user_text, image_bytes, mime_type, max_tokens, a
     Low-level Gemini Vision REST call (multimodal: text + inline image).
     Returns text response or raises.
     """
-    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
-        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     parts = []
@@ -474,7 +452,7 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
         tokens = 500
     # Vision has its own safe model setting; do not inherit text-intent
     # routing or preview aliases that may not support multimodal JSON.
-    model_name = LLM_VISION_MODEL or "gemini-2.5-flash"
+    model_name = LLM_VISION_MODEL or _resolve_model()
 
     for attempt in range(3):
         start = time.time()
@@ -539,8 +517,6 @@ _TRANSCRIBE_PROMPT = (
 
 def _call_gemini_audio(audio_bytes, mime_type, max_tokens, api_key, model_name):
     """Low-level Gemini multimodal call for audio → text transcription."""
-    if model_name in ("gemini-3-flash-preview", "gemini-3.1-flash-lite"):
-        model_name = "gemini-2.5-flash"
     url = f"{GEMINI_API_URL}/{model_name}:generateContent"
 
     audio_b64 = base64.b64encode(audio_bytes).decode("ascii")

@@ -223,6 +223,13 @@ def handle_assess_risk(user_id, params):
     weight = params.get('weight')
     height = params.get('height')
     disease = params.get('disease') or params.get('diseases')
+
+    # Dialogflow may omit the entity value for free-text negative answers.
+    if isinstance(disease, str) and disease.strip().lower() in {
+        "ไม่มี", "ไม่มีโรค", "ไม่มีโรคประจำตัว", "ไม่เป็นโรคอะไร",
+        "ไม่มีโรคอะไร", "none", "no", "no disease",
+    }:
+        disease = "ไม่มีโรคประจำตัว"
     
     if age is None or str(age).strip() == "":
         ask = "กรุณาระบุ อายุ ของคนไข้ด้วยค่ะ (เช่น 45)"
