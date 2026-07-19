@@ -3,7 +3,7 @@
 Handlers package (KWN-09).
 Exposes intent handlers from modular sub-modules.
 """
-from routes.webhook.handlers.registration import handle_patient_identity
+from routes.webhook.handlers.registration import handle_patient_identity, handle_view_patient_profile
 from routes.webhook.handlers.symptoms import (
     handle_report_symptoms,
     handle_assess_risk,
@@ -25,6 +25,7 @@ from routes.webhook.handlers.fallback import (
 
 __all__ = [
     'handle_patient_identity',
+    'handle_view_patient_profile',
     'handle_report_symptoms',
     'handle_assess_risk',
     'handle_request_appointment',

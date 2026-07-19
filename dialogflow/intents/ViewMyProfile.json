@@ -1,0 +1,15 @@
+{
+  "id": "9eb2c7d3-c1a0-4aa5-b5f1-772b2bff475f",
+  "name": "ViewMyProfile",
+  "auto": true,
+  "contexts": [],
+  "responses": [{"resetContexts": false, "action": "", "affectedContexts": [], "parameters": [], "messages": [{"type": "0", "title": "", "textToSpeech": "", "lang": "th", "condition": ""}], "speech": []}],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

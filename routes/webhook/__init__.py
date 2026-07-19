@@ -8,6 +8,7 @@ from routes.webhook.helpers import _touch_activity, _make_dialogflow_response, _
 from routes.webhook.handlers.fallback import _resolve_knowledge_topic
 from routes.webhook.handlers import (
     handle_patient_identity,
+    handle_view_patient_profile,
     handle_report_symptoms,
     handle_assess_risk,
     handle_request_appointment,
@@ -44,6 +45,7 @@ __all__ = [
     '_resolve_knowledge_topic',
     '_registration_gate_response',
     'handle_patient_identity',
+    'handle_view_patient_profile',
     'handle_report_symptoms',
     'handle_assess_risk',
     'handle_request_appointment',

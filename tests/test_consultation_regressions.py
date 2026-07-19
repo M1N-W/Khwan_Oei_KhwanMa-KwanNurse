@@ -15,19 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class ConsultationRoutingTests(unittest.TestCase):
-    def test_patient_replies_include_cancel_and_retry_guidance(self):
-        from app import create_app
-        from routes.webhook.helpers import _append_patient_cancel_guidance
-
-        app = create_app()
-        response = app.response_class(
-            '{"fulfillmentText":"✅ บันทึกคำขอเรียบร้อยแล้วค่ะ"}',
-            mimetype="application/json",
-        )
-        updated = _append_patient_cancel_guidance((response, 200), "RequestAppointment")
-
-        self.assertIn("พิมพ์ ‘ยกเลิก’", updated[0].get_json()["fulfillmentText"])
-
     def test_wound_photo_command_is_not_routed_to_knowledge(self):
         from app import create_app
 
@@ -98,7 +85,7 @@ class ConsultationRoutingTests(unittest.TestCase):
             item["action"]["text"]
             for item in payload["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
         ]
-        self.assertEqual(quick_reply_texts, ["1", "2", "3", "4", "5"])
+        self.assertEqual(quick_reply_texts, ["1", "2", "3", "4", "5", "ยกเลิก"])
         self.assertIn("ติดต่อพยาบาล", payload["fulfillmentMessages"][0]["payload"]["line"]["text"])
 
     def test_category_five_returns_direct_nurse_contact(self):

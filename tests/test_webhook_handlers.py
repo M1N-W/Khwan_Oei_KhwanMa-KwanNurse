@@ -60,3 +60,21 @@ class WebhookHandlersTest(unittest.TestCase):
         res = _dispatch_intent("PatientIdentity", "U123", {"param": "val"}, "query")
         self.assertEqual(res, ("identity response", 200))
         mock_handler.assert_called_once_with("U123", {"param": "val"}, "query")
+
+    @patch("routes.webhook.handle_patient_identity")
+    def test_dispatch_start_registration(self, mock_handler):
+        from routes.webhook import _dispatch_intent
+        mock_handler.return_value = ("identity response", 200)
+
+        res = _dispatch_intent("StartRegistration", "U123", {}, "ลงทะเบียน")
+        self.assertEqual(res, ("identity response", 200))
+        mock_handler.assert_called_once_with("U123", {}, "ลงทะเบียน")
+
+    @patch("routes.webhook.handle_view_patient_profile")
+    def test_dispatch_view_profile(self, mock_handler):
+        from routes.webhook import _dispatch_intent
+        mock_handler.return_value = ("profile response", 200)
+
+        res = _dispatch_intent("ViewMyProfile", "U123", {}, "ข้อมูลของฉัน")
+        self.assertEqual(res, ("profile response", 200))
+        mock_handler.assert_called_once_with("U123")

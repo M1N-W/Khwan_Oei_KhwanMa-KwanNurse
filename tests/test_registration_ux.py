@@ -124,6 +124,19 @@ class TestWebhookIntegrationUX(unittest.TestCase):
         self.assertEqual(res["fulfillmentMessages"][0]["platform"], "LINE")
         self.assertEqual(res["fulfillmentMessages"][0]["payload"]["line"], flex)
 
+    @patch("config.ENABLE_RICH_MESSAGES", True)
+    def test_active_flow_gets_cancel_button_and_one_time_hint(self):
+        active = [{"name": "projects/p/agent/sessions/U1/contexts/registering", "lifespanCount": 5}]
+        with self.app.test_request_context("/webhook", json={"queryResult": {"outputContexts": []}}):
+            first = _make_dialogflow_response("กรุณาระบุชื่อ", output_contexts=active)
+        items = first["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"]
+        self.assertEqual(items[-1]["action"]["text"], "ยกเลิก")
+        self.assertIn("พิมพ์ “ยกเลิก” ได้ทุกเมื่อ", first["fulfillmentText"])
+
+        with self.app.test_request_context("/webhook", json={"queryResult": {"outputContexts": active}}):
+            next_turn = _make_dialogflow_response("กรุณาระบุ HN", output_contexts=active)
+        self.assertNotIn("พิมพ์ “ยกเลิก” ได้ทุกเมื่อ", next_turn["fulfillmentText"])
+
 
 if __name__ == "__main__":
     unittest.main()

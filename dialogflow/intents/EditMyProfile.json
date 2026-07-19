@@ -1,0 +1,15 @@
+{
+  "id": "1cf9bd24-45b7-4e80-bd87-d92edb2844e5",
+  "name": "EditMyProfile",
+  "auto": true,
+  "contexts": [],
+  "responses": [{"resetContexts": false, "action": "", "affectedContexts": [], "parameters": [], "messages": [{"type": "0", "title": "", "textToSpeech": "", "lang": "th", "condition": ""}], "speech": []}],
+  "priority": 500000,
+  "webhookUsed": true,
+  "webhookForSlotFilling": false,
+  "fallbackIntent": false,
+  "events": [],
+  "conditionalResponses": [],
+  "condition": "",
+  "conditionalFollowupEvents": []
+}

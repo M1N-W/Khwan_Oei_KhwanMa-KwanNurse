@@ -142,8 +142,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "That citizen ID is invalid. Please send a valid 13-digit citizen ID.",
     },
     "identity.confirm": {
-        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nบัตรประชาชน: {citizen_id}\nโทร: {phone}\n\n💡 ทริค: คุณสามารถพิมพ์คำว่า 'ข้อมูล' เพื่อเรียกดูบัตรคนไข้ของคุณได้ตลอดเวลาค่ะ",
-        "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nCitizen ID: {citizen_id}\nPhone: {phone}\n\n💡 Hint: You can type 'ข้อมูล' to recall your profile card at any time.",
+        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nบัตรประชาชน: {citizen_id}\nโทร: {phone}\n\n💡 พิมพ์ ‘ข้อมูลของฉัน’ เพื่อดูข้อมูล หรือ ‘แก้ไขข้อมูล’ เมื่อต้องการเปลี่ยนแปลงค่ะ",
+        "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nCitizen ID: {citizen_id}\nPhone: {phone}\n\n💡 Type ‘My profile’ to view your information or ‘Edit my profile’ to update it.",
     },
     "identity.save_error": {
         "th": "ขอโทษค่ะ ไม่สามารถบันทึกข้อมูลคนไข้ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",

@@ -315,8 +315,8 @@ class TestAfterHoursQuickReplies(unittest.TestCase):
         self.assertIsNotNone(line_payload, "Expected a LINE payload in fulfillmentMessages")
         self.assertIn("quickReply", line_payload)
 
-    def test_after_hours_quick_reply_has_exactly_two_items(self):
-        """After-hours quick reply must have exactly 2 buttons."""
+    def test_after_hours_quick_reply_has_all_visible_category_items(self):
+        """After-hours quick reply must match the visible 1-5 category menu."""
         data = self._call_contact_nurse_after_hours()
         msgs = data.get("fulfillmentMessages", [])
         line_payload = next(
@@ -324,10 +324,10 @@ class TestAfterHoursQuickReplies(unittest.TestCase):
             None,
         )
         items = line_payload["quickReply"]["items"]
-        self.assertEqual(len(items), 2)
+        self.assertEqual([item["action"]["text"] for item in items], ["1", "2", "3", "4", "5"])
 
-    def test_after_hours_first_button_is_wait(self):
-        """First after-hours button: label='⏳ รอเวลาทำการ', text='รอเวลาทำการ'."""
+    def test_after_hours_first_button_is_emergency_category(self):
+        """The first quick reply matches category 1 in the visible menu."""
         data = self._call_contact_nurse_after_hours()
         msgs = data.get("fulfillmentMessages", [])
         line_payload = next(
@@ -335,20 +335,20 @@ class TestAfterHoursQuickReplies(unittest.TestCase):
             None,
         )
         first = line_payload["quickReply"]["items"][0]
-        self.assertEqual(first["action"]["label"], "⏳ รอเวลาทำการ")
-        self.assertEqual(first["action"]["text"], "รอเวลาทำการ")
+        self.assertEqual(first["action"]["label"], "🚨 ฉุกเฉิน")
+        self.assertEqual(first["action"]["text"], "1")
 
-    def test_after_hours_second_button_is_emergency(self):
-        """Second after-hours button: label='🚨 แจ้งเรื่องฉุกเฉิน', text='แจ้งเรื่องฉุกเฉิน'."""
+    def test_after_hours_last_button_is_contact_nurse_category(self):
+        """The last quick reply matches category 5 in the visible menu."""
         data = self._call_contact_nurse_after_hours()
         msgs = data.get("fulfillmentMessages", [])
         line_payload = next(
             (m["payload"]["line"] for m in msgs if "payload" in m and "line" in m["payload"]),
             None,
         )
-        second = line_payload["quickReply"]["items"][1]
-        self.assertEqual(second["action"]["label"], "🚨 แจ้งเรื่องฉุกเฉิน")
-        self.assertEqual(second["action"]["text"], "แจ้งเรื่องฉุกเฉิน")
+        last = line_payload["quickReply"]["items"][-1]
+        self.assertEqual(last["action"]["label"], "👩🏻‍⚕️ ติดต่อพยาบาล")
+        self.assertEqual(last["action"]["text"], "5")
 
     def test_after_hours_choice_wait_resolves_correctly(self):
         """Passing 'รอเวลาทำการ' to handle_after_hours_choice returns success and routes correctly."""
@@ -609,7 +609,7 @@ class TestDeterministicRouter(unittest.TestCase):
             }
             
             response = client.post("/webhook", json=payload, headers={"Authorization": "Bearer mock_token"})
-            mock_dispatch.assert_called_once_with("PatientIdentity", "U_TEST", {}, "ลงทะเบียน")
+            mock_dispatch.assert_called_once_with("StartRegistration", "U_TEST", {}, "ลงทะเบียน")
 
     @patch("config.DIALOGFLOW_WEBHOOK_TOKEN", "mock_token")
     def test_state_machine_intercepts_unregistered_user(self):

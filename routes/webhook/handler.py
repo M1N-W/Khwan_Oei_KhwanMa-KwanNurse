@@ -127,7 +127,7 @@ def _reply_line_from_bridge_result(reply_token: str, user_id: str, result: dict)
 
     # Direct LINE mode can send Flex safely; use it for the completed profile
     # card while the Dialogflow LINE integration remains text-only for Flex.
-    if intent_name in {"PatientIdentity", "PatientIdentity_Input", "PatientIdentity_Fallback"}:
+    if intent_name in {"PatientIdentity", "PatientIdentity_Input", "PatientIdentity_Fallback", "ViewMyProfile"}:
         try:
             from database.patient_profile import read_patient_profile_result
             from services.patient_profile import build_profile_flex_summary, is_registration_complete
@@ -423,7 +423,8 @@ def register_routes(app):
             query_text = req.get('queryResult', {}).get('queryText', '')
             normalized_query = query_text.strip().lower() if isinstance(query_text, str) else ""
             top_level_commands = {
-                "ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร",
+                "ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร", "ขอยืนยันตัวตน", "ลงทะเบียนผู้ป่วย", "ต้องการลงทะเบียน",
+                "ข้อมูลของฉัน", "ดูบัตรผู้ป่วย", "แก้ไขข้อมูล",
                 "รายงานอาการ", "แจ้งอาการ", "ประเมินความเสี่ยง", "ประเมินความเสี่ยงส่วนบุคคล",
                 "นัดหมายพยาบาล", "นัดหมาย", "ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ",
                 "ติดตามหลังให้ยา", "ติดตามอาการ", "ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล",
@@ -497,7 +498,7 @@ def register_routes(app):
                     incr(f"conversation.route.{decision.state.flow_id}.{decision.state.step_id or 'complete'}")
                 # Do not let AI interception interpret a state-owned slot.
                 is_flow_command = bool(decision.state or intent in {
-                    "ReportSymptoms", "AssessRisk", "RequestAppointment", "AfterHoursChoice", "PatientIdentity",
+                    "ReportSymptoms", "AssessRisk", "RequestAppointment", "AfterHoursChoice", "PatientIdentity", "StartRegistration",
                 })
 
             # Context-based Intent Interception (Component 4)
@@ -630,17 +631,33 @@ def register_routes(app):
                     if registration_cancelled:
                         msg = "❌ ยกเลิกการลงทะเบียนเรียบร้อยแล้วค่ะ หากต้องการลงทะเบียนใหม่ กรุณาพิมพ์คำว่า 'ลงทะเบียน' อีกครั้งค่ะ"
                     else:
-                        # Bug #2 fix: ยกเลิก teleconsult session ด้วย ไม่ใช่แค่ clear context
+                        # Only cancel a durable nurse request when the active flow is
+                        # teleconsult (or there is no form in progress). Cancelling a
+                        # symptom/risk/appointment form must not remove a nurse queue.
+                        active_non_teleconsult_flow = any(
+                            _has_active_context(req, context_name)
+                            for context_name in (
+                                "reportsymptoms_dialog_context",
+                                "assessrisk_dialog_context",
+                                "assesspersonalrisk_dialog_context",
+                                "requestappointment_dialog_context",
+                            )
+                        )
                         teleconsult_cancelled = False
-                        try:
-                            from services.teleconsult import cancel_consultation
-                            tc_result = cancel_consultation(user_id)
-                            if tc_result and tc_result.get('success'):
-                                teleconsult_cancelled = True
-                                logger.info("Teleconsult session cancelled for user %s", user_id)
-                        except Exception:
-                            logger.warning("Failed to cancel teleconsult session for user %s", user_id, exc_info=True)
-                        msg = "❌ ยกเลิกการทำรายการเรียบร้อยแล้วค่ะ มีอะไรให้ฉันช่วยเหลือเพิ่มเติมไหมคะ?"
+                        if not active_non_teleconsult_flow:
+                            try:
+                                from services.teleconsult import cancel_consultation
+                                tc_result = cancel_consultation(user_id)
+                                if tc_result and tc_result.get('success'):
+                                    teleconsult_cancelled = True
+                                    logger.info("Teleconsult session cancelled for user %s", user_id)
+                            except Exception:
+                                logger.warning("Failed to cancel teleconsult session for user %s", user_id, exc_info=True)
+                        msg = (
+                            "❌ ยกเลิกคำขอปรึกษาและนำออกจากคิวเรียบร้อยแล้วค่ะ"
+                            if teleconsult_cancelled
+                            else "❌ ยกเลิกการทำรายการนี้แล้วค่ะ ข้อมูลที่ยังไม่บันทึกจะไม่ถูกส่ง"
+                        )
                     from routes.webhook.helpers import _make_dialogflow_response
                     return jsonify(_make_dialogflow_response(msg, output_contexts=clear_contexts)), 200
 
@@ -667,8 +684,15 @@ def register_routes(app):
                             return ai_response
 
                 # Core keyword routing
-                if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร"):
-                    intent = "PatientIdentity"
+                if cleaned_query in ("ลงทะเบียน", "register", "สมัครสมาชิก", "เข้าสู่ระบบ", "สมัคร", "ขอยืนยันตัวตน", "ลงทะเบียนผู้ป่วย", "ต้องการลงทะเบียน"):
+                    intent = "StartRegistration"
+                    params = {}
+                elif cleaned_query in ("ข้อมูลของฉัน", "ดูบัตรผู้ป่วย"):
+                    intent = "ViewMyProfile"
+                    params = {}
+                elif cleaned_query in ("แก้ไขข้อมูล", "แก้ไขประวัติ"):
+                    intent = "EditMyProfile"
+                    params = {}
                 elif cleaned_query in ("รายงานอาการ", "แจ้งอาการ"):
                     intent = "ReportSymptoms"
                     params = {}
@@ -742,8 +766,6 @@ def register_routes(app):
 
         try:
             response = _dispatch_intent(intent, user_id, params, query_text)
-            from routes.webhook.helpers import _append_patient_cancel_guidance
-            response = _append_patient_cancel_guidance(response, intent)
             response = _append_context_operations_to_response(response, controller_context_operations)
             if is_top_level_command:
                 active_context = {
@@ -848,6 +870,7 @@ def _dispatch_intent(intent, user_id, params, query_text):
         handle_free_text_symptom,
         handle_recommend_knowledge,
         handle_patient_identity,
+        handle_view_patient_profile,
         handle_unknown_intent,
         handle_after_hours_choice
     )
@@ -895,7 +918,12 @@ def _dispatch_intent(intent, user_id, params, query_text):
             "📷 พร้อมแล้วค่ะ กรุณาส่งรูปแผลในแชตนี้ได้เลยนะคะ\n"
             "ระบบจะรับรูปและส่งให้ AI วิเคราะห์เบื้องต้นค่ะ"
         )), 200
+    elif intent == "ViewMyProfile":
+        response = handle_view_patient_profile(user_id)
+    elif intent == "EditMyProfile":
+        response = handle_patient_identity(user_id, {}, "แก้ไขข้อมูล")
     elif intent in (
+        'StartRegistration',
         'UpdatePatientIdentity',
         'PatientIdentity',
         'RegisterPatient',
@@ -914,7 +942,7 @@ def _dispatch_intent(intent, user_id, params, query_text):
             _touch_activity("GetKnowledge", user_id)
             return response
         from services.patient_profile import is_registration_trigger_text, mark_registration_started
-        if intent == "RegisterPatient" or is_registration_trigger_text(query_text):
+        if intent in {"StartRegistration", "RegisterPatient"} or is_registration_trigger_text(query_text):
             mark_registration_started(user_id)
         response = handle_patient_identity(user_id, params, query_text)
     else:

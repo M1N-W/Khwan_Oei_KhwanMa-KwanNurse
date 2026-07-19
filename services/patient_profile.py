@@ -51,10 +51,15 @@ LAST_ACTIVE_THROTTLE_SECONDS = 6 * 3600
 REGISTRATION_START_CACHE_PREFIX = "profile:registration-start:v1"
 REGISTRATION_START_TTL_SECONDS = 120
 
-_REGISTRATION_TRIGGER_SUBSTRINGS = (
+_REGISTRATION_START_COMMANDS = {
     "ลงทะเบียน",
     "register",
-)
+    "สมัครสมาชิก",
+    "สมัคร",
+    "ขอยืนยันตัวตน",
+    "ลงทะเบียนผู้ป่วย",
+    "ต้องการลงทะเบียน",
+}
 _REGISTRATION_CANCEL_SUBSTRINGS = (
     "ยกเลิก",
     "cancel",
@@ -355,10 +360,9 @@ def _coerce_string(value: Any) -> str:
 
 
 def is_registration_trigger_text(text: Any) -> bool:
-    norm = str(text or "").strip().lower()
-    if not norm:
-        return False
-    return any(token in norm for token in _REGISTRATION_TRIGGER_SUBSTRINGS)
+    """Return True only for explicit registration commands, never broad substrings."""
+    norm = "".join(str(text or "").casefold().split())
+    return norm in _REGISTRATION_START_COMMANDS
 
 
 def is_registration_cancel_text(text: Any) -> bool:

@@ -111,9 +111,10 @@ class TestUIUXImprovements(unittest.TestCase):
         line_payload = data["fulfillmentMessages"][0]["payload"]["line"]
         self.assertIn("quickReply", line_payload)
         items = line_payload["quickReply"]["items"]
-        self.assertEqual(len(items), 2)
-        self.assertEqual(items[0]["action"]["label"], "⏳ รอเวลาทำการ")
-        self.assertEqual(items[1]["action"]["label"], "🚨 แจ้งเรื่องฉุกเฉิน")
+        self.assertEqual(len(items), 5)
+        self.assertEqual(items[0]["action"]["label"], "🚨 ฉุกเฉิน")
+        self.assertEqual(items[0]["action"]["text"], "1")
+        self.assertEqual(items[-1]["action"]["text"], "5")
 
     @patch("database.patient_profile.read_patient_profile")
     def test_get_patient_prefix_label(self, mock_read):
@@ -403,7 +404,7 @@ class TestUIUXImprovements(unittest.TestCase):
             })
             self.assertEqual(response.status_code, 200)
             data = response.get_json()
-            self.assertIn("ยกเลิกการทำรายการเรียบร้อยแล้วค่ะ", data["fulfillmentText"])
+            self.assertIn("ยกเลิกการทำรายการนี้แล้วค่ะ", data["fulfillmentText"])
             contexts = data["outputContexts"]
             # Verify contexts are cleared
             self.assertEqual(contexts[0]["lifespanCount"], 0)

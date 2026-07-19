@@ -38,63 +38,13 @@ _LAST_ACTIVE_TRACKED_INTENTS = {
 }
 
 _REGISTRATION_INTENTS = {
+    "StartRegistration",
     "PatientIdentity",
     "UpdatePatientIdentity",
     "RegisterPatient",
     "PatientIdentity_Input",
     "PatientIdentity_Fallback",
 }
-
-_PATIENT_CANCEL_GUIDANCE = (
-    "\n\nหากต้องการเปลี่ยนรายการ พิมพ์ ‘ยกเลิก’ แล้วเริ่มใหม่ได้เลยค่ะ 💚"
-)
-
-_GUIDANCE_INTENTS = {
-    "PatientIdentity", "UpdatePatientIdentity", "RegisterPatient",
-    "ReportSymptoms", "AssessRisk", "AssessPersonalRisk",
-    "RequestAppointment", "ContactNurse", "AfterHoursChoice",
-}
-
-
-def _append_patient_cancel_guidance(response, intent):
-    """Add a gentle, consistent cancellation/retry note to patient replies."""
-    if intent not in _GUIDANCE_INTENTS:
-        return response
-
-    response_obj = response[0] if isinstance(response, tuple) else response
-    payload = None
-    if isinstance(response_obj, dict):
-        payload = dict(response_obj)
-    elif hasattr(response_obj, "get_json"):
-        payload = response_obj.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return response
-
-    text = payload.get("fulfillmentText")
-    if not isinstance(text, str) or not text.strip() or "‘ยกเลิก’" in text:
-        return response
-    if any(
-        isinstance(context, dict) and int(context.get("lifespanCount", 0) or 0) > 0
-        for context in (payload.get("outputContexts") or [])
-    ):
-        return response
-    text = text.rstrip() + _PATIENT_CANCEL_GUIDANCE
-    payload["fulfillmentText"] = text
-
-    # Keep the LINE custom payload in sync with fulfillmentText for direct bridge mode.
-    for message in payload.get("fulfillmentMessages") or []:
-        if message.get("platform") != "LINE":
-            continue
-        line_payload = (message.get("payload") or {}).get("line") or {}
-        if line_payload.get("type") == "text":
-            line_payload["text"] = text[:5000]
-
-    if isinstance(response_obj, dict):
-        return (payload, *response[1:]) if isinstance(response, tuple) else payload
-    response_obj.set_data(__import__("json").dumps(payload, ensure_ascii=False))
-    response_obj.content_type = "application/json"
-    return response
-
 
 def _mask_user_id_for_log(user_id):
     return scrub_user_id(user_id)
@@ -193,8 +143,53 @@ def _registration_intent_looks_like_knowledge(intent, params, query_text):
     return False
 
 
+def _is_active_flow_context(context: dict) -> bool:
+    return (
+        isinstance(context, dict)
+        and int(context.get("lifespanCount", 0) or 0) > 0
+        and any(name in str(context.get("name", "")) for name in (
+            "reportsymptoms_dialog_context",
+            "assessrisk_dialog_context",
+            "assesspersonalrisk_dialog_context",
+            "requestappointment_dialog_context",
+            "teleconsult_category_context",
+            "registering",
+        ))
+    )
+
+
+def _with_cancel_quick_reply(quick_replies: list[dict] | None) -> list[dict]:
+    """Add one escape hatch without duplicating it or exceeding LINE's cap."""
+    from services.line_message import MAX_QUICK_REPLY_ITEMS, quick_reply_item
+
+    items = list(quick_replies or [])
+    if any((item.get("action") or {}).get("text") == "ยกเลิก" for item in items):
+        return items[:MAX_QUICK_REPLY_ITEMS]
+    return (items[:MAX_QUICK_REPLY_ITEMS - 1] + [quick_reply_item("✕ ยกเลิก", "ยกเลิก")])
+
+
+def _should_show_cancel_hint(output_contexts: list[dict] | None) -> bool:
+    """Show the explanatory hint only when a flow starts, not on every turn."""
+    if not any(_is_active_flow_context(context) for context in (output_contexts or [])):
+        return False
+    try:
+        from flask import has_request_context, request
+        if not has_request_context():
+            return True
+        incoming = (request.get_json(silent=True, force=True) or {}).get("queryResult", {}).get("outputContexts", [])
+        return not any(_is_active_flow_context(context) for context in incoming)
+    except Exception:
+        return False
+
+
 def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_message: dict = None, output_contexts: list[dict] = None) -> dict:
     """Build a Dialogflow response, optionally including LINE custom payloads and output contexts (KWN-06)."""
+    has_active_flow = any(_is_active_flow_context(context) for context in (output_contexts or []))
+    if has_active_flow:
+        quick_replies = _with_cancel_quick_reply(quick_replies)
+        if _should_show_cancel_hint(output_contexts):
+            text = text.rstrip() + "\n\n💡 ระหว่างทำรายการ กด “✕ ยกเลิก” หรือพิมพ์ “ยกเลิก” ได้ทุกเมื่อค่ะ"
+
     res = {"fulfillmentText": text}
     
     from config import ENABLE_RICH_MESSAGES

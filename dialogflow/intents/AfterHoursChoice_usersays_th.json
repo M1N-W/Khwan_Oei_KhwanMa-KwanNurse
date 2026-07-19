@@ -105,7 +105,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000009",
-    "data": [{"text": "3", "userDefined": false}],
+    "data": [
+      {
+        "text": "3",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",
@@ -113,7 +118,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000010",
-    "data": [{"text": "4", "userDefined": false}],
+    "data": [
+      {
+        "text": "4",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",
@@ -121,7 +131,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000011",
-    "data": [{"text": "5", "userDefined": false}],
+    "data": [
+      {
+        "text": "5",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",
@@ -129,7 +144,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000012",
-    "data": [{"text": "เลือก 3", "userDefined": false}],
+    "data": [
+      {
+        "text": "เลือก 3",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",
@@ -137,7 +157,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000013",
-    "data": [{"text": "เลือก 4", "userDefined": false}],
+    "data": [
+      {
+        "text": "เลือก 4",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",
@@ -145,7 +170,12 @@
   },
   {
     "id": "c1a2b3d4-0001-0001-0001-000000000014",
-    "data": [{"text": "เลือก 5", "userDefined": false}],
+    "data": [
+      {
+        "text": "เลือก 5",
+        "userDefined": false
+      }
+    ],
     "isTemplate": false,
     "count": 0,
     "lang": "th",

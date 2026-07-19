@@ -10,6 +10,52 @@ from routes.webhook.helpers import _make_dialogflow_response, _mask_user_id_for_
 logger = get_logger(__name__)
 
 
+def handle_view_patient_profile(user_id):
+    """Show a registered patient's masked profile without entering edit mode."""
+    try:
+        from flask import has_request_context, request as flask_req
+        from database.patient_profile import read_patient_profile_result
+        from services.patient_profile import (
+            build_profile_flex_summary,
+            mask_phone_number,
+            registration_missing_fields,
+        )
+
+        read_result = read_patient_profile_result(user_id)
+        if not read_result.available:
+            return jsonify({"fulfillmentText": "ขออภัยค่ะ ระบบข้อมูลผู้ป่วยขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งค่ะ"}), 200
+
+        profile = read_result.profile or {}
+        if registration_missing_fields(profile):
+            return jsonify(_make_dialogflow_response(
+                "ยังไม่มีข้อมูลลงทะเบียนที่ครบถ้วนนะคะ กรุณาพิมพ์ “ลงทะเบียน” เพื่อเริ่มได้เลยค่ะ"
+            )), 200
+
+        citizen_id = str(profile.get("citizen_id") or "")
+        masked_citizen_id = "-"
+        if len(citizen_id) >= 6:
+            masked_citizen_id = f"{citizen_id[0]}-{citizen_id[1:5]}-XXXXX-XX-{citizen_id[-1]}"
+        display_name = " ".join(part for part in (
+            str(profile.get("first_name") or "").strip(),
+            str(profile.get("last_name") or "").strip(),
+        ) if part) or "-"
+        text = (
+            "📋 ข้อมูลผู้ป่วยของคุณ\n\n"
+            f"ชื่อ: {display_name}\n"
+            f"HN: {profile.get('hn') or '-'}\n"
+            f"บัตรประชาชน: {masked_citizen_id}\n"
+            f"โทร: {mask_phone_number(str(profile.get('phone') or ''))}\n\n"
+            "หากต้องการเปลี่ยนข้อมูล พิมพ์ “แก้ไขข้อมูล” ได้เลยค่ะ"
+        )
+        flex_summary = None
+        if has_request_context() and flask_req.path == "/line/webhook":
+            flex_summary = build_profile_flex_summary(profile)
+        return jsonify(_make_dialogflow_response(text, flex_message=flex_summary)), 200
+    except Exception:
+        logger.exception("Error viewing PatientProfile user=%s", _mask_user_id_for_log(user_id))
+        return jsonify({"fulfillmentText": "ขออภัยค่ะ ไม่สามารถแสดงข้อมูลผู้ป่วยได้ในขณะนี้ กรุณาลองใหม่อีกครั้งค่ะ"}), 200
+
+
 def handle_patient_identity(user_id, params, query_text=""):
     """Collect/update patient registration fields incrementally."""
     try:

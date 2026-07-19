@@ -32,7 +32,7 @@
   },
   "defaultTimezone": "Asia/Bangkok",
   "webhook": {
-    "url": "",
+    "url": "https://khwan-oei-khwanma.onrender.com/webhook",
     "username": "",
     "headers": {},
     "available": true,

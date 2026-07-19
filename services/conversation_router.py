@@ -19,7 +19,11 @@ TOP_LEVEL_COMMANDS = {
     "ปรึกษาพยาบาล": ("teleconsult", "ContactNurse"),
     "ติดต่อพยาบาล": ("teleconsult", "ContactNurse"),
     "คุยกับพยาบาล": ("teleconsult", "ContactNurse"),
-    "ลงทะเบียน": ("registration", "PatientIdentity"),
+    "ลงทะเบียน": ("registration", "StartRegistration"),
+    "สมัครสมาชิก": ("registration", "StartRegistration"),
+    "สมัคร": ("registration", "StartRegistration"),
+    "ขอยืนยันตัวตน": ("registration", "StartRegistration"),
+    "ลงทะเบียนผู้ป่วย": ("registration", "StartRegistration"),
 }
 
 FLOW_INTENTS = {

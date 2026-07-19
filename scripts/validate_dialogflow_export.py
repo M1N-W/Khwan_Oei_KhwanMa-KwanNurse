@@ -11,9 +11,15 @@ DISPATCHED = {
     "ReportSymptoms", "AssessRisk", "AssessPersonalRisk", "RequestAppointment",
     "GetKnowledge", "GetFollowUpSummary", "ContactNurse", "AfterHoursChoice",
     "CancelConsultation", "GetGroupID", "FreeTextSymptom", "RecommendKnowledge",
+    "StartRegistration", "ViewMyProfile", "EditMyProfile",
 }
 RUNTIME_SLOT_FILLING = {
     "ReportSymptoms", "AssessRisk", "AssessPersonalRisk", "RequestAppointment",
+}
+PROFILE_INTENT_PHRASES = {
+    "StartRegistration": {"ลงทะเบียน"},
+    "ViewMyProfile": {"ข้อมูลของฉัน"},
+    "EditMyProfile": {"แก้ไขข้อมูล"},
 }
 
 
@@ -65,6 +71,21 @@ def main() -> int:
     for required in {"1", "2", "3", "4", "5"}:
         if required not in phrase_text:
             errors.append(f"missing AfterHoursChoice phrase: {required}")
+
+    for intent_name, required_phrases in PROFILE_INTENT_PHRASES.items():
+        path = intent_dir / f"{intent_name}_usersays_th.json"
+        phrases = load_json(path) if path.exists() else []
+        phrase_text = {
+            "".join(part.get("text", "") for part in item.get("data", []))
+            for item in phrases
+        }
+        for required in required_phrases:
+            if required not in phrase_text:
+                errors.append(f"missing {intent_name} phrase: {required}")
+
+    legacy_profile_phrases = intent_dir / "PatientIdentity_usersays_th.json"
+    if legacy_profile_phrases.exists() and load_json(legacy_profile_phrases):
+        errors.append("PatientIdentity must not own top-level profile phrases")
 
     if errors:
         for error in errors:
