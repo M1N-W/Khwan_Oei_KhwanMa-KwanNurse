@@ -488,7 +488,7 @@ def handle_request_appointment(user_id, params):
             quick_reply_item("🔵 ช่วงบ่าย (13:00 - 16:00)", "บ่าย"),
             quick_reply_item("🕒 ระบุเวลาเอง", "ระบุเวลาเอง"),
         ]
-        ask = "กรุณาระบุ เวลาที่ต้องการนัดหมาย ด้วยค่ะ"
+        ask = "กรุณาระบุเวลาที่ต้องการนัดหมายด้วยค่ะ"
         return jsonify(_make_dialogflow_response(ask, quick_replies, output_contexts=output_contexts)), 200
 
     # 5. Reason Collection

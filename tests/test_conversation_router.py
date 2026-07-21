@@ -58,3 +58,29 @@ class ConversationRouterTests(unittest.TestCase):
         )
 
         self.assertTrue(decision.duplicate)
+
+    def test_custom_appointment_time_command_passes_to_handler(self):
+        from services.conversation_router import resolve_route
+        from services.conversation_state import InMemoryConversationStateStore, start_state
+
+        store = InMemoryConversationStateStore(now=lambda: NOW)
+        state = start_state("U1", "line", "appointment", now=NOW)
+        for answer in ("25", "11", "2569"):
+            store.start(state)
+            decision = resolve_route(
+                user_id="U1", channel_id="line", query_text=answer,
+                dialogflow_intent="AfterHoursChoice", dialogflow_params={},
+                session_name=SESSION, webhook_event_id=f"evt-{answer}", store=store, now=NOW,
+            )
+            state = decision.state
+
+        decision = resolve_route(
+            user_id="U1", channel_id="line", query_text="ระบุเวลาเอง",
+            dialogflow_intent="AfterHoursChoice", dialogflow_params={},
+            session_name=SESSION, webhook_event_id="evt-custom-time", store=store, now=NOW,
+        )
+
+        self.assertEqual(decision.intent, "RequestAppointment")
+        self.assertIsNone(decision.response_text)
+        self.assertEqual(decision.state.step_id, "preferred_time")
+        self.assertNotIn("preferred_time", decision.params)

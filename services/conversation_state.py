@@ -128,7 +128,7 @@ def _validation_message(rule: InputRule) -> str:
         "height": "กรุณาระบุส่วนสูงให้ถูกต้องค่ะ",
         "issue_category": "กรุณาเลือกหมายเลขจากเมนูนี้ค่ะ",
     }
-    return labels.get(rule.slot, "ข้อมูลไม่ถูกต้อง กรุณาลองใหม่อีกครั้งค่ะ")
+    return labels.get(rule.slot, "ข้อมูลไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง")
 
 
 def _normalize_value(rule: InputRule, text: str) -> str | None:
@@ -164,6 +164,11 @@ def apply_input(state: ConversationState, text: str, *, now: datetime | None = N
     rule = _rule_for(state)
     if rule is None:
         return StateTransition(state, consumed=False)
+    # This is a control command handled by the appointment handler. Do not
+    # validate it as a time value or store it as ``preferred_time``.
+    if state.flow_id == "appointment" and state.step_id == "preferred_time":
+        if str(text or "").strip() == "ระบุเวลาเอง":
+            return StateTransition(state, consumed=False)
     value = _normalize_value(rule, text)
     if value is None:
         return StateTransition(state, consumed=True, validation_message=_validation_message(rule))
