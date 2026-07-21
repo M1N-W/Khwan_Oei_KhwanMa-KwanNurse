@@ -230,6 +230,22 @@ class LlmProviderTests(unittest.TestCase):
             result = llm_mod.complete("sys", "user")
             self.assertIn("ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว", result)
 
+    def test_all_keys_on_cooldown_do_not_send_another_request(self):
+        import requests
+        with patch("services.llm.LLM_PROVIDER", "gemini"), \
+             patch("services.llm.GEMINI_API_KEYS", ["key1", "key2"]), \
+             patch("services.llm.requests.post") as mock_post:
+            from services import llm as llm_mod
+            llm_mod._reset_state_for_tests()
+            with llm_mod._cooldown_lock:
+                llm_mod._key_cooldowns["key1"] = time.time() + 60
+                llm_mod._key_cooldowns["key2"] = time.time() + 60
+
+            result = llm_mod.complete("sys", "user")
+
+            self.assertIn("ขณะนี้ระบบ AI มีผู้ใช้งานจำนวนมากชั่วคราว", result)
+            mock_post.assert_not_called()
+
 
 
 # ===========================================================================

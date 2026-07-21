@@ -115,8 +115,11 @@ def _execute_with_key_fallback(api_call_fn, model_name):
     with _cooldown_lock:
         available_keys = [k for k in keys_pool if _key_cooldowns.get(k, 0.0) <= now]
         if not available_keys:
-            available_keys = list(keys_pool)
-            _key_cooldowns.clear()
+            # All keys are rate-limited. Do not immediately clear cooldowns
+            # and send another burst to the same quota/project.
+            raise requests.exceptions.RetryError(
+                "All configured Gemini keys are on cooldown"
+            )
             
     keys_to_try = list(available_keys)
     random.shuffle(keys_to_try)
@@ -465,7 +468,9 @@ def complete_image_json(system, user_text, image_bytes, mime_type="image/jpeg", 
     # routing or preview aliases that may not support multimodal JSON.
     model_name = LLM_VISION_MODEL or _resolve_model()
 
-    for attempt in range(3):
+    # _execute_with_key_fallback already tries each available key once.
+    # Retrying the whole key pool multiplies 429/503 traffic for one image.
+    for attempt in range(1):
         start = time.time()
         try:
             if LLM_PROVIDER == "gemini":
@@ -637,10 +642,12 @@ def _get_state_snapshot():
 
 
 def _reset_state_for_tests():
-    """Test-only hook to reset circuit + counters."""
+    """Test-only hook to reset circuit, counters, and key cooldowns."""
     with _state_lock:
         _state["consecutive_failures"] = 0
         _state["circuit_open_until"] = 0.0
         _state["call_date"] = date.today()
         _state["calls_today"] = 0
         _state["vision_calls_today"] = 0
+    with _cooldown_lock:
+        _key_cooldowns.clear()
