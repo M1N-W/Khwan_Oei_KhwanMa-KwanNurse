@@ -29,6 +29,7 @@ from config import (
     GEMINI_API_KEYS,
     GEMINI_API_URL,
     GEMINI_DEFAULT_MODEL,
+    LLM_JSON_MAX_ATTEMPTS,
     LLM_MODEL,
     LLM_TIMEOUT_SECONDS,
     LLM_MAX_OUTPUT_TOKENS,
@@ -351,7 +352,7 @@ def complete_json(system, user, max_tokens=None, intent=None):
     Convenience wrapper: call `complete(want_json=True)` and parse JSON.
     Returns dict/list or None on any failure (including invalid JSON).
     """
-    for attempt in range(3):
+    for attempt in range(max(1, LLM_JSON_MAX_ATTEMPTS)):
         raw = complete(system, user, max_tokens=max_tokens, want_json=True, intent=intent)
         if not raw or raw.startswith("🚨"):
             continue

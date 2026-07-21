@@ -85,8 +85,8 @@ def get_nurse_contact_message():
     from config import NURSE_CONTACT_LINK
     return (
         "👩🏻‍⚕️ ติดต่อพยาบาลขวัญเรือนโดยตรงค่ะ\n\n"
-        "LINE ID: 0899181839\n"
-        f"กดลิงก์นี้เพื่อเปิดแชตพยาบาลได้เลยนะคะ\n{NURSE_CONTACT_LINK}"
+        "LINE ID: 0899181839\n\n"
+        f"กดลิงก์นี้เพื่อแชทกับพยาบาลนะคะ\n{NURSE_CONTACT_LINK}"
     )
 
 
@@ -466,7 +466,7 @@ def handle_after_hours_choice(user_id, choice_text):
                     "✅ บันทึกคำขอของคุณเรียบร้อยแล้วค่ะ\n\n"
                     "📋 ทีมพยาบาลจะติดต่อกลับในวันทำการถัดไป\n"
                     f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
-                    "หากมีอาการฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+                    "หากมีอาการฉุกเฉิน กรุณาโทร 1669"
                 )
             }
 
@@ -502,7 +502,7 @@ def handle_after_hours_choice(user_id, choice_text):
                             "✅ บันทึกคำขอของคุณเรียบร้อยแล้วค่ะ\n\n"
                             "📋 ทีมพยาบาลจะติดต่อกลับในวันทำการถัดไป\n"
                             f"🕐 เวลาทำการ: {OFFICE_HOURS['start']}-{OFFICE_HOURS['end']} น.\n\n"
-                            "หากมีอาการฉุกเฉิน กรุณาโทร 1669 ทันทีค่ะ"
+                            "หากมีอาการฉุกเฉิน กรุณาโทร 1669"
                         )
                     }
             # ตอบค่าไม่ตรงหรืออยู่ในเวลาทำการ ให้แสดง menu ซ้ำ

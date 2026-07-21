@@ -99,7 +99,7 @@ def create_app():
 
     # Log startup information
     logger.info("=" * 60)
-    logger.info("ขวัญเอ๋ยขวัญมา-บอท v5.0 - COMPLETE!")
+    logger.info("ขวัญเอ๋ยขวัญมา - COMPLETE!")
     logger.info("=" * 60)
     logger.info("Debug Mode: %s", DEBUG)
     logger.info("Features (6/6 - 100%%): ")
@@ -108,7 +108,7 @@ def create_app():
     logger.info("  3. ✅ RequestAppointment")
     logger.info("  4. ✅ GetKnowledge")
     logger.info("  5. ✅ FollowUpReminders")
-    logger.info("  6. ✅ Teleconsult ⭐ NEW")
+    logger.info("  6. ✅ Teleconsult")
     logger.info("=" * 60)
     logger.info("🎉 ALL FEATURES COMPLETE!")
     logger.info("=" * 60)

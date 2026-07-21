@@ -142,7 +142,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "That citizen ID is invalid. Please send a valid 13-digit citizen ID.",
     },
     "identity.confirm": {
-        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nบัตรประชาชน: {citizen_id}\nโทร: {phone}\n\n💡 พิมพ์ ‘ข้อมูลของฉัน’ เพื่อดูข้อมูล หรือ ‘แก้ไขข้อมูล’ เมื่อต้องการเปลี่ยนแปลงค่ะ",
+        "th": "✅ ข้อมูลลงทะเบียนครบแล้ว\n\nชื่อ: {first_name} {last_name}\nHN: {hn}\nบัตรประชาชน: {citizen_id}\nโทร: {phone}\n\n💡 พิมพ์ ‘ข้อมูลของฉัน’ เพื่อดูข้อมูล\n‘แก้ไขข้อมูล’ เมื่อต้องการเปลี่ยนแปลงค่ะ",
         "en": "✅ Registration information is complete.\n\nName: {first_name} {last_name}\nHN: {hn}\nCitizen ID: {citizen_id}\nPhone: {phone}\n\n💡 Type ‘My profile’ to view your information or ‘Edit my profile’ to update it.",
     },
     "identity.save_error": {

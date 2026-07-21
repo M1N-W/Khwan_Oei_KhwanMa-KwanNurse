@@ -97,6 +97,14 @@ _KB_NAV_QUICK_REPLIES = [
     quick_reply_item("🏥 ปรึกษาพยาบาล", "ปรึกษาพยาบาล"),
 ]
 
+_KB_TOPIC_QUICK_REPLIES = [
+    quick_reply_item("🩹 การดูแลแผล", "การดูแลแผล"),
+    quick_reply_item("🏃 กายภาพบำบัด", "กายภาพบำบัด"),
+    quick_reply_item("🩸 ป้องกันลิ่มเลือด", "ป้องกันลิ่มเลือด"),
+    quick_reply_item("💊 การรับประทานยา", "การรับประทานยา"),
+    quick_reply_item("🚨 สัญญาณอันตราย", "สัญญาณอันตราย"),
+]
+
 # After-hours choice quick replies (Task 4A).
 _AFTER_HOURS_QUICK_REPLIES = [
     quick_reply_item("⏳ รอเวลาทำการ", "รอเวลาทำการ"),
@@ -133,7 +141,10 @@ def handle_get_knowledge(user_id, params, query_text=""):
     if (not topic_str or topic_str.lower() in _KNOWLEDGE_MENU_TRIGGERS) and \
        (not query_text or query_text.lower().strip() in _KNOWLEDGE_MENU_TRIGGERS):
         result = get_knowledge_menu()
-        return jsonify({"fulfillmentText": result}), 200
+        return jsonify(_make_dialogflow_response(
+            result,
+            quick_replies=_KB_TOPIC_QUICK_REPLIES,
+        )), 200
 
     # 1. Try Dialogflow-extracted topic first
     resolved = _resolve_knowledge_topic(topic_str) if topic_str else None
@@ -293,6 +304,40 @@ def handle_cancel_consultation(user_id):
 
 def handle_unknown_intent(intent):
     """Handle unknown/unhandled intents"""
+    # Dialogflow can emit a fallback intent while an active slot-filling
+    # context is still present; recover the owned flow before showing a menu.
+    try:
+        from flask import has_request_context, request
+        if has_request_context():
+            req = request.get_json(silent=True, force=True) or {}
+            query_result = req.get("queryResult") or {}
+            contexts = query_result.get("outputContexts") or []
+            symptom_context = next(
+                (
+                    context for context in contexts
+                    if "reportsymptoms_dialog_context" in str(context.get("name", ""))
+                    and int(context.get("lifespanCount", 0) or 0) > 0
+                ),
+                None,
+            )
+            if symptom_context is not None:
+                from routes.webhook.handlers.symptoms import handle_report_symptoms
+                params = dict(symptom_context.get("parameters") or {})
+                params.update(query_result.get("parameters") or {})
+                text = str(query_result.get("queryText") or "").strip()
+                for slot in ("pain_score", "wound_status", "fever_check", "mobility_status"):
+                    if not str(params.get(slot) or "").strip():
+                        params[slot] = text
+                        break
+                logger.info(
+                    "Recovered fallback intent into ReportSymptoms: query_len=%d",
+                    len(text),
+                )
+                return handle_report_symptoms(
+                    req.get("session", "").split("/")[-1], params,
+                )
+    except Exception:
+        logger.exception("Active symptom fallback recovery failed")
     logger.warning("Unhandled intent: %s", intent)
     return jsonify({
         "fulfillmentText": (

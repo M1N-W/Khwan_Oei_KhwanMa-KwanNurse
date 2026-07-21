@@ -187,19 +187,20 @@ def _llm_refine(profile, rule_result):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def recommend_guides(profile, top_n=3):
+def recommend_guides(profile, top_n=3, use_llm=True):
     """
     Return ordered recommendations for the given patient profile.
 
     Args:
         profile: dict with any subset of {age, sex, surgery_type, diseases}
         top_n: truncate result to this many items (0/None = all)
+        use_llm: allow the optional network-backed refinement step
 
     Returns:
         list of dicts: [{key, title, reason, source}, ...]
     """
     rule_result = _rule_based_rank(profile)
-    refined = _llm_refine(profile, rule_result)
+    refined = _llm_refine(profile, rule_result) if use_llm else None
     result = refined if refined else rule_result
     if top_n:
         return result[:top_n]

@@ -203,7 +203,9 @@ def handle_report_symptoms(user_id, params):
             from services.education import recommend_guides
             from services.line_message import build_education_carousel, push_rich_message
             profile = get_or_build_profile(user_id, params)
-            recs = recommend_guides(profile, top_n=3)
+            # Webhook latency budget: keep the patient reply rule-based. The
+            # optional Gemini refinement is network-bound and belongs off-path.
+            recs = recommend_guides(profile, top_n=3, use_llm=False)
             if recs:
                 carousel = build_education_carousel(recs)
                 push_rich_message([carousel], user_id)

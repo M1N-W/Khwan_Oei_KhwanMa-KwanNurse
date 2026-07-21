@@ -15,6 +15,57 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 class ConsultationRoutingTests(unittest.TestCase):
+    def test_followup_command_overrides_misclassified_registration_intent(self):
+        from app import create_app
+
+        app = create_app()
+        payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "ติดตามหลังให้ยา",
+                "intent": {"displayName": "StartRegistration"},
+                "parameters": {},
+            },
+        }
+        with patch("routes.webhook.handler._dispatch_intent", return_value=({"fulfillmentText": "ติดตาม"}, 200)) as dispatch, \
+             patch("database.patient_profile.read_patient_profile_result") as profile_read:
+            profile_read.return_value = type("ProfileResult", (), {
+                "available": True,
+                "profile": {"first_name": "A", "last_name": "B", "hn": "H1", "phone": "0812345678", "consent_granted": True},
+            })()
+            response = app.test_client().post("/webhook", json=payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("GetFollowUpSummary", "U1", {}, "ติดตามหลังให้ยา")
+
+    def test_symptom_choice_recovers_from_dialogflow_fallback_context(self):
+        from app import create_app
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "2",
+                "intent": {"displayName": "Default Fallback Intent"},
+                "parameters": {},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/reportsymptoms_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {},
+                }],
+            },
+        }
+        with patch("routes.webhook.handler._dispatch_intent", return_value=({"fulfillmentText": "สภาพแผล"}, 200)) as dispatch, \
+             patch("database.patient_profile.read_patient_profile_result") as profile_read:
+            profile_read.return_value = type("ProfileResult", (), {
+                "available": True,
+                "profile": {"first_name": "A", "last_name": "B", "hn": "H1", "phone": "0812345678", "consent_granted": True},
+            })()
+            response = app.test_client().post("/webhook", json=request_payload)
+
+        self.assertEqual(response.status_code, 200)
+        dispatch.assert_called_once_with("ReportSymptoms", "U1", {"pain_score": "2"}, "2")
+
     def test_wound_photo_command_is_not_routed_to_knowledge(self):
         from app import create_app
 

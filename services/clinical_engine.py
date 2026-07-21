@@ -375,7 +375,7 @@ def evaluate_personal_risk(inputs: PersonalClinicalInput) -> PersonalClinicalOut
     diseases_str = ", ".join(disease_normalized) if disease_normalized else "ไม่มีโรคประจำตัว"
     
     message = f"{emoji} ผลประเมินความเสี่ยงส่วนบุคคล\n"
-    message += "=" * 35 + "\n\n"
+    message += "=" * 25 + "\n\n"
     message += "👤 ข้อมูลพื้นฐาน\n"
     message += f"  • อายุ: {age_val if age_val is not None else '-'} ปี\n"
     message += f"  • น้ำหนัก: {weight_val if weight_val is not None else '-'} กก.\n"

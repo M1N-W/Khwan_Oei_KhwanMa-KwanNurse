@@ -431,6 +431,11 @@ def register_routes(app):
                 "ส่งรูปแผล", "ส่งภาพแผล", "ถ่ายรูปแผล",
             }
             is_top_level_command = normalized_query in top_level_commands
+            is_explicit_command = is_top_level_command
+            is_ai_control_command = normalized_query in {
+                "คุยกับเอไอ", "โหมดเอไอ", "เปิดเอไอ", "ปรึกษาเอไอ", "คุยกับai", "โหมดai",
+                "ออกจากเอไอ", "ปิดเอไอ", "ออกจากai", "ปิดai", "คุยกับพยาบาล", "ยกเลิก", "ออก",
+            }
             is_flow_command = normalized_query in {
                 "รายงานอาการ", "แจ้งอาการ",
                 "ประเมินความเสี่ยง", "ประเมินความเสี่ยงส่วนบุคคล",
@@ -671,6 +676,7 @@ def register_routes(app):
                 if (
                     intent != "RequestWoundImage"
                     and not is_flow_command
+                    and (not is_explicit_command or is_ai_control_command)
                     and read_result
                     and read_result.available
                     and read_result.profile
@@ -704,6 +710,9 @@ def register_routes(app):
                     params = {}
                 elif cleaned_query in ("ความรู้", "เมนูความรู้", "เมนูความรู้หลัก", "คู่มือ"):
                     intent = "GetKnowledge"
+                    params = {}
+                elif cleaned_query in ("ติดตามหลังให้ยา", "ติดตามอาการ", "ติดตามหลังจำหน่าย", "ติดตาม"):
+                    intent = "GetFollowUpSummary"
                     params = {}
                 elif cleaned_query in ("ปรึกษาพยาบาล", "ติดต่อพยาบาล", "คุยกับพยาบาล"):
                     intent = "ContactNurse"

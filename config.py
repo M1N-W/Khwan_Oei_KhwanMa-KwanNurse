@@ -239,6 +239,7 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "").strip()
 # is slow.
 LLM_TIMEOUT_SECONDS = float(os.environ.get("LLM_TIMEOUT_SECONDS", "8"))
 LLM_MAX_OUTPUT_TOKENS = int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "500"))
+LLM_JSON_MAX_ATTEMPTS = int(os.environ.get("LLM_JSON_MAX_ATTEMPTS", "2"))
 
 # Safety rails
 LLM_DAILY_CALL_LIMIT = int(os.environ.get("LLM_DAILY_CALL_LIMIT", "1000"))
