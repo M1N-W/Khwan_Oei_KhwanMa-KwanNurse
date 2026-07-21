@@ -27,7 +27,10 @@
 
             <div class="field">
                 <label for="password">รหัสผ่าน</label>
-                <input class="input" type="password" id="password" name="password" required autocomplete="current-password">
+                <div class="password-input-wrap">
+                    <input class="input" type="password" id="password" name="password" required autocomplete="current-password">
+                    <button type="button" class="password-toggle" data-password-toggle="password" aria-controls="password" aria-pressed="false">แสดง</button>
+                </div>
             </div>
 
             <button type="submit" class="btn btn-primary full-width">เข้าสู่ระบบ</button>

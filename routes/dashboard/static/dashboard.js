@@ -41,6 +41,30 @@
     });
   }
 
+  function bindPasswordToggles(root) {
+    var scope = root || document;
+    if (typeof scope.querySelectorAll !== "function") {
+      return;
+    }
+    var toggles = scope.querySelectorAll("[data-password-toggle]");
+    toggles.forEach(function (button) {
+      if (button.dataset.passwordToggleBound === "1") {
+        return;
+      }
+      var input = document.getElementById(button.dataset.passwordToggle);
+      if (!input) {
+        return;
+      }
+      button.dataset.passwordToggleBound = "1";
+      button.addEventListener("click", function () {
+        var visible = input.type === "text";
+        input.type = visible ? "password" : "text";
+        button.textContent = visible ? "แสดง" : "ซ่อน";
+        button.setAttribute("aria-pressed", visible ? "false" : "true");
+      });
+    });
+  }
+
   function bindModalControls(root) {
     var scope = root || document;
     if (typeof scope.querySelectorAll !== "function") {
@@ -178,6 +202,7 @@
 
   function boot(root) {
     bindConfirmForms(root || document);
+    bindPasswordToggles(root || document);
     bindModalControls(root || document);
     scheduleTrendChart();
   }

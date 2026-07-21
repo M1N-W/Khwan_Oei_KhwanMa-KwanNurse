@@ -502,9 +502,8 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     
     message += (
         f"📆 วัน: {date_display}\n"
-        f"🕐 เวลา: {preferred_time} น.\n"
+        f"🕐 เวลา: {preferred_time}\n"
         f"💬 เรื่อง: {reason}\n\n"
-        f"⚡ โปรดตรวจสอบและยืนยันนัด\n"
         f"📊 ดูรายละเอียด: {WORKSHEET_LINK}"
     )
     

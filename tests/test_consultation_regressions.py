@@ -320,6 +320,37 @@ class AppointmentStateTests(unittest.TestCase):
         self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
         self.assertEqual(payload["outputContexts"][0]["parameters"]["preferred_time"], "09:00")
 
+    def test_dialogflow_time_choice_cannot_complete_appointment_as_reason(self):
+        from app import create_app
+        from routes.webhook.handlers.symptoms import handle_request_appointment
+
+        app = create_app()
+        request_payload = {
+            "session": "projects/p/agent/sessions/U1",
+            "queryResult": {
+                "queryText": "เช้า",
+                "parameters": {"reason": "เช้า"},
+                "outputContexts": [{
+                    "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                    "lifespanCount": 5,
+                    "parameters": {
+                        "apt_day": "25",
+                        "apt_month": "11",
+                        "apt_year": "2026",
+                    },
+                }],
+            },
+        }
+        with app.test_request_context("/webhook", json=request_payload):
+            response, status = handle_request_appointment(
+                "U1", request_payload["queryResult"]["parameters"]
+            )
+
+        payload = response.get_json()
+        self.assertEqual(status, 200)
+        self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
+        self.assertNotIn("reason", payload["outputContexts"][0]["parameters"])
+
     def test_past_date_response_clears_date_slots_for_restart(self):
         from app import create_app
         from routes.webhook.handlers.symptoms import handle_request_appointment

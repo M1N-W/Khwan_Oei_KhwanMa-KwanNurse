@@ -473,6 +473,15 @@ def handle_request_appointment(user_id, params):
                 time_collected_this_turn = True
                 output_contexts = appointment_context()
 
+    # Dialogflow may copy a quick-reply time choice into ``reason`` on the
+    # same turn. It is a time answer, never the appointment subject.
+    time_choice_text = query_text.strip().lower()
+    if (
+        time_choice_text in {"เช้า", "บ่าย", "ระบุเวลาเอง"}
+        and str(merged_params.get("reason") or "").strip().lower() == time_choice_text
+    ):
+        merged_params.pop("reason", None)
+
     if not merged_params.get("preferred_time"):
         quick_replies = [
             quick_reply_item("🟢 ช่วงเช้า (09:00 - 12:00)", "เช้า"),

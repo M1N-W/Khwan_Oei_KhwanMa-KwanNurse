@@ -108,6 +108,7 @@ class LoginFormTests(DashboardAuthTestBase):
         body = resp.get_data(as_text=True)
         self.assertIn('name="csrf_token"', body)
         self.assertIn("เข้าสู่ระบบ", body)
+        self.assertIn('data-password-toggle="password"', body)
 
     def test_get_login_sets_session_cookie_with_csrf(self):
         resp = self.client.get("/dashboard/login")

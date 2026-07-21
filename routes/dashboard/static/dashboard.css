@@ -135,6 +135,34 @@ textarea {
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16);
 }
 
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input-wrap .input {
+  padding-right: 64px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--brand-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 4px;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .topbar {
   position: sticky;
   top: 0;
