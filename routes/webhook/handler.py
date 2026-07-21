@@ -1006,11 +1006,11 @@ def handle_line_image_event(event):
             )
         if NURSE_GROUP_ID:
             try:
-                from services.notification import _get_patient_prefix_label
+                from services.notification import _format_patient_lines, _get_patient_prefix_label
                 patient_label = _get_patient_prefix_label(user_id)
                 send_line_push(
                     f"📸 ผู้ป่วยส่งรูปแผล (AI ไม่พร้อม)\n"
-                    f"👤 ผู้ป่วย: {patient_label}\n"
+                    f"{_format_patient_lines(patient_label)}\n"
                     f"กรุณาตรวจสอบรูปใน LINE",
                     NURSE_GROUP_ID,
                 )

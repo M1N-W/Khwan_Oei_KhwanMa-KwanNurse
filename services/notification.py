@@ -4,6 +4,7 @@ Notification Service Module
 Handles LINE push notifications
 """
 import time
+import re
 import requests
 from typing import Optional
 from config import (
@@ -209,6 +210,21 @@ def _get_patient_prefix_label(user_id: str) -> str:
     return "ไม่ระบุชื่อ (ยังไม่ลงทะเบียน)"
 
 
+def _format_patient_lines(patient_label: str, prefix: str = "👤 ผู้ป่วย") -> str:
+    """Keep patient name and HN on separate mobile-safe lines."""
+    label = str(patient_label or "ไม่ระบุชื่อ").strip()
+    match = re.match(r"^(.*?)\s*\(HN:\s*([^)]*)\)$", label)
+    if match:
+        name, hn = match.group(1).strip(), match.group(2).strip()
+        return f"{prefix}: {name or 'ไม่ระบุชื่อ'}\n🏥 HN: {hn or '-'}"
+    return f"{prefix}: {label}"
+
+
+def _dashboard_hint() -> str:
+    """Avoid embedding the long Sheets URL in mobile plain-text alerts."""
+    return "📊 ดูรายละเอียดเพิ่มเติมได้ที่ Nurse Dashboard"
+
+
 def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level, risk_score):
     """
     Build notification message for symptom report
@@ -218,7 +234,7 @@ def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level
     message = (
         "🚨 รายงานอาการเร่งด่วน\n"
         "────────\n"
-        f"👤 {patient_label}\n"
+        f"{_format_patient_lines(patient_label)}\n"
         f"⚠️ ความเสี่ยง: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         "📋 อาการ\n"
@@ -228,8 +244,7 @@ def build_symptom_notification(user_id, pain, wound, fever, mobility, risk_level
         f"• เคลื่อนไหว: {mobility}\n\n"
         "⚡ กรุณาตรวจสอบทันที"
     )
-    if WORKSHEET_LINK:
-        message += f"\n📎 ข้อมูล: {WORKSHEET_LINK}"
+    message += f"\n{_dashboard_hint()}"
     return message
 
 
@@ -242,7 +257,7 @@ def build_risk_notification(user_id, age, bmi, diseases_str, risk_level, risk_sc
     message = (
         f"🆕 ผู้ป่วยกลุ่มเสี่ยงสูง!\n"
         f"───────────────\n"
-        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"{_format_patient_lines(patient_label)}\n"
         f"⚠️ ระดับ: {risk_level}\n"
         f"📊 คะแนน: {risk_score}\n\n"
         f"📋 ข้อมูล:\n"
@@ -250,7 +265,7 @@ def build_risk_notification(user_id, age, bmi, diseases_str, risk_level, risk_sc
         f"  • BMI: {bmi:.1f}\n"
         f"  • โรค: {diseases_str}\n\n"
         f"⚡ โปรดวางแผนติดตามใกล้ชิด\n"
-        f"📊 ดูข้อมูล: {WORKSHEET_LINK}"
+        f"{_dashboard_hint()}"
     )
     return message
 
@@ -435,14 +450,14 @@ def build_wound_alert_message(
     return (
         "📸 ภาพแผลผู้ป่วยใหม่!\n"
         "───────────────\n"
-        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"{_format_patient_lines(patient_label)}\n"
         f"{severity_emoji} ความรุนแรง: {severity_label}\n"
         f"🎯 ความมั่นใจ AI: {confidence_pct}%\n\n"
         "📋 ข้อสังเกต:\n"
         f"{obs_lines}\n\n"
         f"💡 คำแนะนำเบื้องต้น: {advice or '-'}\n\n"
         "⚡ กรุณาตรวจสอบรูปต้นฉบับใน LINE\n"
-        f"📊 ดูข้อมูล: {WORKSHEET_LINK}"
+        f"{_dashboard_hint()}"
     )
 
 
@@ -492,7 +507,7 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
     message = (
         f"📅 การนัดหมายใหม่!\n"
         f"───────────────\n"
-        f"👤 ผู้ป่วย: {patient_label}\n"
+        f"{_format_patient_lines(patient_label)}\n"
     )
     
     if name:
@@ -504,7 +519,7 @@ def build_appointment_notification(user_id, name, phone, preferred_date, preferr
         f"📆 วัน: {date_display}\n"
         f"🕐 เวลา: {preferred_time}\n"
         f"💬 เรื่อง: {reason}\n\n"
-        f"📊 ดูรายละเอียด: {WORKSHEET_LINK}"
+        f"{_dashboard_hint()}"
     )
     
     return message
@@ -529,7 +544,7 @@ def build_emergency_text_alert(user_id: str, description: str) -> str:
             name = name[:-len(last)].strip()
     if not name:
         name = "ไม่ระบุชื่อ"
-    hn_str = f" (HN: {hn})" if hn else ""
+    hn_line = f"🏥 HN: {hn}\n" if hn else ""
 
     desc = description.strip() if description and description.strip() else "แจ้งเหตุฉุกเฉิน (นอกเวลาทำการ)"
     from datetime import datetime
@@ -538,7 +553,8 @@ def build_emergency_text_alert(user_id: str, description: str) -> str:
 
     return (
         f"🚨🚨 เรื่องฉุกเฉิน 🚨🚨\n\n"
-        f"👤 ผู้ป่วย: {name}{hn_str}\n"
+        f"👤 ผู้ป่วย: {name}\n"
+        f"{hn_line}"
         f"💬 อาการ: {desc}\n"
         f"🕐 เวลา: {time_str}\n\n"
         f"⚠️ กรุณาติดต่อกลับภายใน 5 นาที"

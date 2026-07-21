@@ -550,7 +550,8 @@ class AlertFormattingTests(unittest.TestCase):
                 "U-secret", 0, "บวมแดง", "มีไข้", "เดินได้", "เสี่ยงสูง", 4
             )
 
-        self.assertIn("นายทดสอบ (HN: 123)", message)
+        self.assertIn("👤 ผู้ป่วย: นายทดสอบ", message)
+        self.assertIn("🏥 HN: 123", message)
         self.assertIn("⚡ กรุณาตรวจสอบทันที", message)
         self.assertNotIn("User ID", message)
         self.assertNotIn("Flags", message)

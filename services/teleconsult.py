@@ -609,12 +609,12 @@ def alert_nurse_new_request(session, queue_info):
         
         queue_status = get_queue_status()
         
-        from services.notification import _get_patient_prefix_label
+        from services.notification import _format_patient_lines, _get_patient_prefix_label
         patient_label = _get_patient_prefix_label(session.get('user_id', ''))
         description = str(session.get('description') or '').strip()
         message = (
             f"🔔 คำขอปรึกษาใหม่\n\n"
-            f"👤 ผู้ป่วย: {patient_label}\n"
+            f"{_format_patient_lines(patient_label)}\n"
             f"📋 ประเภท: {icon} {name_th}\n"
             f"⚠️ ระดับ: {priority_text}\n"
             f"💬 รายละเอียด: {description or 'ไม่ระบุ'}\n\n"

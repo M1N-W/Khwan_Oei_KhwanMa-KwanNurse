@@ -92,7 +92,8 @@ class TeleconsultServiceTests(unittest.TestCase):
         alert_nurse_new_request(session, {"estimated_wait": 15})
 
         message = mock_push.call_args.args[0]
-        self.assertIn("สมชาย ใจดี (HN: HN001)", message)
+        self.assertIn("👤 ผู้ป่วย: สมชาย ใจดี", message)
+        self.assertIn("🏥 HN: HN001", message)
         self.assertNotIn("U_INTERNAL", message)
         self.assertNotIn("TC_INTERNAL", message)
         self.assertIn("💊 ถามเรื่องยา", message)

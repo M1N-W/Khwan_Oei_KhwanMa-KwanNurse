@@ -164,8 +164,7 @@ def analyze_symptom_trend(reports):
 
 def _format_alert(user_id, analysis, reports):
     """Build the Thai alert message for the nurse group."""
-    from services.notification import _get_patient_prefix_label
-    from config import WORKSHEET_LINK
+    from services.notification import _dashboard_hint, _format_patient_lines, _get_patient_prefix_label
 
     patient_label = _get_patient_prefix_label(user_id)
 
@@ -185,7 +184,7 @@ def _format_alert(user_id, analysis, reports):
     lines = [
         "⚠️ Early-Warning: ตรวจพบแนวโน้มน่ากังวล",
         "───────────────",
-        f"👤 ผู้ป่วย: {patient_label}",
+        _format_patient_lines(patient_label),
         f"📈 คะแนนสูงสุดในช่วง: {analysis['max_score']}",
         "",
         "🔎 สัญญาณที่ตรวจพบ:",
@@ -199,8 +198,7 @@ def _format_alert(user_id, analysis, reports):
         ts_str = ts.strftime("%d/%m %H:%M") if ts else "-"
         lines.append(f"\n🕐 รายงานล่าสุด: {ts_str} ({latest.get('risk_level', '-')})")
     lines.append("\n💡 แนะนำ: ติดต่อผู้ป่วยเพื่อประเมินซ้ำ")
-    if WORKSHEET_LINK:
-        lines.append(f"📊 ดูข้อมูล: {WORKSHEET_LINK}")
+    lines.append(_dashboard_hint())
     return "\n".join(lines)
 
 
