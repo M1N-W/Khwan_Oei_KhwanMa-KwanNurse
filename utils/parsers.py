@@ -175,6 +175,9 @@ def resolve_time_from_params(sys_time_param, timeofday_param):
         
     for param in (sys_time_param, timeofday_param):
         if param and isinstance(param, str):
+            direct_key = param.strip().lower()
+            if direct_key in TIME_OF_DAY_MAP:
+                return TIME_OF_DAY_MAP[direct_key]
             t_col = parse_thai_colloquial_time(param)
             if t_col:
                 return t_col

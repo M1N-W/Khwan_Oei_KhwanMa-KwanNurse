@@ -50,7 +50,11 @@ def _get_or_create_sheet():
         sheet = spreadsheet.add_worksheet(
             title=SHEET_VOICE_LOG, rows=1000, cols=len(_HEADER),
         )
-        sheet.append_row(_HEADER, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(_HEADER, value_input_option="USER_ENTERED"),
+            op_name="voice_logs.init_headers",
+        )
         logger.info("voice_logs: auto-created sheet '%s'", SHEET_VOICE_LOG)
         return sheet
     except Exception:
@@ -90,7 +94,11 @@ def save_voice_message(
             str(int(transcription_length or 0)),
             (status or "")[:30],
         ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="voice_logs.append",
+        )
         logger.info(
             "voice_logs: appended user=%s status=%s len=%d duration=%ss mime=%s",
             user_id, status, transcription_length, duration_sec or 0, mime_type,

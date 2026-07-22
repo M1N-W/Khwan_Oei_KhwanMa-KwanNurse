@@ -61,7 +61,11 @@ def _get_or_create_sheet():
         sheet = spreadsheet.add_worksheet(
             title=SHEET_EDUCATION_LOG, rows=1000, cols=len(_HEADER),
         )
-        sheet.append_row(_HEADER, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(_HEADER, value_input_option="USER_ENTERED"),
+            op_name="education_logs.init_headers",
+        )
         logger.info("education_logs: auto-created sheet '%s'", SHEET_EDUCATION_LOG)
         return sheet
     except Exception:

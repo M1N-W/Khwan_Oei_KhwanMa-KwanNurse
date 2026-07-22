@@ -52,10 +52,10 @@ from database.sheets import get_spreadsheet
 REQUIRED_SHEETS = {
     SHEET_SYMPTOM_LOG: ["Timestamp", "User_ID", "Pain", "Wound", "Fever", "Mobility", "Risk_Level", "Risk_Score"],
     SHEET_RISK_PROFILE: ["Timestamp", "User_ID", "Age", "Weight", "Height", "BMI", "Diseases", "Risk_Level", "Risk_Score"],
-    SHEET_APPOINTMENTS: ["Timestamp", "User_ID", "Name", "Phone", "Preferred_Date", "Preferred_Time", "Reason", "Status", "Assigned_To", "Notes"],
+    SHEET_APPOINTMENTS: ["Timestamp", "User_ID", "Name", "Phone", "Preferred_Date", "Preferred_Time", "Reason", "Status", "Assigned_To", "Notes", "Idempotency_Key"],
     SHEET_FOLLOW_UP_REMINDERS: ["Timestamp", "User_ID", "Reminder_Type", "Status", "Response_Text", "Message_Sent", "Response_Timestamp"],
     SHEET_REMINDER_SCHEDULES: ["Created_At", "User_ID", "Discharge_Date", "Reminder_Type", "Scheduled_Date", "Status", "Notes", "Claimed_By", "Claimed_At", "Retry_Count", "Last_Error", "Last_Attempt_At"],
-    SHEET_TELECONSULT_SESSIONS: ["Session_ID", "Timestamp", "User_ID", "Issue_Type", "Priority", "Status", "Description", "Queue_Position", "Assigned_Nurse", "Started_At", "Completed_At", "Notes"],
+    SHEET_TELECONSULT_SESSIONS: ["Session_ID", "Timestamp", "User_ID", "Issue_Type", "Priority", "Status", "Description", "Queue_Position", "Assigned_Nurse", "Started_At", "Completed_At", "Notes", "Idempotency_Key"],
     SHEET_TELECONSULT_QUEUE: ["Queue_ID", "Timestamp", "Session_ID", "User_ID", "Issue_Type", "Priority", "Status", "Estimated_Wait"],
     SHEET_WOUND_ANALYSIS_LOG: ["Timestamp", "User_ID", "Severity", "Observations", "Advice", "Confidence", "Image_Size_KB", "Message_ID"],
     SHEET_PATIENT_PROFILE: ["User_ID", "Age", "Sex", "Surgery_Type", "Surgery_Date", "Diseases", "Updated_At", "First_Name", "Last_Name", "HN", "Phone", "Registration_Status", "Registered_At", "Consent_Version", "Consent_At", "Last_Active_At"],

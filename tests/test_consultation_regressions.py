@@ -351,6 +351,50 @@ class AppointmentStateTests(unittest.TestCase):
         self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
         self.assertNotIn("reason", payload["outputContexts"][0]["parameters"])
 
+    def test_all_time_of_day_choices_only_advance_to_reason(self):
+        from app import create_app
+        from routes.webhook.handlers.symptoms import handle_request_appointment
+
+        app = create_app()
+        expected_times = {
+            "เช้า": "09:00",
+            "สาย": "10:30",
+            "เที่ยง": "12:00",
+            "บ่าย": "14:00",
+            "เย็น": "18:00",
+            "กลางคืน": "20:00",
+            "ดึก": "20:00",
+        }
+
+        for time_choice, expected_time in expected_times.items():
+            request_payload = {
+                "session": "projects/p/agent/sessions/U1",
+                "queryResult": {
+                    "queryText": time_choice,
+                    "parameters": {"reason": time_choice},
+                    "outputContexts": [{
+                        "name": "projects/p/agent/sessions/U1/contexts/requestappointment_dialog_context",
+                        "lifespanCount": 5,
+                        "parameters": {
+                            "apt_day": "25",
+                            "apt_month": "11",
+                            "apt_year": "2026",
+                        },
+                    }],
+                },
+            }
+            with self.subTest(time_choice=time_choice), app.test_request_context(
+                "/webhook", json=request_payload
+            ):
+                response, status = handle_request_appointment("U1", {"reason": time_choice})
+
+            payload = response.get_json()
+            self.assertEqual(status, 200)
+            self.assertIn("เหตุผลการนัดหมาย", payload["fulfillmentText"])
+            context_params = payload["outputContexts"][0]["parameters"]
+            self.assertEqual(context_params["preferred_time"], expected_time)
+            self.assertNotIn("reason", context_params)
+
     def test_past_date_response_clears_date_slots_for_restart(self):
         from app import create_app
         from routes.webhook.handlers.symptoms import handle_request_appointment

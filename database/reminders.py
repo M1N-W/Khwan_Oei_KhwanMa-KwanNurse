@@ -69,7 +69,11 @@ def save_reminder_schedule(user_id, discharge_date, reminder_type, scheduled_dat
             notes               # Notes
         ]
         
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="reminders.append_schedule",
+        )
         logger.info(f"Scheduled {reminder_type} reminder for user {user_id} at {scheduled_str}")
         return True
         
@@ -108,7 +112,11 @@ def save_reminder_sent(user_id, reminder_type, message_text=""):
             ''                 # Response_Timestamp (empty for now)
         ]
         
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="reminders.append_sent",
+        )
         logger.info(f"Recorded reminder sent: {reminder_type} to {user_id}")
         
         # Update schedule status
@@ -164,7 +172,8 @@ def save_reminder_response(user_id, reminder_type, response_text):
                         response_col = headers.index('Response_Text') + 1 if 'Response_Text' in headers else 5
                         timestamp_col = headers.index('Response_Timestamp') + 1 if 'Response_Timestamp' in headers else 7
 
-                        sheet.batch_update([
+                        from database.retry import retry_sheet_op
+                        retry_sheet_op(lambda: sheet.batch_update([
                             {
                                 'range': f"{column_number_to_letter(status_col)}{row_num}",
                                 'values': [[ReminderStatus.RESPONDED]]
@@ -177,7 +186,7 @@ def save_reminder_response(user_id, reminder_type, response_text):
                                 'range': f"{column_number_to_letter(timestamp_col)}{row_num}",
                                 'values': [[response_timestamp]]
                             }
-                        ])
+                        ]), op_name="reminders.update_response")
                         
                         logger.info(f"Recorded response from {user_id} for {reminder_type}")
                         
@@ -197,7 +206,11 @@ def save_reminder_response(user_id, reminder_type, response_text):
             '',  # Message_Sent (unknown)
             timestamp  # Response_Timestamp
         ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="reminders.append_response",
+        )
         logger.warning(f"No 'sent' record found for {user_id}/{reminder_type}, created new responded record")
         
         return True
@@ -243,10 +256,14 @@ def update_schedule_status(user_id, reminder_type, new_status):
                     record.get('Reminder_Type') == reminder_type):
 
                     row_num = i + 1
-                    sheet.batch_update([{
-                        'range': f"{column_number_to_letter(status_col)}{row_num}",
-                        'values': [[new_status]]
-                    }])
+                    from database.retry import retry_sheet_op
+                    retry_sheet_op(
+                        lambda: sheet.batch_update([{
+                            'range': f"{column_number_to_letter(status_col)}{row_num}",
+                            'values': [[new_status]]
+                        }]),
+                        op_name="reminders.update_schedule_status",
+                    )
                     logger.info(f"Updated schedule status: {user_id}/{reminder_type} -> {new_status}")
                     return
                 
@@ -384,10 +401,14 @@ def check_no_response_reminders():
 
                             if hours_passed >= 24:
                                 row_num = i + 1
-                                sheet.batch_update([{
-                                    'range': f"{column_number_to_letter(status_col)}{row_num}",
-                                    'values': [[ReminderStatus.NO_RESPONSE]]
-                                }])
+                                from database.retry import retry_sheet_op
+                                retry_sheet_op(
+                                    lambda: sheet.batch_update([{
+                                        'range': f"{column_number_to_letter(status_col)}{row_num}",
+                                        'values': [[ReminderStatus.NO_RESPONSE]]
+                                    }]),
+                                    op_name="reminders.mark_no_response",
+                                )
 
                                 record['row_num'] = row_num
                                 record['hours_passed'] = hours_passed

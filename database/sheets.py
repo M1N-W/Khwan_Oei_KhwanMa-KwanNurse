@@ -4,6 +4,7 @@ Google Sheets Database Module
 Handles all interactions with Google Sheets
 """
 import base64
+import hashlib
 import gspread
 import json
 import os
@@ -26,6 +27,7 @@ import threading
 
 _thread_local = threading.local()
 _CLIENT_TTL_SECONDS = 3000  # 50 minutes
+_IDEMPOTENCY_LOCK = threading.RLock()
 
 
 def _get_local_cache():
@@ -211,6 +213,103 @@ def get_worksheet(sheet_name):
         return None
 
 
+def build_idempotency_key(namespace, payload):
+    """Build a stable, opaque key from a canonical JSON payload."""
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return f"{namespace}:v1:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def ensure_sheet_headers(sheet, required_headers, *, op_name="sheets.headers"):
+    """Read and add missing headers using the shared bounded retry policy."""
+    from database.retry import retry_sheet_op
+
+    values = retry_sheet_op(
+        lambda: sheet.get_all_values(), op_name=f"{op_name}.read",
+    ) or []
+    if not isinstance(values, list):
+        values = []
+    if not values:
+        retry_sheet_op(
+            lambda: sheet.append_row(list(required_headers), value_input_option="USER_ENTERED"),
+            op_name=f"{op_name}.append",
+        )
+        return list(required_headers)
+
+    headers = [str(header).strip() for header in values[0]]
+    missing = [header for header in required_headers if header not in headers]
+    if missing:
+        headers.extend(missing)
+        end_col = column_number_to_letter(len(headers))
+        retry_sheet_op(
+            lambda: sheet.update(
+                f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED",
+            ),
+            op_name=f"{op_name}.update",
+        )
+    return headers
+
+
+def find_sheet_row_by_key(sheet, key, key_header, *, op_name="sheets.find_key"):
+    """Return the newest row matching a key without mutating the sheet."""
+    from database.retry import retry_sheet_op
+
+    if not key:
+        return None
+    values = retry_sheet_op(
+        lambda: sheet.get_all_values(), op_name=op_name,
+    ) or []
+    if not isinstance(values, list):
+        values = []
+    if len(values) < 2:
+        return None
+    headers = [str(header).strip() for header in values[0]]
+    if key_header not in headers:
+        return None
+    key_index = headers.index(key_header)
+    for row in reversed(values[1:]):
+        if len(row) > key_index and str(row[key_index]).strip() == str(key):
+            padded = list(row) + [""] * max(0, len(headers) - len(row))
+            return dict(zip(headers, padded))
+    return None
+
+
+def append_row_if_absent(
+    sheet,
+    row,
+    key,
+    key_header,
+    *,
+    required_headers=(),
+    op_name="sheets.append_idempotent",
+):
+    """Append once per key; return False when the row already exists."""
+    from database.retry import retry_sheet_op
+
+    if not key:
+        raise ValueError("idempotency key is required")
+
+    with _IDEMPOTENCY_LOCK:
+        headers = ensure_sheet_headers(
+            sheet, list(required_headers) or [key_header], op_name=op_name,
+        )
+        existing = find_sheet_row_by_key(
+            sheet, key, key_header, op_name=f"{op_name}.find",
+        )
+        if existing is not None:
+            return False
+
+        padded_row = list(row) + [""] * max(0, len(headers) - len(row))
+        key_index = headers.index(key_header)
+        if len(padded_row) <= key_index or str(padded_row[key_index]).strip() != str(key):
+            raise ValueError(f"row does not contain {key_header}")
+        retry_sheet_op(
+            lambda: sheet.append_row(padded_row, value_input_option="USER_ENTERED"),
+            op_name=op_name,
+        )
+        return True
+
 def column_number_to_letter(n):
     """
     Convert a 1-based column number to A1-notation letters.
@@ -345,22 +444,31 @@ def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level, r
             logger.error("No gspread client available")
             return False
 
+        from database.retry import retry_sheet_op
+        headers = ensure_sheet_headers(
+            sheet,
+            ["Timestamp", "User_ID", "Age", "Weight", "Height", "BMI", "Diseases", "Risk_Level", "Risk_Score"],
+            op_name="risk_profile.headers",
+        )
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         diseases_str = ", ".join(diseases) if isinstance(diseases, list) else str(diseases)
-        
-        row = [
-            timestamp,
-            user_id,
-            age or "",
-            weight or "",
-            height or "",
-            f"{bmi:.1f}" if bmi > 0 else "",
-            diseases_str,
-            risk_level,
-            risk_score
-        ]
-        
-        sheet.append_row(row, value_input_option='USER_ENTERED')
+
+        record = {
+            "Timestamp": timestamp,
+            "User_ID": user_id,
+            "Age": age or "",
+            "Weight": weight or "",
+            "Height": height or "",
+            "BMI": f"{bmi:.1f}" if bmi > 0 else "",
+            "Diseases": diseases_str,
+            "Risk_Level": risk_level,
+            "Risk_Score": risk_score,
+        }
+        row = [record.get(header, "") for header in headers]
+        retry_sheet_op(
+            lambda: sheet.append_row(row, value_input_option="USER_ENTERED"),
+            op_name="risk_profile.append",
+        )
         logger.info("Profile data saved for user %s", user_id)
         return True
     
@@ -369,8 +477,9 @@ def save_profile_data(user_id, age, weight, height, bmi, diseases, risk_level, r
         return False
 
 
-def save_appointment_data(user_id, name, phone, preferred_date, preferred_time, 
-                          reason, status="New", assigned_to="", notes=""):
+def save_appointment_data(user_id, name, phone, preferred_date, preferred_time,
+                          reason, status="New", assigned_to="", notes="",
+                          idempotency_key=None):
     """
     Save appointment to Appointments sheet
     Returns: boolean (success/failure)
@@ -381,21 +490,48 @@ def save_appointment_data(user_id, name, phone, preferred_date, preferred_time,
             logger.error("No gspread client available")
             return False
 
+        headers = ensure_sheet_headers(
+            sheet,
+            [
+                "Timestamp", "User_ID", "Name", "Phone", "Preferred_Date",
+                "Preferred_Time", "Reason", "Status", "Assigned_To", "Notes",
+                "Idempotency_Key",
+            ],
+            op_name="appointments.headers",
+        )
+        if not idempotency_key:
+            idempotency_key = build_idempotency_key(
+                "appointment",
+                {
+                    "user_id": str(user_id or "").strip(),
+                    "preferred_date": str(preferred_date or "").strip(),
+                    "preferred_time": str(preferred_time or "").strip(),
+                    "reason": str(reason or "").strip(),
+                },
+            )
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        row = [
-            timestamp,
-            user_id,
-            name or "",
-            phone or "",
-            preferred_date or "",
-            preferred_time or "",
-            reason or "",
-            status,
-            assigned_to,
-            notes
-        ]
-        
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        record = {
+            "Timestamp": timestamp,
+            "User_ID": user_id,
+            "Name": name or "",
+            "Phone": phone or "",
+            "Preferred_Date": preferred_date or "",
+            "Preferred_Time": preferred_time or "",
+            "Reason": reason or "",
+            "Status": status,
+            "Assigned_To": assigned_to,
+            "Notes": notes,
+            "Idempotency_Key": idempotency_key,
+        }
+        row = [record.get(header, "") for header in headers]
+        append_row_if_absent(
+            sheet,
+            row,
+            idempotency_key,
+            "Idempotency_Key",
+            required_headers=headers,
+            op_name="appointments.append",
+        )
         logger.info("Appointment saved for user %s", user_id)
         return True
     

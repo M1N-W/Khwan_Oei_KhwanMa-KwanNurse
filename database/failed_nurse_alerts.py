@@ -191,7 +191,11 @@ def _get_or_create_sheet():
             rows=1000,
             cols=len(HEADER),
         )
-        sheet.append_row(HEADER, value_input_option="USER_ENTERED")
+        from database.retry import retry_sheet_op
+        retry_sheet_op(
+            lambda: sheet.append_row(HEADER, value_input_option="USER_ENTERED"),
+            op_name="failed_nurse_alerts.init_headers",
+        )
         logger.info("failed_nurse_alerts: auto-created sheet")
         return sheet
     except Exception:
@@ -216,7 +220,13 @@ def _verify_headers_and_get_sheet():
             if changed:
                 from database.sheets import column_number_to_letter
                 end_col = column_number_to_letter(len(headers))
-                sheet.update(f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED")
+                from database.retry import retry_sheet_op
+                retry_sheet_op(
+                    lambda: sheet.update(
+                        f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED",
+                    ),
+                    op_name="failed_nurse_alerts.headers",
+                )
     except Exception:
         logger.exception("failed_nurse_alerts: header verification failed")
     return sheet
@@ -244,6 +254,7 @@ def save_failed_symptom_alert(
         sheet = _verify_headers_and_get_sheet()
         if sheet is None:
             return False
+        from database.sheets import append_row_if_absent, ensure_sheet_headers
 
         payload = _normalized_payload(
             user_id, risk_code, risk_score, pain, wound, fever, mobility, neuro,
@@ -254,22 +265,31 @@ def save_failed_symptom_alert(
             return False
         key = _idempotency_key_from_payload(payload)
         created_at = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        row = [
-            created_at,
+        headers = ensure_sheet_headers(
+            sheet, HEADER, op_name="failed_nurse_alerts.headers",
+        )
+        row_record = {
+            "Created_At": created_at,
+            "Idempotency_Key": key,
+            "Event_Type": _EVENT_TYPE,
+            "User_ID": payload["user_id"],
+            "Risk_Level": payload["risk_code"],
+            "Risk_Score": payload["risk_score"],
+            "Payload_JSON": payload_json,
+            "Notification_Message": _safe_cell(notification_message, NOTIFICATION_MESSAGE_MAX_CHARS),
+            "Status": _STATUS_PENDING,
+            "Retry_Count": 0,
+            "Last_Error": _LAST_ERROR,
+        }
+        row = [row_record.get(header, "") for header in headers]
+        append_row_if_absent(
+            sheet,
+            row,
             key,
-            _EVENT_TYPE,
-            payload["user_id"],
-            payload["risk_code"],
-            payload["risk_score"],
-            payload_json,
-            _safe_cell(notification_message, NOTIFICATION_MESSAGE_MAX_CHARS),
-            _STATUS_PENDING,
-            0,
-            _LAST_ERROR,
-        ]
-        # Pad row to match HEADER length
-        row = row + [""] * max(0, len(HEADER) - len(row))
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+            "Idempotency_Key",
+            required_headers=headers,
+            op_name="failed_nurse_alerts.append",
+        )
         logger.info(
             "failed_nurse_alerts: appended event=%s risk=%s score=%s key=%s",
             _EVENT_TYPE, payload["risk_code"], payload["risk_score"], key,
@@ -332,7 +352,13 @@ def update_failed_alert_by_key(idempotency_key: str, updates: dict[str, Any]) ->
                 from database.sheets import column_number_to_letter
                 end_col = column_number_to_letter(len(headers))
                 target_range = f"A{sheet_row_index}:{end_col}{sheet_row_index}"
-                sheet.update(target_range, [new_row], value_input_option="USER_ENTERED")
+                from database.retry import retry_sheet_op
+                retry_sheet_op(
+                    lambda: sheet.update(
+                        target_range, [new_row], value_input_option="USER_ENTERED",
+                    ),
+                    op_name="failed_nurse_alerts.update",
+                )
                 return True
         return False
     except Exception:

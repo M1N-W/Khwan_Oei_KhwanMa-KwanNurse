@@ -14,7 +14,14 @@ from config import (
     ACTIVE_SESSION_STATUSES,
     get_logger,
 )
-from database.sheets import get_worksheet, column_number_to_letter
+from database.sheets import (
+    append_row_if_absent,
+    build_idempotency_key,
+    ensure_sheet_headers,
+    find_sheet_row_by_key,
+    get_worksheet,
+    column_number_to_letter,
+)
 
 logger = get_logger(__name__)
 
@@ -29,59 +36,91 @@ def generate_queue_id():
     return f"Q{datetime.now(tz=LOCAL_TZ).strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:6]}"
 
 
-def create_session(user_id, issue_type, priority, description=""):
-    """
-    Create a new teleconsult session
-    
-    Args:
-        user_id: Patient's LINE user ID
-        issue_type: Category (emergency, medication, wound, appointment, other)
-        priority: Priority level (1=high, 2=medium, 3=low)
-        description: User's description of issue
-        
-    Returns:
-        dict: Session info or None if failed
-    """
+def create_session(user_id, issue_type, priority, description="", idempotency_key=None):
+    """Create or recover one teleconsult session for an idempotency key."""
     try:
         sheet = get_worksheet(SHEET_TELECONSULT_SESSIONS)
         if not sheet:
             logger.error("No sheet client available")
             return None
-        
-        session_id = generate_session_id()
+
+        from database.retry import retry_sheet_op
         timestamp = datetime.now(tz=LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        
-        row = [
-            session_id,         # Session_ID
-            timestamp,          # Timestamp
-            user_id,           # User_ID
-            issue_type,        # Issue_Type
-            str(priority),     # Priority
-            SessionStatus.QUEUED,  # Status
-            description,       # Description
-            '',                # Queue_Position (set later)
-            '',                # Assigned_Nurse
-            '',                # Started_At
-            '',                # Completed_At
-            ''                 # Notes
-        ]
-        
-        sheet.append_row(row, value_input_option="USER_ENTERED")
-        
-        logger.info(f"Created teleconsult session: {session_id} for {user_id}")
-        
-        return {
-            'session_id': session_id,
-            'user_id': user_id,
-            'issue_type': issue_type,
-            'priority': priority,
-            'description': description,
-            'status': 'queued',
-            'timestamp': timestamp
+        idempotency_key = idempotency_key or build_idempotency_key(
+            "teleconsult",
+            {
+                "user_id": str(user_id or "").strip(),
+                "issue_type": str(issue_type or "").strip(),
+                "description": str(description or "").strip(),
+                "request_minute": timestamp[:16],
+            },
+        )
+        headers = ensure_sheet_headers(
+            sheet,
+            [
+                "Session_ID", "Timestamp", "User_ID", "Issue_Type", "Priority",
+                "Status", "Description", "Queue_Position", "Assigned_Nurse",
+                "Started_At", "Completed_At", "Notes", "Idempotency_Key",
+            ],
+            op_name="teleconsult_sessions.headers",
+        )
+        existing = find_sheet_row_by_key(
+            sheet, idempotency_key, "Idempotency_Key",
+            op_name="teleconsult_sessions.find_key",
+        )
+        if existing is not None:
+            return {
+                "session_id": existing.get("Session_ID", ""),
+                "user_id": existing.get("User_ID", user_id),
+                "issue_type": existing.get("Issue_Type", issue_type),
+                "priority": int(existing.get("Priority") or priority),
+                "description": existing.get("Description", description),
+                "status": existing.get("Status", SessionStatus.QUEUED),
+                "timestamp": existing.get("Timestamp", timestamp),
+                "idempotency_key": idempotency_key,
+            }
+
+        session_id = generate_session_id()
+        record = {
+            "Session_ID": session_id,
+            "Timestamp": timestamp,
+            "User_ID": user_id,
+            "Issue_Type": issue_type,
+            "Priority": str(priority),
+            "Status": SessionStatus.QUEUED,
+            "Description": description,
+            "Queue_Position": "",
+            "Assigned_Nurse": "",
+            "Started_At": "",
+            "Completed_At": "",
+            "Notes": "",
+            "Idempotency_Key": idempotency_key,
         }
-        
+        row = [record.get(header, "") for header in headers]
+        inserted = append_row_if_absent(
+            sheet, row, idempotency_key, "Idempotency_Key",
+            required_headers=headers, op_name="teleconsult_sessions.append",
+        )
+        if not inserted:
+            existing = find_sheet_row_by_key(
+                sheet, idempotency_key, "Idempotency_Key",
+                op_name="teleconsult_sessions.find_after_race",
+            ) or record
+            session_id = existing.get("Session_ID", session_id)
+
+        logger.info("Created teleconsult session: %s for %s", session_id, user_id)
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "issue_type": issue_type,
+            "priority": priority,
+            "description": description,
+            "status": "queued",
+            "timestamp": timestamp,
+            "idempotency_key": idempotency_key,
+        }
     except Exception as e:
-        logger.exception(f"Error creating session: {e}")
+        logger.exception("Error creating session: %s", e)
         return None
 
 
@@ -103,8 +142,29 @@ def add_to_queue(session_id, user_id, issue_type, priority):
         if not sheet:
             return None
         
+        from database.retry import retry_sheet_op
+        headers = ensure_sheet_headers(
+            sheet,
+            ["Queue_ID", "Timestamp", "Session_ID", "User_ID", "Issue_Type", "Priority", "Status", "Estimated_Wait"],
+            op_name="teleconsult_queue.headers",
+        )
+        existing = find_sheet_row_by_key(
+            sheet, session_id, "Session_ID", op_name="teleconsult_queue.find_session",
+        )
+        if existing is not None:
+            position = get_dynamic_queue_position(session_id)
+            return {
+                "queue_id": existing.get("Queue_ID", ""),
+                "session_id": session_id,
+                "position": position,
+                "estimated_wait": int(existing.get("Estimated_Wait") or 0),
+                "timestamp": existing.get("Timestamp", ""),
+            }
+
         # Get current queue to calculate position
-        all_values = sheet.get_all_values()
+        all_values = retry_sheet_op(
+            lambda: sheet.get_all_values(), op_name="teleconsult_queue.read",
+        )
         
         # Count waiting entries
         waiting_count = 0
@@ -130,18 +190,21 @@ def add_to_queue(session_id, user_id, issue_type, priority):
         people_ahead = queue_position - 1
         estimated_wait = people_ahead * AVG_SERVICE_MINUTES + max_wait
         
-        row = [
-            queue_id,              # Queue_ID
-            timestamp,             # Timestamp
-            session_id,            # Session_ID
-            user_id,              # User_ID
-            issue_type,           # Issue_Type
-            str(priority),        # Priority
-            QueueStatus.WAITING,  # Status
-            str(estimated_wait)   # Estimated_Wait
-        ]
-        
-        sheet.append_row(row, value_input_option="USER_ENTERED")
+        record = {
+            "Queue_ID": queue_id,
+            "Timestamp": timestamp,
+            "Session_ID": session_id,
+            "User_ID": user_id,
+            "Issue_Type": issue_type,
+            "Priority": str(priority),
+            "Status": QueueStatus.WAITING,
+            "Estimated_Wait": str(estimated_wait),
+        }
+        row = [record.get(header, "") for header in headers]
+        append_row_if_absent(
+            sheet, row, session_id, "Session_ID",
+            required_headers=headers, op_name="teleconsult_queue.append",
+        )
         
         # Update session with queue position
         update_session_queue_position(session_id, queue_position)
@@ -229,7 +292,11 @@ def update_session_status(session_id, new_status, assigned_nurse=None, notes=Non
                         'values': [[notes]]
                     })
 
-                sheet.batch_update(updates)
+                from database.retry import retry_sheet_op
+                retry_sheet_op(
+                    lambda: sheet.batch_update(updates),
+                    op_name="teleconsult_sessions.update_status",
+                )
 
                 logger.info(f"Updated session {session_id} status to {new_status}")
                 return True
@@ -260,7 +327,11 @@ def update_session_queue_position(session_id, position):
         for i in range(1, len(all_values)):
             if len(all_values[i]) > 0 and all_values[i][0] == session_id:
                 row_num = i + 1
-                sheet.update_cell(row_num, pos_col, str(position))
+                from database.retry import retry_sheet_op
+                retry_sheet_op(
+                    lambda: sheet.update_cell(row_num, pos_col, str(position)),
+                    op_name="teleconsult_sessions.update_position",
+                )
                 return True
         
         return False
@@ -298,7 +369,11 @@ def remove_from_queue(session_id):
             row = all_values[i]
             if len(row) >= 3 and row[2] == session_id:  # Session_ID is column 3
                 row_num = i + 1
-                sheet.update_cell(row_num, status_col, QueueStatus.REMOVED)
+                from database.retry import retry_sheet_op
+                retry_sheet_op(
+                    lambda: sheet.update_cell(row_num, status_col, QueueStatus.REMOVED),
+                    op_name="teleconsult_queue.remove",
+                )
                 logger.info(f"Removed session {session_id} from queue")
                 return True
         
@@ -425,4 +500,3 @@ def get_dynamic_queue_position(session_id: str) -> int:
     except Exception as e:
         logger.exception(f"Error calculating dynamic queue position: {e}")
         return 1
-

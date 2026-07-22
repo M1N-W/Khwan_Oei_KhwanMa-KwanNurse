@@ -114,8 +114,14 @@ def _effective_headers(raw_headers: list[str]) -> tuple[list[str], bool]:
 def _write_header_if_needed(sheet, headers: list[str], changed: bool) -> None:
     if not changed:
         return
+    from database.retry import retry_sheet_op
     end_col = column_number_to_letter(len(headers))
-    sheet.update(f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED")
+    retry_sheet_op(
+        lambda: sheet.update(
+            f"A1:{end_col}1", [headers], value_input_option="USER_ENTERED",
+        ),
+        op_name="patient_profile.headers",
+    )
 
 
 def _row_record(headers: list[str], row: list[str]) -> dict[str, Any]:
@@ -286,6 +292,8 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
     ttl_cache.invalidate(cache_key)
 
     try:
+        from database.retry import retry_sheet_op
+        from database.sheets import append_row_if_absent
         sheet = get_worksheet(SHEET_PATIENT_PROFILE)
         if not sheet:
             logger.error("upsert_patient_profile: sheet handle unavailable")
@@ -294,8 +302,14 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
         values = sheet.get_all_values()
         if not values:
             rec = _apply_profile_to_record(user_id, profile or {})
-            sheet.append_row(HEADERS, value_input_option="USER_ENTERED")
-            sheet.append_row(_record_to_row(HEADERS, rec), value_input_option="USER_ENTERED")
+            append_row_if_absent(
+                sheet,
+                _record_to_row(HEADERS, rec),
+                user_id,
+                "User_ID",
+                required_headers=HEADERS,
+                op_name="patient_profile.append",
+            )
             logger.info(
                 "upsert_patient_profile: created sheet with headers + row user=%s",
                 scrub_user_id(user_id),
@@ -313,7 +327,12 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
                 new_row = _record_to_row(headers, rec)
                 end_col = column_number_to_letter(len(headers))
                 target_range = f"A{sheet_row_index}:{end_col}{sheet_row_index}"
-                sheet.update(target_range, [new_row], value_input_option="USER_ENTERED")
+                retry_sheet_op(
+                    lambda: sheet.update(
+                        target_range, [new_row], value_input_option="USER_ENTERED",
+                    ),
+                    op_name="patient_profile.update",
+                )
                 logger.info(
                     "upsert_patient_profile: updated row %d user=%s",
                     sheet_row_index,
@@ -322,7 +341,14 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
                 return True
 
         rec = _apply_profile_to_record(user_id, profile or {})
-        sheet.append_row(_record_to_row(headers, rec), value_input_option="USER_ENTERED")
+        append_row_if_absent(
+            sheet,
+            _record_to_row(headers, rec),
+            user_id,
+            "User_ID",
+            required_headers=headers,
+            op_name="patient_profile.append",
+        )
         logger.info("upsert_patient_profile: appended row user=%s", scrub_user_id(user_id))
         return True
 

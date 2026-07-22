@@ -207,9 +207,24 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
     disease_normalized = engine_out.diseases_normalized
     message = engine_out.patient_message
 
-    # Save to sheet
-    save_profile_data(user_id, inputs.age, inputs.weight, inputs.height, bmi, 
-                      disease_normalized, risk_level, risk_score)
+    # Save to sheet and keep the patient-facing result honest when persistence fails.
+    try:
+        save_succeeded = bool(save_profile_data(
+            user_id, inputs.age, inputs.weight, inputs.height, bmi,
+            disease_normalized, risk_level, risk_score,
+        ))
+    except Exception:
+        save_succeeded = False
+        logger.exception(
+            "Personal risk profile save raised risk_level=%s risk_score=%s",
+            risk_level, risk_score,
+        )
+    if not save_succeeded:
+        _metric("personal_risk.save_failed")
+        logger.warning(
+            "Personal risk profile save not confirmed risk_level=%s risk_score=%s",
+            risk_level, risk_score,
+        )
     
     # Send notification if high risk
     if engine_out.notification_required:
@@ -224,4 +239,11 @@ def calculate_personal_risk(user_id, age, weight, height, disease):
         )
         send_line_push(notify_msg)
     
+    if not save_succeeded:
+        message += (
+            "\n\n📌 สถานะระบบ:\n"
+            "ประเมินความเสี่ยงเรียบร้อย แต่ยังไม่สามารถยืนยันการบันทึกประวัติได้ "
+            "กรุณาลองประเมินอีกครั้งภายหลัง หากมีอาการผิดปกติให้ติดต่อพยาบาลทันที"
+        )
+
     return message

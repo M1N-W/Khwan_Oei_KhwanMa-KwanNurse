@@ -374,6 +374,15 @@ def register_routes(app):
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat(),
         }), status_code
 
+    @app.route('/sheet-healthz', methods=['GET', 'HEAD'])
+    def sheet_healthz():
+        """Read-only Google Sheets credential, worksheet, and schema probe."""
+        from database.health import check_sheet_health
+
+        health = check_sheet_health()
+        status_code = 200 if health.get("status") == "ok" else 503
+        return jsonify(health), status_code
+
     @app.route('/metrics', methods=['GET'])
     def metrics_snapshot():
         """

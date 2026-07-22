@@ -329,7 +329,7 @@ def handle_request_appointment(user_id, params):
         text = str(value).strip()
         return bool(parse_thai_colloquial_time(text)) or bool(
             re.fullmatch(r"\d{1,2}\s*[:.]\s*\d{2}", text)
-        )
+        ) or bool(resolve_time_from_params(text, text))
     pt = resolve_time_from_params(preferred_time_raw, timeofday_raw)
     if pt:
         merged_params["preferred_time"] = pt
@@ -463,9 +463,7 @@ def handle_request_appointment(user_id, params):
                 return jsonify(_make_dialogflow_response(ask, output_contexts=output_contexts)), 200
         else:
             # Check if user typed or sent time parameter directly
-            parsed_t = parse_thai_colloquial_time(query_text)
-            if not parsed_t:
-                parsed_t = resolve_time_from_params(query_text, query_text)
+            parsed_t = resolve_time_from_params(query_text, query_text)
             if not parsed_t:
                 parsed_t = resolve_time_from_params(params.get('time'), params.get('timeofday'))
             if parsed_t:
@@ -477,8 +475,10 @@ def handle_request_appointment(user_id, params):
     # same turn. It is a time answer, never the appointment subject.
     time_choice_text = query_text.strip().lower()
     if (
-        time_choice_text in {"เช้า", "บ่าย", "ระบุเวลาเอง"}
-        and str(merged_params.get("reason") or "").strip().lower() == time_choice_text
+        resolve_time_from_params(time_choice_text, time_choice_text)
+        or time_choice_text == "ระบุเวลาเอง"
+    ) and (
+        str(merged_params.get("reason") or "").strip().lower() == time_choice_text
     ):
         merged_params.pop("reason", None)
 

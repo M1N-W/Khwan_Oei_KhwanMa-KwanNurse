@@ -92,7 +92,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
         import database.failed_nurse_alerts as failed
 
         sheet = Mock()
-        sheet.get_all_values.side_effect = AssertionError("must not scan backlog")
+        sheet.get_all_values.return_value = [list(failed.HEADER)]
         with patch.object(failed, "get_worksheet", return_value=sheet), \
              patch.object(failed, "get_spreadsheet") as spreadsheet:
             result = self._call_save(notification_message="secretless alert")
@@ -117,6 +117,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
         import database.failed_nurse_alerts as failed
 
         sheet = Mock()
+        sheet.get_all_values.return_value = [list(failed.HEADER)]
         with patch.object(failed, "get_worksheet", return_value=sheet), \
              patch.object(failed, "get_spreadsheet"):
             result = self._call_save(user_id=" UserA ")
@@ -132,6 +133,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
 
         oversized = "x" * 10001 + "TAIL"
         sheet = Mock()
+        sheet.get_all_values.return_value = [list(failed.HEADER)]
         with patch.object(failed, "get_worksheet", return_value=sheet), \
              patch.object(failed, "get_spreadsheet"):
             result = self._call_save(
@@ -163,6 +165,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
 
         oversized = "Y" * 10001 + "TAIL"
         sheet = Mock()
+        sheet.get_all_values.return_value = [list(failed.HEADER)]
         with patch.object(failed, "get_worksheet", return_value=sheet), \
              patch.object(failed, "get_spreadsheet"):
             result = self._call_save(
@@ -195,6 +198,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
         import database.failed_nurse_alerts as failed
 
         new_sheet = Mock()
+        new_sheet.get_all_values.return_value = [list(failed.HEADER)]
         spreadsheet = Mock()
         spreadsheet.add_worksheet.return_value = new_sheet
         with patch.object(failed, "get_worksheet", return_value=None), \
@@ -212,6 +216,7 @@ class FailedNurseAlertPersistenceTests(unittest.TestCase):
         import database.failed_nurse_alerts as failed
 
         sheet = Mock()
+        sheet.get_all_values.return_value = [list(failed.HEADER)]
         sheet.append_row.side_effect = RuntimeError("append failed")
         with patch.object(failed, "get_worksheet", return_value=sheet):
             result = self._call_save()
