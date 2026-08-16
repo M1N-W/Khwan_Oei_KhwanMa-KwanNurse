@@ -407,10 +407,11 @@ def register_routes(app):
         """
         Lightweight in-process metrics snapshot.
         """
-        from services.metrics import snapshot
+        from services.metrics import latency_snapshot, snapshot
         return jsonify({
             "timestamp": datetime.now(tz=LOCAL_TZ).isoformat(),
             "counters": snapshot(),
+            "latency": latency_snapshot(),
         }), 200
 
     @app.route('/track/<token>', methods=['GET'])
@@ -802,7 +803,9 @@ def register_routes(app):
         incr(f"webhook.intent.{intent_for_metric}")
 
         try:
-            response = _dispatch_intent(intent, user_id, params, query_text)
+            from services.performance import measure
+            with measure("webhook.dispatch", intent=intent):
+                response = _dispatch_intent(intent, user_id, params, query_text)
             response = _append_context_operations_to_response(response, controller_context_operations)
             if is_top_level_command:
                 active_context = {

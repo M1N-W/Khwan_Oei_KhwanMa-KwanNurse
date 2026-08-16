@@ -76,6 +76,7 @@ def handle_patient_identity(user_id, params, query_text=""):
             return jsonify({"fulfillmentText": t("identity.storage_unavailable", lang)}), 200
 
         existing = read_result.profile
+        was_registered = bool(existing and existing.get("registration_status") == "registered")
         if existing is None:
             existing = {
                 "first_name": "",
@@ -204,11 +205,12 @@ def handle_patient_identity(user_id, params, query_text=""):
         if has_request_context() and flask_req.path == "/line/webhook":
             flex_summary = build_profile_flex_summary(merged)
         
-        try:
-            from services.survey import schedule_milestone_surveys
-            schedule_milestone_surveys(user_id)
-        except Exception:
-            logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
+        if not was_registered and merged.get("registration_status") == "registered":
+            try:
+                from services.survey import schedule_milestone_surveys
+                schedule_milestone_surveys(user_id)
+            except Exception:
+                logger.exception("Failed to schedule milestone surveys upon completion user=%s", user_id)
             
         # Clear registering context
         clear_contexts = None

@@ -43,37 +43,33 @@ def schedule_milestone_surveys(user_id: str, activation_date: Optional[datetime]
     if not user_id:
         return False
 
-    if has_scheduled_surveys(user_id):
-        logger.info("Survey milestones already scheduled for user=%s, skipping creation", user_id)
-        return False
+    from services.performance import measure
+    with measure("storage.survey.schedule"):
+        if has_scheduled_surveys(user_id):
+            logger.info("Survey milestones already scheduled for user=%s, skipping creation", user_id)
+            return False
 
-    if activation_date is None:
-        activation_date = datetime.now(tz=LOCAL_TZ)
-    elif activation_date.tzinfo is None:
-        activation_date = activation_date.replace(tzinfo=LOCAL_TZ)
+        if activation_date is None:
+            activation_date = datetime.now(tz=LOCAL_TZ)
+        elif activation_date.tzinfo is None:
+            activation_date = activation_date.replace(tzinfo=LOCAL_TZ)
 
-    success = True
-    for day in MILESTONES:
-        # Calculate target run date
-        target_dt = activation_date + timedelta(days=day)
-        # Normalize to 9:00 AM of that day
-        target_dt = target_dt.replace(hour=9, minute=0, second=0, microsecond=0)
-        
-        # Generate token
-        token = secrets.token_urlsafe(16)
-        
-        # Save to database
-        ok = save_survey_schedule(
-            user_id=user_id,
-            milestone_day=day,
-            survey_url=SURVEY_FORM_URL,
-            tracking_token=token,
-            scheduled_at=target_dt
-        )
-        if not ok:
-            success = False
+        success = True
+        for day in MILESTONES:
+            target_dt = (activation_date + timedelta(days=day)).replace(
+                hour=9, minute=0, second=0, microsecond=0,
+            )
+            ok = save_survey_schedule(
+                user_id=user_id,
+                milestone_day=day,
+                survey_url=SURVEY_FORM_URL,
+                tracking_token=secrets.token_urlsafe(16),
+                scheduled_at=target_dt,
+            )
+            if not ok:
+                success = False
 
-    return success
+        return success
 
 
 def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:

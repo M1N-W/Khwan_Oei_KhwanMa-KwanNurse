@@ -59,6 +59,15 @@ class CounterSemanticsTests(unittest.TestCase):
         reset()
         self.assertEqual(snapshot(), {})
 
+    def test_latency_snapshot_reports_percentiles(self):
+        from services.metrics import latency_snapshot, observe_latency
+        observe_latency("webhook.dispatch.ReportSymptoms", 0.100)
+        observe_latency("webhook.dispatch.ReportSymptoms", 0.300)
+        sample = latency_snapshot()["webhook.dispatch.ReportSymptoms"]
+        self.assertEqual(sample["count"], 2)
+        self.assertEqual(sample["p50_ms"], 100.0)
+        self.assertEqual(sample["p95_ms"], 300.0)
+
     def test_log_summary_empty_is_safe(self):
         from services.metrics import log_summary
         # Must not raise even with no data
@@ -92,6 +101,7 @@ class MetricsRouteTests(unittest.TestCase):
         body = resp.get_json()
         self.assertIn("timestamp", body)
         self.assertIn("counters", body)
+        self.assertIn("latency", body)
         self.assertEqual(body["counters"]["line_push.success"], 4)
         self.assertEqual(body["counters"]["early_warning.alert_sent"], 1)
 

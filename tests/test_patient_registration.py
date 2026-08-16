@@ -474,13 +474,14 @@ class PatientRegistrationWebhookTests(unittest.TestCase):
         ), patch(
             "database.patient_profile.read_patient_profile_result",
             return_value=PatientProfileReadResult(True, profile),
-        ), patch("services.survey.schedule_milestone_surveys"):
+        ), patch("services.survey.schedule_milestone_surveys") as schedule:
             response, status = handle_patient_identity("U1", {}, "ลงทะเบียน")
 
         payload = response.get_json()
         self.assertEqual(status, 200)
         self.assertIn("ข้อมูลลงทะเบียนครบแล้ว", payload["fulfillmentText"])
         self.assertNotIn("fulfillmentMessages", payload)
+        schedule.assert_not_called()
 
     def test_existing_profile_resumes_from_stored_fields(self):
         from routes.webhook import handle_patient_identity

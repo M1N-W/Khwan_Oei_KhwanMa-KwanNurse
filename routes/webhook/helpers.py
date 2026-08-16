@@ -55,7 +55,9 @@ def _touch_activity(intent, user_id):
         return
     try:
         from services.patient_profile import touch_last_active
-        touch_last_active(user_id)
+        from services.performance import measure
+        with measure("webhook.activity_touch", intent=intent):
+            touch_last_active(user_id)
     except Exception:
         logger.exception("activity touch failed user=%s", _mask_user_id_for_log(user_id))
 
@@ -73,7 +75,9 @@ def _registration_gate_response(intent, user_id, query_text):
         from services.i18n import detect_language, t
         from services.patient_profile import should_prompt_registration
 
-        decision = should_prompt_registration(user_id)
+        from services.performance import measure
+        with measure("webhook.registration_gate", intent=intent):
+            decision = should_prompt_registration(user_id)
         if decision.prompt:
             lang = detect_language(query_text or "")
             return jsonify({"fulfillmentText": t("identity.incomplete_prompt", lang)}), 200

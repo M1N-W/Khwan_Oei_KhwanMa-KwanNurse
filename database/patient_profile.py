@@ -256,6 +256,19 @@ def read_patient_profile_result(user_id: str) -> PatientProfileReadResult:
             return PatientProfileReadResult(True, cached)
 
     try:
+        from services.performance import measure
+        with measure("storage.patient_profile.read"):
+            return _read_patient_profile_from_sheet(user_id, cache_key, is_testing)
+    except Exception:
+        logger.exception("read_patient_profile failed user_id=%s", scrub_user_id(user_id))
+        return PatientProfileReadResult(False, None)
+
+
+def _read_patient_profile_from_sheet(
+    user_id: str, cache_key: str, is_testing: bool,
+) -> PatientProfileReadResult:
+    """Read one profile from Sheets; extracted to keep latency timing non-invasive."""
+    try:
         sheet = get_worksheet(SHEET_PATIENT_PROFILE)
         if not sheet:
             return PatientProfileReadResult(False, None)
@@ -273,8 +286,7 @@ def read_patient_profile_result(user_id: str) -> PatientProfileReadResult:
                 return PatientProfileReadResult(True, profile_dict)
         return PatientProfileReadResult(True, None)
     except Exception:
-        logger.exception("read_patient_profile failed user_id=%s", scrub_user_id(user_id))
-        return PatientProfileReadResult(False, None)
+        raise
 
 
 def read_patient_profile(user_id: str) -> Optional[dict[str, Any]]:
@@ -291,6 +303,21 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
     cache_key = f"db:profile:v1:{user_id}"
     ttl_cache.invalidate(cache_key)
 
+    try:
+        from services.performance import measure
+        with measure("storage.patient_profile.write"):
+            return _upsert_patient_profile_to_sheet(user_id, profile, cache_key)
+    except Exception:
+        logger.exception("upsert_patient_profile failed user_id=%s", scrub_user_id(user_id))
+        return False
+
+
+def _cache_written_profile(user_id: str, headers: list[str], rec: dict[str, Any]) -> None:
+    """Write through the short profile cache after a confirmed Sheets write."""
+    ttl_cache.set(f"db:profile:v1:{user_id}", _row_to_dict(headers, _record_to_row(headers, rec)), 30)
+
+
+def _upsert_patient_profile_to_sheet(user_id: str, profile: dict[str, Any], cache_key: str) -> bool:
     try:
         from database.retry import retry_sheet_op
         from database.sheets import append_row_if_absent
@@ -314,6 +341,7 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
                 "upsert_patient_profile: created sheet with headers + row user=%s",
                 scrub_user_id(user_id),
             )
+            _cache_written_profile(user_id, HEADERS, rec)
             return True
 
         headers, header_changed = _effective_headers(values[0])
@@ -338,6 +366,7 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
                     sheet_row_index,
                     scrub_user_id(user_id),
                 )
+                _cache_written_profile(user_id, headers, rec)
                 return True
 
         rec = _apply_profile_to_record(user_id, profile or {})
@@ -350,8 +379,8 @@ def upsert_patient_profile(user_id: str, profile: dict[str, Any]) -> bool:
             op_name="patient_profile.append",
         )
         logger.info("upsert_patient_profile: appended row user=%s", scrub_user_id(user_id))
+        _cache_written_profile(user_id, headers, rec)
         return True
 
     except Exception:
-        logger.exception("upsert_patient_profile failed user_id=%s", scrub_user_id(user_id))
-        return False
+        raise
