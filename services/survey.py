@@ -90,7 +90,7 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
 
     # Rich Flex Bubble
     body = [
-        flex_text(f"📋 แบบสอบถามความพึงพอใจ", weight="bold", size="lg", color="#0066CC"),
+        flex_text(f"📋 แบบสอบถามความพึงพอใจ", weight="bold", size="lg", color="#1565C0"),
         flex_text(f"รอบการดูแลรักษาครอบ {thai_day}", size="md", color="#333333"),
         flex_text("ความคิดเห็นของคุณมีความสำคัญในการปรับปรุงบริการของทีมพยาบาลค่ะ", size="sm", color="#666666"),
     ]
@@ -101,9 +101,9 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
         body_components=body,
         footer_components=footer,
         header_text="📋 ขวัญเอ๋ยขวัญมา Survey",
-        header_background_color="#0066CC",
+        header_background_color="#1565C0",
     )
-    flex_msg = build_flex_message(f"แบบสอบถามความพึงพอใจรอบ {thai_day}", bubble)
+    flex_msg = build_flex_message(text, bubble)
 
     return [flex_msg, build_survey_rating_question()]
 

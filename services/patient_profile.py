@@ -853,16 +853,6 @@ def build_profile_flex_summary(profile: dict) -> dict:
     phone_display = mask_phone_number(phone_raw) if phone_raw else "—"
     status = profile.get("registration_status") or "incomplete"
     
-    citizen_id_raw = profile.get("citizen_id") or ""
-    if citizen_id_raw:
-        digits = "".join(ch for ch in str(citizen_id_raw) if ch.isdigit())
-        if len(digits) == 13:
-            citizen_id_display = f"{digits[0]}-{digits[1:5]}-XXXXX-XX-{digits[-1]}"
-        else:
-            citizen_id_display = digits
-    else:
-        citizen_id_display = "—"
-        
     consent_version = profile.get("consent_version") or ""
     consent_at = profile.get("consent_at") or ""
     
@@ -878,7 +868,8 @@ def build_profile_flex_summary(profile: dict) -> dict:
         "header": {
             "type": "box",
             "layout": "vertical",
-            "backgroundColor": "#466b96",
+            "backgroundColor": "#1565C0",
+            "paddingAll": "16px",
             "contents": [
                 {
                     "type": "text",
@@ -893,6 +884,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
             "type": "box",
             "layout": "vertical",
             "spacing": "md",
+            "paddingAll": "16px",
             "contents": [
                 {
                     "type": "box",
@@ -940,7 +932,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
                             "contents": [
                                 {
                                     "type": "text",
-                                    "text": "Patient Name",
+                                    "text": "ชื่อ-นามสกุล",
                                     "size": "xs",
                                     "color": "#aaaaaa"
                                 },
@@ -996,39 +988,6 @@ def build_profile_flex_summary(profile: dict) -> dict:
                     "contents": [
                         {
                             "type": "text",
-                            "text": "🆔",
-                            "flex": 0,
-                            "size": "md"
-                        },
-                        {
-                            "type": "box",
-                            "layout": "vertical",
-                            "contents": [
-                                {
-                                    "type": "text",
-                                    "text": "Citizen ID",
-                                    "size": "xs",
-                                    "color": "#aaaaaa"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": citizen_id_display,
-                                    "size": "sm",
-                                    "weight": "bold",
-                                    "color": "#111111"
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "spacing": "md",
-                    "alignItems": "center",
-                    "contents": [
-                        {
-                            "type": "text",
                             "text": "📞",
                             "flex": 0,
                             "size": "md"
@@ -1039,7 +998,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
                             "contents": [
                                 {
                                     "type": "text",
-                                    "text": "Phone",
+                                    "text": "เบอร์โทรศัพท์",
                                     "size": "xs",
                                     "color": "#aaaaaa"
                                 },
@@ -1072,7 +1031,7 @@ def build_profile_flex_summary(profile: dict) -> dict:
                             "contents": [
                                 {
                                     "type": "text",
-                                    "text": "Consent",
+                                    "text": "สถานะการยินยอม",
                                     "size": "xs",
                                     "color": "#aaaaaa"
                                 },
@@ -1115,4 +1074,4 @@ def build_profile_flex_summary(profile: dict) -> dict:
             ]
         }
     }
-    return build_flex_message("สรุปข้อมูลการลงทะเบียนของคุณ", bubble)
+    return build_flex_message("สรุปข้อมูลการลงทะเบียน: ตรวจสอบหรือแก้ไขข้อมูลของคุณได้เลยค่ะ", bubble)

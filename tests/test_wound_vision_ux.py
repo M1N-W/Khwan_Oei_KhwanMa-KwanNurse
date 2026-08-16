@@ -32,7 +32,7 @@ class TestWoundPhotographyGuide(unittest.TestCase):
 
     def test_alttext_is_correct(self):
         msg = self._get()
-        self.assertEqual(msg["altText"], "วิธีถ่ายภาพแผล")
+        self.assertIn("กดส่งรูปแผล", msg["altText"])
 
     def test_contains_lighting_tip(self):
         msg = self._get()
@@ -78,15 +78,15 @@ class TestWoundFlexResult(unittest.TestCase):
 
     def test_alttext_contains_word_wound(self):
         msg = self._get()
-        self.assertIn("แผล", msg["altText"])
+        self.assertIn("ผลคัดกรองเบื้องต้น", msg["altText"])
 
     def test_high_severity_uses_red_header(self):
         msg = self._get(severity="high")
-        self.assertIn("#C62828", str(msg))
+        self.assertIn("#B3261E", str(msg))
 
     def test_medium_severity_uses_orange_header(self):
         msg = self._get(severity="medium")
-        self.assertIn("#EF6C00", str(msg))
+        self.assertIn("#B26A00", str(msg))
 
     def test_low_severity_uses_green_header(self):
         msg = self._get(severity="low", obs=[], advice="ดูแลตามปกติ", conf=0.95)
@@ -104,10 +104,10 @@ class TestWoundFlexResult(unittest.TestCase):
         self.assertEqual(msg["type"], "flex")
         self.assertIn("ไม่พบ", str(msg))
 
-    def test_confidence_percentage_in_header(self):
+    def test_confidence_percentage_is_not_patient_facing(self):
         msg = self._get(conf=0.82)
-        # 82% should appear somewhere in the header
-        self.assertIn("82%", str(msg))
+        self.assertNotIn("82%", str(msg))
+        self.assertNotIn("ความมั่นใจ", str(msg))
 
     def test_high_severity_shows_nurse_notice(self):
         msg = self._get(severity="high")

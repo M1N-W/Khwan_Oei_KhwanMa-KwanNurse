@@ -158,6 +158,19 @@ class TestFlexBuilders(unittest.TestCase):
         msg = lm.build_flex_message(long_alt, {})
         self.assertLessEqual(len(msg["altText"]), lm.MAX_FLEX_ALT_TEXT_CHARS)
 
+    def test_presentation_tokens_use_approved_palette(self):
+        self.assertEqual(lm.LINE_COLORS["brand"], "#1565C0")
+        self.assertEqual(lm.LINE_COLORS["success"], "#2E7D32")
+        self.assertEqual(lm.LINE_COLORS["attention"], "#B26A00")
+        self.assertEqual(lm.LINE_COLORS["urgent"], "#B3261E")
+
+    def test_patient_wound_result_hides_confidence(self):
+        message = lm.build_wound_flex_result("medium", ["แผลบวม"], "กรุณาติดตามอาการ", 0.88)
+        rendered = str(message)
+        self.assertIn("ผลคัดกรองเบื้องต้น", rendered)
+        self.assertNotIn("ความมั่นใจ", rendered)
+        self.assertNotIn("88%", rendered)
+
 
 class TestValidateLinePayload(unittest.TestCase):
     """Tier 2: validate_line_payload edge cases"""
@@ -257,6 +270,15 @@ class TestSendHelpersFallback(unittest.TestCase):
         msgs = [lm.build_flex_message("alt fallback", bubble)]
         lm.push_rich_message(msgs, "U123")
         mock_push.assert_called_once_with("alt fallback", "U123")
+
+    @patch("services.line_message.ENABLE_RICH_MESSAGES", False)
+    @patch("services.notification.send_line_push")
+    def test_survey_fallback_includes_tracking_url(self, mock_push):
+        from services.survey import build_survey_message
+        mock_push.return_value = True
+        messages = build_survey_message("https://example.test/track/token", 30)
+        lm.push_rich_message(messages, "U123")
+        self.assertIn("https://example.test/track/token", mock_push.call_args.args[0])
 
 
 if __name__ == "__main__":

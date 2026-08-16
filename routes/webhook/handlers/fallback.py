@@ -339,19 +339,8 @@ def handle_unknown_intent(intent):
     except Exception:
         logger.exception("Active symptom fallback recovery failed")
     logger.warning("Unhandled intent: %s", intent)
-    return jsonify({
-        "fulfillmentText": (
-            f"ขอโทษค่ะ บอทยังไม่รองรับคำสั่ง '{intent}' ในขณะนี้\n\n"
-            f"คุณสามารถใช้ฟีเจอร์หลักได้\n"
-            f"• รายงานอาการ\n"
-            f"• ประเมินความเสี่ยง\n"
-            f"• นัดหมายพยาบาล\n"
-            f"• ความรู้และคำแนะนำ (พิมพ์ 'แนะนำความรู้' สำหรับเฉพาะราย)\n"
-            f"• ติดตามหลังจำหน่าย\n"
-            f"• ปรึกษาพยาบาล\n"
-            f"• เล่าอาการเป็นข้อความอิสระ"
-        )
-    }), 200
+    from services.line_copy import line_copy
+    return jsonify({"fulfillmentText": line_copy("unknown_command")}), 200
 
 
 def handle_after_hours_choice(user_id, query_text):
@@ -389,8 +378,8 @@ def handle_after_hours_choice(user_id, query_text):
     result = teleconsult_after_hours_choice(user_id, query_text)
     if result.get('awaiting_choice'):
         after_hours_replies = [
-            quick_reply_item("🚨 1. ฉุกเฉิน", "1"),
-            quick_reply_item("📝 2. ไม่เร่งด่วน", "2"),
+            quick_reply_item("🚨 แจ้งเรื่องฉุกเฉิน", "1"),
+            quick_reply_item("📝 รอเวลาทำการ", "2"),
         ]
         return jsonify(_make_dialogflow_response(
             result['message'],

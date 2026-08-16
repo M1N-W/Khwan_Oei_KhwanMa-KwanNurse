@@ -7,6 +7,7 @@ from config import get_logger
 from routes.webhook.helpers import _mask_user_id_for_log
 from services import get_reminder_summary
 from services.education import recommend_guides, format_recommendations_message
+from services.line_copy import line_copy
 from database.education_logs import save_education_view
 
 logger = get_logger(__name__)
@@ -28,20 +29,10 @@ def handle_get_followup_summary(user_id):
             }), 200
         
         if summary['total_reminders'] == 0:
-            message = (
-                "📋 ยังไม่มีข้อมูลการติดตามค่ะ\n\n"
-                "หลังจากที่คุณจำหน่ายจากโรงพยาบาล\n"
-                "ระบบจะเริ่มติดตามอาการของคุณอัตโนมัติ\n\n"
-                "💡 ระบบจะส่งการเตือนในวันที่\n"
-                "   • วันที่ 3 หลังจำหน่าย\n"
-                "   • วันที่ 7 (สัปดาห์แรก)\n"
-                "   • วันที่ 14 (สัปดาห์ที่ 2)\n"
-                "   • วันที่ 30 (ครบ 1 เดือน)"
-            )
+            message = line_copy("followup_empty")
         else:
             message = (
                 f"📊 สรุปการติดตามของคุณ\n"
-                f"{'=' * 30}\n\n"
                 f"📌 รวมทั้งหมด: {summary['total_reminders']} ครั้ง\n"
                 f"✅ ตอบกลับแล้ว: {summary['responded']} ครั้ง\n"
                 f"⏳ รอตอบกลับ: {summary['pending']} ครั้ง\n"
@@ -141,7 +132,8 @@ def handle_recommend_knowledge(user_id, params):
             try:
                 from services.line_message import build_education_carousel, push_rich_message
                 carousel = build_education_carousel(recommendations)
-                push_rich_message([carousel], user_id)
+                if push_rich_message([carousel], user_id):
+                    message = line_copy("recommendations_sent")
             except Exception:
                 logger.exception("Failed to push education carousel user=%s", user_id)
 
@@ -150,5 +142,5 @@ def handle_recommend_knowledge(user_id, params):
     except Exception:
         logger.exception("Error in RecommendKnowledge handler")
         return jsonify({
-            "fulfillmentText": "ขอโทษค่ะ ไม่สามารถแนะนำความรู้ได้ในขณะนี้"
+            "fulfillmentText": line_copy("generic_error")
         }), 200

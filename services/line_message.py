@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from typing import Optional
 from config import ENABLE_RICH_MESSAGES, get_logger
+from services.line_copy import LINE_COPY
 
 logger = get_logger(__name__)
 
@@ -31,6 +32,11 @@ MAX_TEXT_CHARS = 5_000
 MAX_FLEX_ALT_TEXT_CHARS = 400
 MAX_QUICK_REPLY_ITEMS = 13
 MAX_MESSAGES_PER_CALL = 5
+LINE_COLORS = {
+    "brand": "#1565C0", "success": "#2E7D32", "attention": "#B26A00",
+    "urgent": "#B3261E", "surface": "#FFFFFF", "text": "#1F2937",
+    "text_secondary": "#5B6472",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +151,7 @@ def flex_button(
     action_type: str = "message",
     action_text: Optional[str] = None,
     action_uri: Optional[str] = None,
-    style: str = "primary",
+    style: str = "primary", color: Optional[str] = None,
 ) -> dict:
     """
     Build a Flex button component.
@@ -162,7 +168,10 @@ def flex_button(
         action["uri"] = action_uri
     elif action_text:
         action["text"] = action_text
-    return {"type": "button", "action": action, "style": style}
+    button = {"type": "button", "action": action, "style": style, "height": "sm"}
+    if style == "primary":
+        button["color"] = color or LINE_COLORS["brand"]
+    return button
 
 
 def flex_separator() -> dict:
@@ -174,7 +183,7 @@ def flex_bubble(
     body_components: list[dict],
     header_text: Optional[str] = None,
     footer_components: Optional[list[dict]] = None,
-    header_background_color: str = "#1DB954",
+    header_background_color: str = LINE_COLORS["brand"],
 ) -> dict:
     """
     Build a Flex bubble container (single card).
@@ -195,6 +204,7 @@ def flex_bubble(
             "layout": "vertical",
             "contents": body_components,
             "spacing": "md",
+            "paddingAll": "16px",
         },
     }
     if header_text:
@@ -202,6 +212,7 @@ def flex_bubble(
             "type": "box",
             "layout": "vertical",
             "backgroundColor": header_background_color,
+            "paddingAll": "16px",
             "contents": [
                 {"type": "text", "text": header_text, "color": "#FFFFFF", "weight": "bold", "size": "lg"}
             ],
@@ -212,6 +223,7 @@ def flex_bubble(
             "layout": "vertical",
             "contents": footer_components,
             "spacing": "sm",
+            "paddingAll": "16px",
         }
     return bubble
 
@@ -362,7 +374,7 @@ def build_wound_photography_guide() -> dict:
     ]
     return {
         "type": "flex",
-        "altText": "วิธีถ่ายภาพแผล",
+        "altText": "วิธีถ่ายภาพแผล: ถ่ายให้แผลชัด ไม่เบลอ วางไม้บรรทัดหรือเหรียญข้างแผล แล้วกดส่งรูปแผลค่ะ",
         "contents": {
             "type": "bubble",
             "header": {
@@ -388,8 +400,8 @@ def build_wound_photography_guide() -> dict:
 
 
 _SEVERITY_CONFIG = {
-    "high":   {"color": "#C62828", "icon": "🔴", "label": "ความรุนแรงสูง",    "needs_nurse": True},
-    "medium": {"color": "#EF6C00", "icon": "🟠", "label": "ความรุนแรงปานกลาง","needs_nurse": True},
+    "high":   {"color": "#B3261E", "icon": "🔴", "label": "ความรุนแรงสูง",    "needs_nurse": True},
+    "medium": {"color": "#B26A00", "icon": "🟠", "label": "ความรุนแรงปานกลาง","needs_nurse": True},
     "low":    {"color": "#2E7D32", "icon": "🟢", "label": "ความรุนแรงต่ำ",    "needs_nurse": False},
 }
 
@@ -412,27 +424,27 @@ def build_wound_flex_result(severity: str, observations: list, advice: str, conf
 
     return {
         "type": "flex",
-        "altText": f"ผลการประเมินแผล: {cfg['label']}",
+        "altText": f"ผลคัดกรองเบื้องต้น: {cfg['label']}\n{advice}"[:MAX_FLEX_ALT_TEXT_CHARS],
         "contents": {
             "type": "bubble",
             "header": {
                 "type": "box", "layout": "vertical",
                 "backgroundColor": cfg["color"],
                 "contents": [
-                    {"type": "text", "text": f"{cfg['icon']} {cfg['label']}",
+                    {"type": "text", "text": f"{cfg['icon']} ผลคัดกรองเบื้องต้น",
                      "color": "#FFFFFF", "weight": "bold", "size": "lg"},
-                    {"type": "text", "text": f"ความมั่นใจ: {int(confidence * 100)}%",
-                     "color": "#FFFFFF", "size": "xs"},
+                    {"type": "text", "text": cfg["label"],
+                     "color": "#FFFFFF", "size": "sm"},
                 ],
             },
             "body": {
                 "type": "box", "layout": "vertical", "spacing": "sm",
                 "contents": [
-                    {"type": "text", "text": "สิ่งที่พบ", "weight": "bold", "size": "sm"},
+                    {"type": "text", "text": "สิ่งที่พบ", "weight": "bold", "size": "md"},
                     *obs_rows,
                     {"type": "separator", "margin": "md"},
                     {"type": "text", "text": "คำแนะนำ", "weight": "bold",
-                     "size": "sm", "margin": "md"},
+                     "size": "md", "margin": "md"},
                     {"type": "text", "text": advice, "wrap": True, "size": "sm", "color": "#333333"},
                     *nurse_notice,
                 ],
@@ -450,9 +462,7 @@ def build_wound_flex_result(severity: str, observations: list, advice: str, conf
 _GUIDE_COLORS = {
     "wound_care": "#1565C0",
     "physical_therapy": "#2E7D32",
-    "dvt_prevention": "#6A1B9A",
-    "medication": "#E65100",
-    "warning_signs": "#B71C1C",
+    "dvt_prevention": "#1565C0", "medication": "#B26A00", "warning_signs": "#B3261E",
 }
 _GUIDE_ICONS = {
     "wound_care": "🩹",
@@ -465,25 +475,25 @@ _GUIDE_ICONS = {
 
 def _build_guide_bubble(rec: dict) -> dict:
     key = rec.get("key", "")
-    color = _GUIDE_COLORS.get(key, "#37474F")
+    color = _GUIDE_COLORS.get(key, LINE_COLORS["brand"])
     icon = _GUIDE_ICONS.get(key, "📖")
     return {
         "type": "bubble",
-        "size": "micro",
+        "size": "kilo",
         "header": {
-            "type": "box", "layout": "vertical", "backgroundColor": color, "paddingAll": "12px",
+            "type": "box", "layout": "vertical", "backgroundColor": color, "paddingAll": "16px",
             "contents": [{"type": "text", "text": f"{icon} {rec['title']}",
-                          "color": "#FFFFFF", "weight": "bold", "size": "sm", "wrap": True}],
+                          "color": "#FFFFFF", "weight": "bold", "size": "md", "wrap": True}],
         },
         "body": {
-            "type": "box", "layout": "vertical", "paddingAll": "12px",
+            "type": "box", "layout": "vertical", "paddingAll": "16px",
             "contents": [{"type": "text", "text": rec.get("reason", ""),
-                          "wrap": True, "size": "xs", "color": "#555555"}],
+                          "wrap": True, "size": "md", "color": LINE_COLORS["text_secondary"]}],
         },
         "footer": {
-            "type": "box", "layout": "vertical", "paddingAll": "8px",
+            "type": "box", "layout": "vertical", "paddingAll": "16px",
             "contents": [{"type": "button", "style": "primary", "color": color, "height": "sm",
-                          "action": {"type": "message", "label": "อ่านเลย", "text": rec["title"]}}],
+                          "action": {"type": "message", "label": "อ่านคำแนะนำ", "text": rec["title"]}}],
         },
     }
 
@@ -499,7 +509,7 @@ def build_education_carousel(recommendations: list) -> dict:
     bubbles = [_build_guide_bubble(r) for r in recommendations]
     return {
         "type": "flex",
-        "altText": f"📚 ความรู้ที่แนะนำสำหรับคุณ ({len(recommendations)} หัวข้อ)",
+        "altText": "ความรู้ที่แนะนำ: เลือกหัวข้อเพื่ออ่านคำแนะนำได้เลยค่ะ",
         "contents": {"type": "carousel", "contents": bubbles},
     }
 
@@ -564,7 +574,7 @@ def build_nurse_assigned_message(nurse_name: str, contact_link: str) -> dict:
                     {
                         "type": "button",
                         "style": "primary",
-                        "color": "#2E7D32",
+                        "color": LINE_COLORS["brand"],
                         "action": {
                             "type": "uri",
                             "label": "💬 แชทกับพยาบาล",
@@ -581,7 +591,7 @@ def build_nurse_contact_message(contact_link: str) -> dict:
     """Compact Flex card that opens the nurse chat without a URL preview."""
     return {
         "type": "flex",
-        "altText": "👩🏻‍⚕️ ติดต่อพยาบาลขวัญเรือนโดยตรง",
+        "altText": "ติดต่อพยาบาล: กดเปิดแชตเพื่อปรึกษาพยาบาลได้เลยค่ะ",
         "contents": {
             "type": "bubble",
             "size": "kilo",
@@ -596,14 +606,14 @@ def build_nurse_contact_message(contact_link: str) -> dict:
             "body": {
                 "type": "box", "layout": "vertical", "spacing": "sm",
                 "contents": [
-                    {"type": "text", "text": "พยาบาลขวัญเรือนพร้อมให้คำปรึกษาค่ะ", "wrap": True, "size": "md"},
+                    {"type": "text", "text": LINE_COPY["nurse_contact"], "wrap": True, "size": "md"},
                     {"type": "text", "text": "กดปุ่มด้านล่างเพื่อเปิดแชตได้เลยนะคะ", "wrap": True, "size": "sm", "color": "#666666"},
                 ],
             },
             "footer": {
                 "type": "box", "layout": "vertical",
                 "contents": [{
-                    "type": "button", "style": "primary", "color": "#2E7D32",
+                    "type": "button", "style": "primary", "color": LINE_COLORS["brand"],
                     "action": {"type": "uri", "label": "💬 เปิดแชตพยาบาล", "uri": contact_link},
                 }],
             },
@@ -617,7 +627,7 @@ def build_daily_checkin_reminder() -> dict:
     """
     return {
         "type": "flex",
-        "altText": "🔔 ได้เวลารายงานอาการประจำวันแล้วค่ะ",
+        "altText": "🔔 ได้เวลารายงานอาการประจำวันแล้วค่ะ: กดรายงานอาการเพื่อให้ทีมดูแลติดตามต่อค่ะ",
         "contents": {
             "type": "bubble",
             "header": {
@@ -642,7 +652,7 @@ def build_daily_checkin_reminder() -> dict:
                 "contents": [
                     {
                         "type": "text",
-                        "text": "เพื่อความแม่นยำในการประเมินและป้องกันภาวะแทรกซ้อนหลังผ่าตัด โปรดกดรายงานอาการประจำวันของคุณในระบบแชทนี้ค่ะ",
+                        "text": LINE_COPY["daily_checkin"],
                         "wrap": True,
                         "size": "sm",
                         "color": "#333333",
@@ -656,7 +666,7 @@ def build_daily_checkin_reminder() -> dict:
                     {
                         "type": "button",
                         "style": "primary",
-                        "color": "#2E7D32",
+                        "color": LINE_COLORS["brand"],
                         "action": {
                             "type": "message",
                             "label": "📝 รายงานอาการตอนนี้",

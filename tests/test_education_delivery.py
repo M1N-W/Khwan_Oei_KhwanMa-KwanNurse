@@ -59,9 +59,9 @@ class TestEducationCarousel(unittest.TestCase):
         self.assertEqual(msg["type"], "text")
         self.assertIn("ไม่พบ", msg["text"])
 
-    def test_alttext_contains_guide_count(self):
+    def test_alttext_has_actionable_next_step(self):
         msg = self._get(self._RECS)
-        self.assertIn("3", msg["altText"])
+        self.assertIn("เลือกหัวข้อ", msg["altText"])
 
     def test_alttext_under_400_chars(self):
         msg = self._get(self._RECS)

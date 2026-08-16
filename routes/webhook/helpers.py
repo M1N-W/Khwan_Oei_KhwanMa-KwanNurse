@@ -188,7 +188,8 @@ def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_
     if has_active_flow:
         quick_replies = _with_cancel_quick_reply(quick_replies)
         if _should_show_cancel_hint(output_contexts):
-            text = text.rstrip() + "\n\n💡 ระหว่างทำรายการ กด “✕ ยกเลิก” หรือพิมพ์ “ยกเลิก” ได้ทุกเมื่อค่ะ"
+            from services.line_copy import line_copy
+            text = text.rstrip() + "\n\n💡 " + line_copy("cancel_hint")
 
     res = {"fulfillmentText": text}
     
@@ -201,11 +202,6 @@ def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_
                     "payload": {
                         "line": flex_message
                     }
-                },
-                {
-                    "text": {
-                        "text": [text]
-                    }
                 }
             ]
         elif quick_replies:
@@ -216,11 +212,6 @@ def _make_dialogflow_response(text: str, quick_replies: list[dict] = None, flex_
                     "platform": "LINE",
                     "payload": {
                         "line": line_msg
-                    }
-                },
-                {
-                    "text": {
-                        "text": [text]
                     }
                 }
             ]

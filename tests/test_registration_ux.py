@@ -60,7 +60,7 @@ class TestRegistrationUXHelpers(unittest.TestCase):
         }
         msg = build_profile_flex_summary(profile)
         self.assertEqual(msg["type"], "flex")
-        self.assertEqual(msg["altText"], "สรุปข้อมูลการลงทะเบียนของคุณ")
+        self.assertIn("ตรวจสอบหรือแก้ไข", msg["altText"])
         
         contents = msg["contents"]
         self.assertEqual(contents["type"], "bubble")
@@ -114,6 +114,7 @@ class TestWebhookIntegrationUX(unittest.TestCase):
         self.assertIn("fulfillmentMessages", res)
         self.assertEqual(res["fulfillmentMessages"][0]["platform"], "LINE")
         self.assertEqual(res["fulfillmentMessages"][0]["payload"]["line"]["quickReply"]["items"], qrs)
+        self.assertEqual(len(res["fulfillmentMessages"]), 1)
 
     @patch("config.ENABLE_RICH_MESSAGES", True)
     def test_make_dialogflow_response_enabled_flex(self):
@@ -123,6 +124,7 @@ class TestWebhookIntegrationUX(unittest.TestCase):
         self.assertIn("fulfillmentMessages", res)
         self.assertEqual(res["fulfillmentMessages"][0]["platform"], "LINE")
         self.assertEqual(res["fulfillmentMessages"][0]["payload"]["line"], flex)
+        self.assertEqual(len(res["fulfillmentMessages"]), 1)
 
     @patch("config.ENABLE_RICH_MESSAGES", True)
     def test_active_flow_gets_cancel_button_and_one_time_hint(self):

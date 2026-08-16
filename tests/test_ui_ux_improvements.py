@@ -147,7 +147,7 @@ class TestUIUXImprovements(unittest.TestCase):
         flex = build_profile_flex_summary(profile)
         body_box = flex["contents"]["body"]
         self.assertEqual(body_box["contents"][0]["contents"][0]["contents"][0]["text"], "✅ ลงทะเบียนแล้ว")
-        self.assertEqual(body_box["contents"][6]["contents"][1]["contents"][1]["text"], "ยินยอมแล้ว ✅")
+        self.assertEqual(body_box["contents"][5]["contents"][1]["contents"][1]["text"], "ยินยอมแล้ว ✅")
 
         # 2. Incomplete and not consented
         profile_incomplete = {
@@ -162,7 +162,7 @@ class TestUIUXImprovements(unittest.TestCase):
         flex_incomplete = build_profile_flex_summary(profile_incomplete)
         body_box_inc = flex_incomplete["contents"]["body"]
         self.assertEqual(body_box_inc["contents"][0]["contents"][0]["contents"][0]["text"], "⏳ ยังลงทะเบียนไม่ครบ")
-        self.assertEqual(body_box_inc["contents"][6]["contents"][1]["contents"][1]["text"], "ยังไม่ระบุ")
+        self.assertEqual(body_box_inc["contents"][5]["contents"][1]["contents"][1]["text"], "ยังไม่ระบุ")
 
     def test_flex_bubble_spacing(self):
         bubble = flex_bubble(
