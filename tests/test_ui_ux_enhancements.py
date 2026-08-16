@@ -397,7 +397,7 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         self.assertEqual(len(items), 5)
 
     def test_survey_star5_button(self):
-        """Star 5 button: label='⭐ 5 (ดีมาก)', text='5'."""
+        """Star 5 button is an isolated survey postback, not a chat digit."""
         messages = self._build_survey()
         rating_msg = next(
             (m for m in messages if m.get("type") == "text" and "quickReply" in m),
@@ -405,7 +405,8 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         )
         first = rating_msg["quickReply"]["items"][0]
         self.assertEqual(first["action"]["label"], "⭐ 5 (ดีมาก)")
-        self.assertEqual(first["action"]["text"], "5")
+        self.assertEqual(first["action"]["type"], "postback")
+        self.assertEqual(first["action"]["data"], "action=survey_rating&rating=5")
 
     def test_survey_star4_button(self):
         """Star 4 button: label='⭐ 4 (ดี)', text='4'."""
@@ -416,7 +417,7 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         )
         second = rating_msg["quickReply"]["items"][1]
         self.assertEqual(second["action"]["label"], "⭐ 4 (ดี)")
-        self.assertEqual(second["action"]["text"], "4")
+        self.assertEqual(second["action"]["data"], "action=survey_rating&rating=4")
 
     def test_survey_star3_button(self):
         """Star 3 button: label='⭐ 3 (ปานกลาง)', text='3'."""
@@ -427,7 +428,7 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         )
         third = rating_msg["quickReply"]["items"][2]
         self.assertEqual(third["action"]["label"], "⭐ 3 (ปานกลาง)")
-        self.assertEqual(third["action"]["text"], "3")
+        self.assertEqual(third["action"]["data"], "action=survey_rating&rating=3")
 
     def test_survey_star2_button(self):
         """Star 2 button: label='⭐ 2 (พอใช้)', text='2'."""
@@ -438,7 +439,7 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         )
         fourth = rating_msg["quickReply"]["items"][3]
         self.assertEqual(fourth["action"]["label"], "⭐ 2 (พอใช้)")
-        self.assertEqual(fourth["action"]["text"], "2")
+        self.assertEqual(fourth["action"]["data"], "action=survey_rating&rating=2")
 
     def test_survey_star1_button(self):
         """Star 1 button: label='⭐ 1 (ควรปรับปรุง)', text='1'."""
@@ -449,7 +450,7 @@ class TestSurveyStarRatingQuickReplies(unittest.TestCase):
         )
         fifth = rating_msg["quickReply"]["items"][4]
         self.assertEqual(fifth["action"]["label"], "⭐ 1 (ควรปรับปรุง)")
-        self.assertEqual(fifth["action"]["text"], "1")
+        self.assertEqual(fifth["action"]["data"], "action=survey_rating&rating=1")
 
 
 class TestHealthCheckDiagnostics(unittest.TestCase):

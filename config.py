@@ -73,7 +73,12 @@ LINE_TEXT_BRIDGE_ENABLED: bool = (
     os.environ.get("LINE_TEXT_BRIDGE_ENABLED", "false").lower()
     in ("1", "true", "yes", "on")
 )
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:5000").rstrip("/")
+# Prefer an explicit public URL; Render provides RENDER_EXTERNAL_URL in production.
+BASE_URL = (
+    os.environ.get("BASE_URL")
+    or os.environ.get("RENDER_EXTERNAL_URL")
+    or "http://localhost:5000"
+).rstrip("/")
 
 # LINE Messaging API Configuration
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("CHANNEL_ACCESS_TOKEN")

@@ -25,7 +25,7 @@ from services.line_message import (
     flex_bubble,
     build_flex_message,
     push_rich_message,
-    quick_reply_item,
+    quick_reply_postback,
     build_quick_reply_message,
 )
 
@@ -110,11 +110,11 @@ def build_survey_message(tracking_url: str, milestone_day: int) -> list[dict]:
 
 # Star-rating quick replies for satisfaction survey (Task 4B).
 _SURVEY_STAR_QUICK_REPLIES = [
-    quick_reply_item("⭐ 5 (ดีมาก)", "5"),
-    quick_reply_item("⭐ 4 (ดี)", "4"),
-    quick_reply_item("⭐ 3 (ปานกลาง)", "3"),
-    quick_reply_item("⭐ 2 (พอใช้)", "2"),
-    quick_reply_item("⭐ 1 (ควรปรับปรุง)", "1"),
+    quick_reply_postback("⭐ 5 (ดีมาก)", "action=survey_rating&rating=5", "⭐ 5 (ดีมาก)"),
+    quick_reply_postback("⭐ 4 (ดี)", "action=survey_rating&rating=4", "⭐ 4 (ดี)"),
+    quick_reply_postback("⭐ 3 (ปานกลาง)", "action=survey_rating&rating=3", "⭐ 3 (ปานกลาง)"),
+    quick_reply_postback("⭐ 2 (พอใช้)", "action=survey_rating&rating=2", "⭐ 2 (พอใช้)"),
+    quick_reply_postback("⭐ 1 (ควรปรับปรุง)", "action=survey_rating&rating=1", "⭐ 1 (ควรปรับปรุง)"),
 ]
 
 

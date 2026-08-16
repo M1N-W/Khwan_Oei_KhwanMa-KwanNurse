@@ -6,6 +6,7 @@ Maps incoming HTTP webhook requests and dispatches Dialogflow intents to handler
 import os
 import json
 from datetime import datetime
+from urllib.parse import parse_qs
 from flask import request, jsonify, Response
 from config import get_logger, LOCAL_TZ, DEBUG
 from utils.pii import scrub_user_id
@@ -118,6 +119,24 @@ def _handle_line_text_event(event: dict) -> None:
         logger.exception("Direct LINE text bridge failed user=%s", scrub_user_id(user_id))
         from services.notification import reply_line_message
         reply_line_message(reply_token, "⚠️ ขออภัยค่ะ ระบบสนทนาขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้งค่ะ")
+
+
+def _handle_survey_rating_postback(event: dict) -> bool:
+    """Acknowledge a survey rating without routing its digit through Dialogflow."""
+    if not isinstance(event, dict):
+        return False
+    data = ((event.get("postback") or {}).get("data") or "").strip()
+    values = parse_qs(data, keep_blank_values=True)
+    rating = values.get("rating", [""])[0]
+    if values.get("action", [""])[0] != "survey_rating" or rating not in {"1", "2", "3", "4", "5"}:
+        return False
+
+    reply_token = event.get("replyToken") or ""
+    if reply_token:
+        from services.notification import reply_line_message
+        reply_line_message(reply_token, "ขอบคุณสำหรับความคิดเห็นค่ะ 🙏")
+    logger.info("Survey rating received rating=%s", rating)
+    return True
 
 
 def _reply_line_from_bridge_result(reply_token: str, user_id: str, result: dict) -> None:
@@ -840,6 +859,9 @@ def register_routes(app):
                         msg_text = build_text_message(welcome_text)
                         msg_flex = build_user_manual_flex()
                         reply_rich_message(reply_token, [msg_text, msg_flex])
+                    continue
+                if event_type == "postback":
+                    _handle_survey_rating_postback(event)
                     continue
                 if event_type != "message":
                     continue
