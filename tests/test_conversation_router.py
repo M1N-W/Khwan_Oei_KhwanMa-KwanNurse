@@ -59,6 +59,37 @@ class ConversationRouterTests(unittest.TestCase):
 
         self.assertTrue(decision.duplicate)
 
+    def test_bare_digit_without_active_flow_is_not_assigned_to_a_flow(self):
+        from services.conversation_router import resolve_route
+        from services.conversation_state import InMemoryConversationStateStore
+
+        store = InMemoryConversationStateStore(now=lambda: NOW)
+        decision = resolve_route(
+            user_id="U1", channel_id="line", query_text="5",
+            dialogflow_intent="Fallback", dialogflow_params={}, session_name=SESSION,
+            webhook_event_id="evt-no-flow", store=store, now=NOW,
+        )
+
+        self.assertEqual(decision.intent, "Fallback")
+        self.assertIsNone(decision.state)
+        self.assertIsNone(store.get("U1", "line"))
+
+    def test_teleconsult_digit_advances_only_teleconsult_category(self):
+        from services.conversation_router import resolve_route
+        from services.conversation_state import InMemoryConversationStateStore, start_state
+
+        store = InMemoryConversationStateStore(now=lambda: NOW)
+        store.start(start_state("U1", "line", "teleconsult", now=NOW))
+        decision = resolve_route(
+            user_id="U1", channel_id="line", query_text="3",
+            dialogflow_intent="ReportSymptoms", dialogflow_params={}, session_name=SESSION,
+            webhook_event_id="evt-teleconsult", store=store, now=NOW,
+        )
+
+        self.assertEqual(decision.intent, "AfterHoursChoice")
+        self.assertEqual(decision.params, {"issue_category": "wound"})
+        self.assertIsNone(decision.state)
+
     def test_custom_appointment_time_command_passes_to_handler(self):
         from services.conversation_router import resolve_route
         from services.conversation_state import InMemoryConversationStateStore, start_state

@@ -110,15 +110,15 @@ class TestUIUXEnhancements(unittest.TestCase):
             self.assertIn("quickReply", line_payload)
             items = line_payload["quickReply"]["items"]
             self.assertEqual(len(items), 5)
-            self.assertEqual(items[0]["action"]["label"], "🟢 1 (ปวดน้อย)")
+            self.assertEqual(items[0]["action"]["label"], "🟢 ปวดน้อย")
             self.assertEqual(items[0]["action"]["text"], "1")
-            self.assertEqual(items[1]["action"]["label"], "🟡 2 (ปวดเล็กน้อย)")
+            self.assertEqual(items[1]["action"]["label"], "🟡 ปวดเล็กน้อย")
             self.assertEqual(items[1]["action"]["text"], "2")
-            self.assertEqual(items[2]["action"]["label"], "🟠 3 (ปวดปานกลาง)")
+            self.assertEqual(items[2]["action"]["label"], "🟠 ปวดปานกลาง")
             self.assertEqual(items[2]["action"]["text"], "3")
-            self.assertEqual(items[3]["action"]["label"], "🔴 4 (ปวดมาก)")
+            self.assertEqual(items[3]["action"]["label"], "🔴 ปวดมาก")
             self.assertEqual(items[3]["action"]["text"], "4")
-            self.assertEqual(items[4]["action"]["label"], "🚨 5 (ปวดรุนแรง)")
+            self.assertEqual(items[4]["action"]["label"], "🚨 ปวดรุนแรง")
             self.assertEqual(items[4]["action"]["text"], "5")
 
             # 2. Test missing wound_status — ask must mention ONLY wound.

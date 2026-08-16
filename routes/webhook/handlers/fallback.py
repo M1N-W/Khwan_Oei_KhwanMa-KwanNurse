@@ -9,6 +9,7 @@ from config import get_logger, LOCAL_TZ, OFFICE_HOURS, DEBUG
 from database.education_logs import save_education_view
 from routes.webhook.helpers import _make_dialogflow_response
 from services.line_message import quick_reply_item
+from services.line_copy import line_copy
 from services import (
     get_knowledge_menu,
     get_wound_care_guide,
@@ -286,7 +287,7 @@ def handle_contact_nurse(user_id, params, query_text):
     except Exception as e:
         logger.exception(f"Error in ContactNurse: {e}")
         return jsonify({
-            "fulfillmentText": "เกิดข้อผิดพลาด กรุณาลองใหม่ภายหลัง"
+            "fulfillmentText": line_copy("generic_error")
         }), 200
 
 
@@ -298,7 +299,7 @@ def handle_cancel_consultation(user_id):
     except Exception as e:
         logger.exception(f"Error cancelling consultation: {e}")
         return jsonify({
-            "fulfillmentText": "เกิดข้อผิดพลาดในการยกเลิก กรุณาลองใหม่"
+            "fulfillmentText": line_copy("generic_error")
         }), 200
 
 
@@ -339,7 +340,6 @@ def handle_unknown_intent(intent):
     except Exception:
         logger.exception("Active symptom fallback recovery failed")
     logger.warning("Unhandled intent: %s", intent)
-    from services.line_copy import line_copy
     return jsonify({"fulfillmentText": line_copy("unknown_command")}), 200
 
 

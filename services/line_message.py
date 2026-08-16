@@ -179,6 +179,46 @@ def flex_separator() -> dict:
     return {"type": "separator"}
 
 
+def actionable_flex_fallback(title: str, next_action: str) -> str:
+    """Build a short, accessible Flex fallback within LINE's character limit."""
+    return f"{title}: {next_action}"[:MAX_FLEX_ALT_TEXT_CHARS]
+
+
+def flex_card_header(title: str, color: str = LINE_COLORS["brand"]) -> dict:
+    """Build the standard clinical card header."""
+    return {
+        "type": "box", "layout": "vertical", "backgroundColor": color,
+        "paddingAll": "16px",
+        "contents": [flex_text(title, weight="bold", size="lg", color="#FFFFFF")],
+    }
+
+
+def flex_status_pill(label: str, color: str = LINE_COLORS["success"]) -> dict:
+    """Build a compact semantic status label for a Flex body."""
+    return {
+        "type": "box", "layout": "horizontal", "contents": [{
+            "type": "box", "layout": "vertical", "backgroundColor": color,
+            "cornerRadius": "20px", "paddingAll": "4px", "paddingStart": "10px",
+            "paddingEnd": "10px", "contents": [flex_text(label, weight="bold", size="sm", color="#FFFFFF")],
+        }],
+    }
+
+
+def flex_body_text(text: str, *, secondary: bool = False) -> dict:
+    """Build readable mobile body text; ``xs`` is intentionally never used."""
+    return flex_text(text, size="sm" if secondary else "md", color=(
+        LINE_COLORS["text_secondary"] if secondary else LINE_COLORS["text"]
+    ))
+
+
+def flex_footer_cta(label: str, *, action_text: str | None = None, action_uri: str | None = None) -> dict:
+    """Build one brand-colour primary CTA for a patient card footer."""
+    return flex_button(
+        label, action_type="uri" if action_uri else "message", action_text=action_text,
+        action_uri=action_uri, style="primary", color=LINE_COLORS["brand"],
+    )
+
+
 def flex_bubble(
     body_components: list[dict],
     header_text: Optional[str] = None,
@@ -685,13 +725,13 @@ def build_user_manual_flex() -> dict:
     """
     return {
         "type": "flex",
-        "altText": "📖 วิธีใช้งานระบบบอทขวัญเอ๋ยขวัญมา",
+        "altText": actionable_flex_fallback("คู่มือการใช้งาน", "กดรายงานอาการเพื่อเริ่มใช้งานได้เลยค่ะ"),
         "contents": {
             "type": "bubble",
             "header": {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": "#0066CC",
+                "backgroundColor": LINE_COLORS["brand"],
                 "paddingAll": "16px",
                 "contents": [
                     {
@@ -707,76 +747,21 @@ def build_user_manual_flex() -> dict:
                 "type": "box",
                 "layout": "vertical",
                 "spacing": "md",
+                "paddingAll": "16px",
                 "contents": [
                     {
                         "type": "text",
-                        "text": "ยินดีต้อนรับสู่ระบบ ขวัญเอ๋ยขวัญมา บอทดูแลผู้ป่วยหลังผ่าตัดค่ะ คุณสามารถใช้งานเมนูต่างๆ ได้ดังนี้ค่ะ:",
+                        "text": "ดูแลและติดตามอาการหลังผ่าตัดได้ในแชตนี้ค่ะ",
                         "wrap": True,
-                        "size": "sm",
-                        "color": "#333333",
+                        "size": "md",
+                        "color": LINE_COLORS["text"],
                     },
                     {
-                        "type": "box",
-                        "layout": "vertical",
-                        "margin": "md",
-                        "spacing": "xs",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": "📝 รายงานอาการ - พิมพ์ \"รายงานอาการ\"",
-                                "size": "sm",
-                                "weight": "bold",
-                                "color": "#0066CC",
-                            },
-                            {
-                                "type": "text",
-                                "text": "เพื่อประเมินความเสี่ยงและติดตามอาการรายวัน",
-                                "size": "xs",
-                                "color": "#666666",
-                            },
-                            {
-                                "type": "text",
-                                "text": "👤 ข้อมูลของฉัน - พิมพ์ \"ข้อมูลของฉัน\"",
-                                "size": "sm",
-                                "weight": "bold",
-                                "color": "#0066CC",
-                                "margin": "sm",
-                            },
-                            {
-                                "type": "text",
-                                "text": "เพื่อตรวจสอบข้อมูลประวัติและกดเลือกแก้ไขข้อมูล",
-                                "size": "xs",
-                                "color": "#666666",
-                            },
-                            {
-                                "type": "text",
-                                "text": "🏥 นัดหมายพยาบาล - พิมพ์ \"นัดหมาย\"",
-                                "size": "sm",
-                                "weight": "bold",
-                                "color": "#0066CC",
-                                "margin": "sm",
-                            },
-                            {
-                                "type": "text",
-                                "text": "เพื่อแจ้งวันเวลาขอเข้าตรวจหรือทำแผลหลังผ่าตัด",
-                                "size": "xs",
-                                "color": "#666666",
-                            },
-                            {
-                                "type": "text",
-                                "text": "💬 ปรึกษาพยาบาล - พิมพ์ \"ปรึกษาพยาบาล\"",
-                                "size": "sm",
-                                "weight": "bold",
-                                "color": "#0066CC",
-                                "margin": "sm",
-                            },
-                            {
-                                "type": "text",
-                                "text": "เพื่อติดต่อพูดคุยกับทีมพยาบาลขวัญเรือนโดยตรง",
-                                "size": "xs",
-                                "color": "#666666",
-                            }
-                        ],
+                        "type": "text",
+                        "text": "เริ่มจากรายงานอาการประจำวัน แล้วทีมพยาบาลจะติดตามต่อค่ะ",
+                        "wrap": True,
+                        "size": "sm",
+                        "color": LINE_COLORS["text_secondary"],
                     },
                 ],
             },
@@ -787,11 +772,11 @@ def build_user_manual_flex() -> dict:
                     {
                         "type": "button",
                         "style": "primary",
-                        "color": "#0066CC",
+                        "color": LINE_COLORS["brand"],
                         "action": {
                             "type": "message",
-                            "label": "📝 เริ่มลงทะเบียนคนไข้",
-                            "text": "ลงทะเบียน",
+                            "label": "รายงานอาการ",
+                            "text": "รายงานอาการ",
                         },
                     }
                 ],

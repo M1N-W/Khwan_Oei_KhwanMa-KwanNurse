@@ -164,6 +164,17 @@ class TestFlexBuilders(unittest.TestCase):
         self.assertEqual(lm.LINE_COLORS["attention"], "#B26A00")
         self.assertEqual(lm.LINE_COLORS["urgent"], "#B3261E")
 
+    def test_shared_primitives_keep_body_text_readable(self):
+        self.assertEqual(lm.flex_body_text("เนื้อหา")["size"], "md")
+        self.assertEqual(lm.flex_body_text("รายละเอียด", secondary=True)["size"], "sm")
+        self.assertEqual(lm.flex_card_header("หัวข้อ")["paddingAll"], "16px")
+        self.assertEqual(lm.flex_footer_cta("รายงานอาการ", action_text="รายงานอาการ")["color"], "#1565C0")
+
+    def test_actionable_fallback_is_capped(self):
+        fallback = lm.actionable_flex_fallback("หัวข้อ", "ก" * 500)
+        self.assertLessEqual(len(fallback), lm.MAX_FLEX_ALT_TEXT_CHARS)
+        self.assertTrue(fallback)
+
     def test_patient_wound_result_hides_confidence(self):
         message = lm.build_wound_flex_result("medium", ["แผลบวม"], "กรุณาติดตามอาการ", 0.88)
         rendered = str(message)

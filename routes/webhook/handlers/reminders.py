@@ -22,10 +22,7 @@ def handle_get_followup_summary(user_id):
         
         if 'error' in summary:
             return jsonify({
-                "fulfillmentText": (
-                    "ขอโทษค่ะ เกิดข้อผิดพลาดในการดึงข้อมูล\n"
-                    "กรุณาลองใหม่อีกครั้งหรือติดต่อพยาบาลค่ะ"
-                )
+                "fulfillmentText": line_copy("generic_error")
             }), 200
         
         if summary['total_reminders'] == 0:
@@ -85,10 +82,7 @@ def handle_get_followup_summary(user_id):
     except Exception as e:
         logger.exception(f"Error in GetFollowUpSummary: {e}")
         return jsonify({
-            "fulfillmentText": (
-                "ขอโทษค่ะ เกิดข้อผิดพลาดในการดึงข้อมูล\n"
-                "กรุณาลองใหม่อีกครั้งหรือติดต่อพยาบาลค่ะ"
-            )
+            "fulfillmentText": line_copy("generic_error")
         }), 200
 
 

@@ -122,11 +122,11 @@ def handle_report_symptoms(user_id, params):
         if pain is None or str(pain).strip() == "":
             first_missing_key = "pain"
             quick_replies = [
-                quick_reply_item("🟢 1 (ปวดน้อย)", "1"),
-                quick_reply_item("🟡 2 (ปวดเล็กน้อย)", "2"),
-                quick_reply_item("🟠 3 (ปวดปานกลาง)", "3"),
-                quick_reply_item("🔴 4 (ปวดมาก)", "4"),
-                quick_reply_item("🚨 5 (ปวดรุนแรง)", "5"),
+                quick_reply_item("🟢 ปวดน้อย", "1"),
+                quick_reply_item("🟡 ปวดเล็กน้อย", "2"),
+                quick_reply_item("🟠 ปวดปานกลาง", "3"),
+                quick_reply_item("🔴 ปวดมาก", "4"),
+                quick_reply_item("🚨 ปวดรุนแรง", "5"),
             ]
             ask = (
                 "วันนี้ระดับความปวดของคนไข้อยู่ที่ระดับใดคะ? (กรุณาเลือก 1-5):\n\n"
